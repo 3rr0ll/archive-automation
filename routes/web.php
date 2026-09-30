@@ -1,33 +1,28 @@
 <?php
 
-use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Modules\Auth\Controllers\AuthenticatedSessionController;
+use App\Modules\Auth\Controllers\PasswordResetLinkController;
+use App\Modules\Auth\Controllers\NewPasswordController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\Auth\NewPasswordController;
-
-Route::get('/', function () {
-    return view('welcome');
-});
-
-
 
 // Redirect root to login
 Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// Guest routes (Login)
+// Guest Routes (Login & Password Reset)
 Route::middleware('guest')->group(function () {
     Route::get('login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
-    // Password Reset Routes
+
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])->name('password.email');
+    
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
     Route::post('reset-password', [NewPasswordController::class, 'store'])->name('password.store');
 });
 
-// Protected routes (Requires Auth)
+// Protected Routes (Requires Authentication)
 Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     

@@ -1,6 +1,7 @@
 <?php
 
-namespace App\Http\Controllers\Auth;
+namespace App\Modules\Auth\Controllers;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -8,13 +9,11 @@ use Illuminate\Validation\ValidationException;
 
 class AuthenticatedSessionController extends Controller
 {
-    // Show the login view
     public function create()
     {
-        return view('auth.login');
+        return view('auth.login'); 
     }
 
-    // Handle incoming authentication request
     public function store(Request $request)
     {
         $credentials = $request->validate([
@@ -33,7 +32,6 @@ class AuthenticatedSessionController extends Controller
         return redirect()->intended('/dashboard');
     }
 
-    // Destroy an authenticated session (Logout)
     public function destroy(Request $request)
     {
         Auth::guard('web')->logout();
