@@ -13,6 +13,10 @@ return new class extends Migration
     {
         Schema::create('servers', function (Blueprint $table) {
             $table->id();
+            $table->string('name');
+            $table->string('ip_address');
+            $table->text('credentials_encrypted');
+            $table->boolean('is_active')->default(false);
             $table->timestamps();
         });
     }

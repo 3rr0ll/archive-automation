@@ -13,6 +13,10 @@ return new class extends Migration
     {
         Schema::create('deployment_logs', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('deployment_id')->constrained()->cascadeOnDelete();
+            $table->string('step_name');
+            $table->enum('status', ['in_progress', 'success', 'warning', 'error']);
+            $table->text('message');
             $table->timestamps();
         });
     }

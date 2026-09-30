@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('deployments', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('server_id')->constrained()->cascadeOnDelete();
+            $table->string('domain');
+            $table->string('version');
+            $table->enum('status', ['pending', 'processing', 'completed', 'failed'])->default('pending');
+            $table->string('current_step')->nullable();
             $table->timestamps();
         });
     }
