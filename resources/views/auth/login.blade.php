@@ -34,11 +34,12 @@
                     class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
             </div>
 
-            <div class="flex items-center justify-between text-sm">
+            <div class="flex items-center justify-between text-sm mt-2">
                 <label class="flex items-center text-slate-400">
                     <input type="checkbox" name="remember" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500">
                     <span class="ml-2">Remember me</span>
                 </label>
+                <a href="{{ route('password.request') }}" class="text-indigo-400 hover:underline">Forgot password?</a>
             </div>
 
             <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition duration-200">
