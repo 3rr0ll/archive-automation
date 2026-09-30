@@ -1,8 +1,8 @@
 <?php
 
-use App\Modules\Auth\Controllers\AuthenticatedSessionController;
-use App\Modules\Auth\Controllers\PasswordResetLinkController;
-use App\Modules\Auth\Controllers\NewPasswordController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\NewPasswordController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
