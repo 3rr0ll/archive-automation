@@ -5,8 +5,10 @@ use App\Http\Controllers\Api\DeploymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Public API Routes
+// Public API Routes (Auth)
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 // Protected API Routes (Requires Sanctum Bearer Token)
 Route::middleware('auth:sanctum')->group(function (): void {
