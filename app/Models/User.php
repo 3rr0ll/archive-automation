@@ -6,6 +6,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -37,5 +38,23 @@ class User extends Authenticatable
     public function isUser(): bool
     {
         return $this->role === 'user';
+    }
+
+    public static function adminExists(): bool
+    {
+        return static::query()->where('role', 'admin')->exists();
+    }
+
+    public static function anotherAdminExists(?int $exceptUserId = null): bool
+    {
+        return static::query()
+            ->where('role', 'admin')
+            ->when($exceptUserId !== null, fn ($query) => $query->where('id', '!=', $exceptUserId))
+            ->exists();
+    }
+
+    public function apiCredentials(): HasMany
+    {
+        return $this->hasMany(ApiCredential::class);
     }
 }
