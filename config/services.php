@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'runcloud' => [
+        'base_url' => env('RUNCLOUD_API_BASE_URL', 'https://manage.runcloud.io/api/v3'),
+        'api_key' => env('RUNCLOUD_API_KEY'),
+        'api_secret' => env('RUNCLOUD_API_SECRET'),
+        'api_token' => env('RUNCLOUD_API_TOKEN'),
+        'server_id' => env('RUNCLOUD_DEFAULT_SERVER_ID'),
+        'timeout' => (int) env('RUNCLOUD_TIMEOUT', 30),
+    ],
+
 ];

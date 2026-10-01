@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DeploymentController;
+use App\Http\Controllers\Api\RunCloudController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -15,9 +16,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Deployments API
-    Route::get('/deployments', [DeploymentController::class, 'index']);
-    Route::post('/deployments', [DeploymentController::class, 'store']);
-    Route::get('/deployments/{deployment}', [DeploymentController::class, 'show']);
-    Route::delete('/deployments/{deployment}', [DeploymentController::class, 'destroy']);
+
+    // RunCloud Empty WebApp Creation API
+    Route::get('/runcloud/servers', [RunCloudController::class, 'getServers']);
+    Route::post('/runcloud/webapp', [RunCloudController::class, 'createApp']);
 });
+
