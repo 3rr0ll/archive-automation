@@ -16,6 +16,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         return response()->json($request->user());
     });
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
 
 
     // RunCloud Empty WebApp Creation API
