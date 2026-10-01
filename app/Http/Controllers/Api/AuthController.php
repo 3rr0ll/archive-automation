@@ -58,4 +58,31 @@ class AuthController extends Controller
             'message' => 'Successfully logged out',
         ]);
     }
+
+    /**
+     * Refresh the authenticated user's token by rotating it.
+     */
+    public function refresh(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $deviceName = $request->device_name ?? 'refreshed-token';
+
+        // Revoke the current token
+        $user->currentAccessToken()->delete();
+
+        // Issue a fresh token
+        $newToken = $user->createToken($deviceName)->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Token refreshed successfully',
+            'token_type' => 'Bearer',
+            'access_token' => $newToken,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+        ]);
+    }
 }

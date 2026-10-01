@@ -74,4 +74,27 @@ class ApiAuthTest extends TestCase
 
         $this->assertCount(0, $user->tokens);
     }
+
+    public function test_user_can_refresh_token(): void
+    {
+        $user = User::factory()->create();
+
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->postJson('/api/refresh');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'token_type',
+                'access_token',
+                'user' => ['id', 'name', 'email'],
+            ]);
+
+        // Old token should be deleted and replaced with exactly 1 new active token
+        $this->assertCount(1, $user->fresh()->tokens);
+    }
 }
+

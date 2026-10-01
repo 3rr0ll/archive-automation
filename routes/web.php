@@ -15,7 +15,5 @@ Route::middleware('guest')->group(function (): void {
     })->name('login');
 });
 
-// Protected Page Routes (Loads HTML views for authenticated users)
-Route::middleware('auth')->group(function (): void {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-});
+// Page Routes
+Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
