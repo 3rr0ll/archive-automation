@@ -27,12 +27,31 @@ class UserController extends Controller
             'role' => $request->role,
         ]);
 
-        $user->sendEmailVerificationNotification();
-
         return response()->json([
             'success' => true,
             'message' => 'User created successfully.',
             'user' => $user,
         ], 201);
+    }
+
+    /**
+     * Reset any user's password (admin only).
+     */
+    public function resetPassword(Request $request, User $user): JsonResponse
+    {
+        $request->validate([
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        ]);
+
+        $user->update([
+            'password' => $request->password,
+        ]);
+
+        $user->tokens()->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successfully.',
+        ]);
     }
 }
