@@ -63,10 +63,6 @@
                     class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500">
             </div>
 
-            <div class="flex items-center justify-between text-sm">
-                <a href="/forgot-password" class="text-indigo-400 hover:underline">Forgot password?</a>
-            </div>
-
             <button type="submit" :disabled="loading" 
                 class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition duration-200 flex items-center justify-center">
                 <span x-show="!loading">Sign In</span>
