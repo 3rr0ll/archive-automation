@@ -34,6 +34,7 @@ class AuthController extends Controller
         $token = $user->createToken($deviceName)->plainTextToken;
 
         return response()->json([
+            'success' => true,
             'message' => 'Login successful',
             'token_type' => 'Bearer',
             'access_token' => $token,
@@ -53,6 +54,7 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
+            'success' => true,
             'message' => 'Successfully logged out',
         ]);
     }
