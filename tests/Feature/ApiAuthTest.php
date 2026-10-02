@@ -96,5 +96,18 @@ class ApiAuthTest extends TestCase
         // Old token should be deleted and replaced with exactly 1 new active token
         $this->assertCount(1, $user->fresh()->tokens);
     }
+
+    public function test_user_can_logout_via_session_without_transient_token_error(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/logout');
+
+        $response->assertStatus(200)
+            ->assertJson(['message' => 'Successfully logged out']);
+
+        $this->assertGuest('web');
+    }
 }
 
