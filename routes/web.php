@@ -15,5 +15,7 @@ Route::middleware('guest')->group(function (): void {
     })->name('login');
 });
 
-// Page Routes
-Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+// Protected Page Routes (Requires Authentication)
+Route::middleware('auth')->group(function (): void {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+});

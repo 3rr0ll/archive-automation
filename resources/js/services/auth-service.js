@@ -2,131 +2,48 @@
 
 import api from './api-client.js';
 
-const TOKEN_KEY = 'auth_token';
-const TOKEN_ISSUED_AT_KEY = 'auth_token_issued_at';
-
-// Refresh threshold: 30 minutes (1,800,000 ms)
-const REFRESH_THRESHOLD_MS = 30 * 60 * 1000;
-
 /**
- * Persist the token and issue timestamp in localStorage.
+ * Log in with email and password.
+ * The server sets the secure HttpOnly session cookie automatically.
  */
-function storeToken(token) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(TOKEN_ISSUED_AT_KEY, Date.now().toString());
-}
+export async function login({ email, password, remember = false }) {
+    // Clean up any legacy localStorage token
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_token_issued_at');
 
-/**
- * Remove token and timestamp from localStorage.
- */
-function clearToken() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_ISSUED_AT_KEY);
-}
-
-/**
- * Returns true if the token is older than the 30-minute refresh threshold.
- */
-function isTokenStale() {
-    const issuedAt = localStorage.getItem(TOKEN_ISSUED_AT_KEY);
-    if (!issuedAt) {
-        return false;
-    }
-    return (Date.now() - Number(issuedAt)) >= REFRESH_THRESHOLD_MS;
-}
-
-/**
- * Log in with email and password, storing the returned Sanctum token.
- */
-export async function login({ email, password, deviceName = 'web-browser' }) {
-    const data = await api.post('/login', {
+    return api.post('/login', {
         email,
         password,
-        device_name: deviceName,
+        remember,
     });
-
-    if (data.access_token) {
-        storeToken(data.access_token);
-    }
-
-    return data;
 }
 
+let currentUserPromise = null;
+
 /**
- * Fetch the currently authenticated user's profile.
- * Automatically refreshes the token if it has passed the 30-minute threshold.
+ * Fetch the currently authenticated user's profile using the HttpOnly session cookie.
+ * In-flight requests are deduplicated so simultaneous component calls share one request.
  */
-export async function fetchCurrentUser() {
-    if (hasToken() && isTokenStale()) {
-        try {
-            await refreshToken();
-        } catch {
-            // Continue to user call
-        }
+export async function fetchCurrentUser(forceRefresh = false) {
+    if (!currentUserPromise || forceRefresh) {
+        currentUserPromise = api.get('/user').catch((error) => {
+            currentUserPromise = null;
+            throw error;
+        });
     }
-
-    try {
-        return await api.get('/user');
-    } catch (error) {
-        clearToken();
-        throw error;
-    }
+    return currentUserPromise;
 }
 
 /**
- * Log out from the API and clear stored credentials.
+ * Log out from the API and destroy the server session.
  */
 export async function logout() {
     try {
         await api.post('/logout');
     } finally {
-        clearToken();
-        window.location.href = '/login';
+        currentUserPromise = null;
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_token_issued_at');
+        window.location.replace('/login');
     }
 }
-
-/**
- * Refresh the access token and store the new token in localStorage.
- */
-export async function refreshToken() {
-    try {
-        const data = await api.post('/refresh');
-
-        if (data.access_token) {
-            storeToken(data.access_token);
-        }
-
-        return data;
-    } catch (error) {
-        clearToken();
-        throw error;
-    }
-}
-
-/**
- * Check if a token currently exists in storage.
- */
-export function hasToken() {
-    return Boolean(localStorage.getItem(TOKEN_KEY));
-}
-
-/**
- * Initializes a background refresh watcher that checks every minute.
- * If the active token is 30 minutes old or older, it automatically refreshes it.
- */
-export function initTokenRefreshWatcher() {
-    const CHECK_INTERVAL_MS = 60 * 1000;
-
-    setInterval(async () => {
-        if (hasToken() && isTokenStale()) {
-            try {
-                await refreshToken();
-            } catch (error) {
-                console.warn('Silent token refresh failed:', error.message);
-                window.location.href = '/login';
-            }
-        }
-    }, CHECK_INTERVAL_MS);
-}
-
-

@@ -23,17 +23,17 @@
                 </span>
             </div>
 
-            @auth
-                <div class="flex items-center gap-4">
-                    <span class="text-sm text-slate-300 font-medium">{{ auth()->user()->name }}</span>
-                    <form method="POST" action="/api/logout">
-                        @csrf
-                        <button type="submit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white rounded-md border border-slate-700 transition">
-                            Logout
-                        </button>
-                    </form>
-                </div>
-            @endauth
+            <div class="flex items-center gap-4" x-data="userNav">
+                <span class="text-sm text-slate-300 font-medium" x-show="userName" x-text="userName" x-cloak></span>
+                <span class="text-sm text-slate-500 font-medium animate-pulse" x-show="isLoadingUser && !userName">Loading...</span>
+                <button type="button"
+                        @click="handleLogout"
+                        :disabled="isLoggingOut"
+                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white rounded-md border border-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">
+                    <span x-show="isLoggingOut" x-cloak class="animate-spin inline-block size-3 border-2 border-slate-400 border-t-white rounded-full"></span>
+                    <span x-text="isLoggingOut ? 'Logging out...' : 'Logout'">Logout</span>
+                </button>
+            </div>
         </div>
     </header>
 

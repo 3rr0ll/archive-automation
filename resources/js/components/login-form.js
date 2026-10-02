@@ -12,6 +12,8 @@ export function loginForm() {
         isLoading: false,
         errorMessage: '',
         fieldErrors: {},
+        showPassword: false,
+
 
         async submit() {
             this.isLoading = true;
@@ -24,9 +26,10 @@ export function loginForm() {
                     password: this.password,
                 });
 
-                // Redirect to dashboard on success
-                window.location.href = '/dashboard';
+                // Use replace so login is removed from browser history (Back button won't return to login)
+                window.location.replace('/dashboard');
             } catch (error) {
+
                 this.errorMessage = error.message || 'Sign in failed. Please check your credentials.';
                 if (error.errors) {
                     this.fieldErrors = error.errors;
