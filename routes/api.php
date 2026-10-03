@@ -19,7 +19,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
 
-
     // RunCloud Empty WebApp Creation API
     Route::get('/runcloud/servers', [RunCloudController::class, 'getServers']);
     Route::post('/runcloud/webapp', [RunCloudController::class, 'createApp']);
@@ -40,4 +39,10 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::get('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'show'])->name('api-credentials.show');
     Route::put('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'update'])->name('api-credentials.update');
     Route::delete('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'destroy'])->name('api-credentials.destroy');
+
+    Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
+    Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');
+    Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
+    Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
+    Route::delete('/deployments/{deployment}', [DeploymentController::class, 'adminDestroy'])->name('deployments.destroy');
 });
