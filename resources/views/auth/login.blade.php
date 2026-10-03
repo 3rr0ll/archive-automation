@@ -7,6 +7,7 @@
 
     <title>Sign In - Archive Automation</title>
 
+    <tallstackui:script />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen p-4 font-sans antialiased">

@@ -8,9 +8,13 @@
     <title>{{ $title ?? 'Archive Automation' }}</title>
 
     <!-- Scripts and Styles -->
+    <tallstackui:script />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col font-sans">
+    <x-toast />
+    <x-dialog />
+
     <!-- Navigation Bar -->
     <header class="bg-slate-900 border-b border-slate-800">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
