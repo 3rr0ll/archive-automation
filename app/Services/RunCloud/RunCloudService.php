@@ -2,7 +2,7 @@
 
 namespace App\Services\RunCloud;
 
-use App\Services\Cloudflare\CloudflareService;
+use App\Services\Cloudflare\CloudflareDnsService;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -16,16 +16,16 @@ class RunCloudService
     // Strictly PHP 8.1 for deployment
     public const DEFAULT_PHP_VERSION = 'php81';
 
-    protected CloudflareService $cloudflareService;
+    protected CloudflareDnsService $cloudflareDnsService;
     protected string $baseUrl;
     protected ?string $apiKey;
     protected ?string $apiSecret;
     protected ?string $apiToken;
     protected int $timeout;
 
-    public function __construct(?CloudflareService $cloudflareService = null)
+    public function __construct(?CloudflareDnsService $cloudflareDnsService = null)
     {
-        $this->cloudflareService = $cloudflareService ?? app(CloudflareService::class);
+        $this->cloudflareDnsService = $cloudflareDnsService ?? app(CloudflareDnsService::class);
         $this->baseUrl = rtrim((string) Config::get('services.runcloud.base_url', 'https://manage.runcloud.io/api/v3'), '/');
         $this->apiKey = Config::get('services.runcloud.api_key');
         $this->apiSecret = Config::get('services.runcloud.api_secret');
@@ -103,7 +103,7 @@ class RunCloudService
         $dnsSetup = null;
         try {
             $serverIp = $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareService->setupRunCloudDns($domain, $serverIp);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $serverIp);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,

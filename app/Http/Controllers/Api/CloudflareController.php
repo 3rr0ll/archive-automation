@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangeCloudflareWorkersRequest;
 use App\Http\Requests\SetupCloudflareRunCloudDnsRequest;
-use App\Services\Cloudflare\CloudflareService;
+use App\Services\Cloudflare\CloudflareDnsService;
+use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\RunCloud\RunCloudService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,8 @@ use Illuminate\Support\Facades\Log;
 class CloudflareController extends Controller
 {
     public function __construct(
-        protected CloudflareService $cloudflareService
+        protected CloudflareWorkerService $workerService,
+        protected CloudflareDnsService $dnsService
     ) {}
 
     /**
@@ -33,7 +35,7 @@ class CloudflareController extends Controller
         $version = $request->validated('version');
 
         try {
-            $result = $this->cloudflareService->changeWorkers($domain, $version);
+            $result = $this->workerService->changeWorkers($domain, $version);
 
             return response()->json([
                 'message' => 'Cloudflare worker routes updated successfully.',
@@ -71,7 +73,7 @@ class CloudflareController extends Controller
                 $serverIp = $runCloudService->getServerIp($serverId);
             }
 
-            $result = $this->cloudflareService->setupRunCloudDns($domain, $serverIp, $proxied);
+            $result = $this->dnsService->setupRunCloudDns($domain, $serverIp, $proxied);
 
             return response()->json([
                 'message' => 'Cloudflare DNS configured for RunCloud server successfully.',
@@ -103,7 +105,7 @@ class CloudflareController extends Controller
         $domain = (string) $request->input('domain');
 
         try {
-            $records = $this->cloudflareService->getDnsRecords($domain);
+            $records = $this->dnsService->getDnsRecords($domain);
 
             return response()->json([
                 'message' => 'Cloudflare DNS records retrieved successfully.',
@@ -134,7 +136,7 @@ class CloudflareController extends Controller
         $domain = (string) $request->input('domain');
 
         try {
-            $result = $this->cloudflareService->deleteAllDnsRecords($domain);
+            $result = $this->dnsService->deleteAllDnsRecords($domain);
 
             return response()->json([
                 'message' => 'All Cloudflare DNS records deleted successfully.',
