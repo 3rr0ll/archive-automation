@@ -1,0 +1,344 @@
+<?php
+
+namespace App\Services\Cloudflare;
+
+use Exception;
+use Illuminate\Support\Facades\Log;
+
+class CloudflareDnsService
+{
+    public function __construct(
+        protected CloudflareClient $client
+    ) {}
+
+    /**
+     * Reset DNS and set up RunCloud server DNS on Cloudflare:
+     * 1. Delete all existing DNS records for the domain
+     * 2. Add RunCloud server DNS for @ and www as A records (proxied = true)
+     *
+     * @param string $domain Domain name
+     * @param string $serverIp RunCloud server IP address
+     * @param bool $proxied Cloudflare proxy status (default: true for Workers)
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function setupRunCloudDns(string $domain, string $serverIp, bool $proxied = true): array
+    {
+        $normalized = $this->client->normalizeDomain($domain);
+        $rootDomain = $this->client->getRootDomain($normalized);
+        $zoneId = $this->client->getZoneId($rootDomain);
+
+        Log::info('Initiating Cloudflare DNS setup for RunCloud server', [
+            'domain' => $rootDomain,
+            'server_ip' => $serverIp,
+            'zone_id' => $zoneId,
+            'proxied' => $proxied,
+        ]);
+
+        // 1. Delete all DNS records
+        $deleteResult = $this->deleteAllDnsRecords($rootDomain);
+
+        // 2. Add A record for @
+        $rootRecord = $this->addDnsRecord($rootDomain, 'A', '@', $serverIp, $proxied, 1);
+
+        // 3. Add A record for www
+        $wwwRecord = $this->addDnsRecord($rootDomain, 'A', 'www', $serverIp, $proxied, 1);
+
+        Log::info('Cloudflare DNS configured for RunCloud server successfully', [
+            'domain' => $rootDomain,
+            'server_ip' => $serverIp,
+            'deleted_count' => $deleteResult['deleted_count'],
+            'root_record_id' => $rootRecord['id'] ?? null,
+            'www_record_id' => $wwwRecord['id'] ?? null,
+        ]);
+
+        return [
+            'domain' => $rootDomain,
+            'server_ip' => $serverIp,
+            'proxied' => $proxied,
+            'zone_id' => $zoneId,
+            'deleted_records_count' => $deleteResult['deleted_count'],
+            'skipped_records_count' => $deleteResult['skipped_count'],
+            'records' => [
+                'root' => $rootRecord,
+                'www' => $wwwRecord,
+            ],
+        ];
+    }
+
+    /**
+     * Check existing DNS records for the given domain.
+     *
+     * @param string $domain
+     * @return array<int, array<string, mixed>>
+     * @throws Exception
+     */
+    public function getDnsRecords(string $domain): array
+    {
+        $rootDomain = $this->client->getRootDomain($domain);
+        $zoneId = $this->client->getZoneId($rootDomain);
+
+        $page = 1;
+        $allRecords = [];
+
+        do {
+            $response = $this->client->client()->get("/zones/{$zoneId}/dns_records", [
+                'page' => $page,
+                'per_page' => 100,
+            ]);
+
+            if (! $response->successful()) {
+                $this->client->handleApiError("Failed to fetch Cloudflare DNS records for {$rootDomain}", $response);
+            }
+
+            $records = $response->json('result') ?? [];
+            $allRecords = array_merge($allRecords, $records);
+
+            $resultInfo = $response->json('result_info') ?? [];
+            $totalPages = (int) ($resultInfo['total_pages'] ?? 1);
+
+            $page++;
+        } while ($page <= $totalPages && ! empty($records));
+
+        return $allRecords;
+    }
+
+    /**
+     * Delete all DNS records in the domain's Cloudflare zone.
+     * Safely preserves zone apex NS records which Cloudflare manages and forbids deleting.
+     *
+     * @param string $domain
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function deleteAllDnsRecords(string $domain): array
+    {
+        $rootDomain = $this->client->getRootDomain($domain);
+        $zoneId = $this->client->getZoneId($rootDomain);
+        $records = $this->getDnsRecords($rootDomain);
+
+        $deletedCount = 0;
+        $skippedCount = 0;
+        $deletedRecords = [];
+
+        foreach ($records as $record) {
+            $id = $record['id'] ?? '';
+            $type = strtoupper($record['type'] ?? '');
+            $name = strtolower($record['name'] ?? '');
+
+            // In Cloudflare, apex NS records cannot be deleted via the API
+            if ($type === 'NS' && ($name === strtolower($rootDomain) || $name === '@')) {
+                $skippedCount++;
+                continue;
+            }
+
+            if (empty($id)) {
+                continue;
+            }
+
+            $response = $this->client->client()->delete("/zones/{$zoneId}/dns_records/{$id}");
+
+            if ($response->successful()) {
+                $deletedCount++;
+                $deletedRecords[] = [
+                    'id' => $id,
+                    'name' => $record['name'] ?? '',
+                    'type' => $type,
+                ];
+            } else {
+                Log::warning("Could not delete DNS record [{$id}] ({$type} {$name})", [
+                    'error' => $response->body(),
+                ]);
+                $skippedCount++;
+            }
+        }
+
+        return [
+            'domain' => $rootDomain,
+            'zone_id' => $zoneId,
+            'deleted_count' => $deletedCount,
+            'skipped_count' => $skippedCount,
+            'deleted_records' => $deletedRecords,
+        ];
+    }
+
+    /**
+     * Add a DNS record to Cloudflare zone.
+     *
+     * @param string $domain
+     * @param string $type Record type (A, CNAME, etc.)
+     * @param string $name Name (@, www, subdomain)
+     * @param string $content Value / IP address
+     * @param bool $proxied Proxied through Cloudflare CDN/Workers
+     * @param int $ttl TTL in seconds (1 for auto)
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function addDnsRecord(
+        string $domain,
+        string $type,
+        string $name,
+        string $content,
+        bool $proxied = true,
+        int $ttl = 1
+    ): array {
+        $rootDomain = $this->client->getRootDomain($domain);
+        $zoneId = $this->client->getZoneId($rootDomain);
+
+        $payload = [
+            'type' => strtoupper($type),
+            'name' => $name,
+            'content' => $content,
+            'ttl' => $ttl,
+            'proxied' => $proxied,
+        ];
+
+        $response = $this->client->client()->post("/zones/{$zoneId}/dns_records", $payload);
+
+        if (! $response->successful()) {
+            $this->client->handleApiError("Failed to create Cloudflare DNS record ({$type} {$name}) for {$rootDomain}", $response);
+        }
+
+        return $response->json('result') ?? [];
+    }
+
+    /**
+     * List DNS records by zone ID.
+     *
+     * @param string $zoneId
+     * @return array<int, array<string, mixed>>
+     * @throws Exception
+     */
+    public function listDnsRecords(string $zoneId): array
+    {
+        $response = $this->client->client()->get("/zones/{$zoneId}/dns_records", [
+            'per_page' => 100,
+        ]);
+
+        if (! $response->successful()) {
+            $this->client->handleApiError("Failed to list DNS records for zone {$zoneId}", $response);
+        }
+
+        return $response->json('result', []);
+    }
+
+    /**
+     * Add an A record by zone ID.
+     *
+     * @param string $zoneId
+     * @param string $name
+     * @param string $ip
+     * @param bool $proxied
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function addARecord(string $zoneId, string $name, string $ip, bool $proxied = true): array
+    {
+        $payload = [
+            'type' => 'A',
+            'name' => $name,
+            'content' => $ip,
+            'proxied' => $proxied,
+            'ttl' => 1,
+        ];
+
+        $response = $this->client->client()->post("/zones/{$zoneId}/dns_records", $payload);
+
+        if (! $response->successful()) {
+            $this->client->handleApiError("Failed to add A record [{$name}] for zone {$zoneId}", $response);
+        }
+
+        return $response->json('result', []);
+    }
+
+    /**
+     * Upsert an A record: updates matching record and removes duplicates, or creates if absent.
+     *
+     * @param string $zoneId
+     * @param string $name
+     * @param string $ip
+     * @param bool $proxied
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function upsertARecord(string $zoneId, string $name, string $ip, bool $proxied = true): array
+    {
+        $existingResponse = $this->client->client()->get("/zones/{$zoneId}/dns_records", [
+            'type' => 'A',
+            'name' => $name,
+            'per_page' => 100,
+        ]);
+
+        $records = $existingResponse->successful() ? ($existingResponse->json('result', [])) : [];
+
+        if (! empty($records)) {
+            $first = array_shift($records);
+
+            foreach ($records as $dupe) {
+                try {
+                    $this->deleteDnsRecord($zoneId, (string) $dupe['id']);
+                } catch (\Throwable) {
+                    // Ignore duplicate deletion error
+                }
+            }
+
+            $response = $this->client->client()->put("/zones/{$zoneId}/dns_records/{$first['id']}", [
+                'type' => 'A',
+                'name' => $name,
+                'content' => $ip,
+                'proxied' => $proxied,
+                'ttl' => 1,
+            ]);
+
+            if (! $response->successful()) {
+                $this->client->handleApiError("Failed to update A record [{$name}] for zone {$zoneId}", $response);
+            }
+
+            return $response->json('result', []);
+        }
+
+        return $this->addARecord($zoneId, $name, $ip, $proxied);
+    }
+
+    /**
+     * Delete a single DNS record by zone ID and record ID.
+     *
+     * @param string $zoneId
+     * @param string $recordId
+     * @return void
+     * @throws Exception
+     */
+    public function deleteDnsRecord(string $zoneId, string $recordId): void
+    {
+        $response = $this->client->client()->delete("/zones/{$zoneId}/dns_records/{$recordId}");
+
+        if (! $response->successful()) {
+            $this->client->handleApiError("Failed to delete DNS record [{$recordId}] for zone {$zoneId}", $response);
+        }
+    }
+
+    /**
+     * Apply DNS changes or worker configurations.
+     *
+     * @param string $domain
+     * @param array<int, array<string, mixed>> $records
+     * @return bool
+     * @throws Exception
+     */
+    public function configureDns(string $domain, array $records): bool
+    {
+        $rootDomain = $this->client->getRootDomain($domain);
+
+        foreach ($records as $record) {
+            $type = $record['type'] ?? 'A';
+            $name = $record['name'] ?? '@';
+            $content = $record['content'] ?? '';
+            $proxied = (bool) ($record['proxied'] ?? true);
+            $ttl = (int) ($record['ttl'] ?? 1);
+
+            $this->addDnsRecord($rootDomain, $type, $name, $content, $proxied, $ttl);
+        }
+
+        return true;
+    }
+}
