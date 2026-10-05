@@ -29,7 +29,7 @@ class AdminDeploymentOversightTest extends TestCase
             'user_id' => $user->id,
             'server_id' => 123,
             'domain' => fake()->unique()->domainName(),
-            'version' => '8.4',
+            'version' => 'non-www',
             'status' => $status,
             'current_step' => $status,
         ]);

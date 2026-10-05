@@ -51,6 +51,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::delete('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'destroy'])->name('api-credentials.destroy');
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
+    Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
     Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');

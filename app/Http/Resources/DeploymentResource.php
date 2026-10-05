@@ -24,7 +24,8 @@ class DeploymentResource extends JsonResource
             ]),
             'server_id' => $this->server_id,
             'domain' => $this->domain,
-            'version' => $this->version,
+            'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
+            'archive_status' => $this->archive_status instanceof \BackedEnum ? $this->archive_status->value : $this->archive_status,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'current_step' => $this->current_step,
             'logs' => $this->whenLoaded('logs', fn () => $this->logs->map(fn ($log): array => [
