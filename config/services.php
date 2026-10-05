@@ -41,7 +41,17 @@ return [
         'api_secret' => env('RUNCLOUD_API_SECRET'),
         'api_token' => env('RUNCLOUD_API_TOKEN'),
         'server_id' => env('RUNCLOUD_DEFAULT_SERVER_ID'),
+        'server_ip' => env('RUNCLOUD_DEFAULT_SERVER_IP'),
         'timeout' => (int) env('RUNCLOUD_TIMEOUT', 30),
+    ],
+
+    'cloudflare' => [
+        'base_url' => env('CLOUDFLARE_API_BASE_URL', 'https://api.cloudflare.com/client/v4'),
+        'api_token' => env('CLOUDFLARE_API_TOKEN'),
+        'api_key' => env('CLOUDFLARE_API_KEY'),
+        'email' => env('CLOUDFLARE_EMAIL'),
+        'account_id' => env('CLOUDFLARE_ACCOUNT_ID'),
+        'timeout' => (int) env('CLOUDFLARE_TIMEOUT', 30),
     ],
 
 ];

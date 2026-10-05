@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ApiCredentialController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
 use App\Http\Controllers\Api\RunCloudController;
 use App\Http\Controllers\Api\UserController;
@@ -22,6 +23,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // RunCloud Empty WebApp Creation API
     Route::get('/runcloud/servers', [RunCloudController::class, 'getServers']);
     Route::post('/runcloud/webapp', [RunCloudController::class, 'createApp']);
+
+    // Cloudflare Workers & DNS Management API
+    Route::post('/cloudflare/workers', [CloudflareController::class, 'changeWorkers']);
+    Route::post('/cloudflare/workers/change', [CloudflareController::class, 'changeWorkers']);
+    Route::post('/cloudflare/worker-routes', [CloudflareController::class, 'changeWorkers']);
+    Route::get('/cloudflare/dns', [CloudflareController::class, 'dnsRecords']);
+    Route::delete('/cloudflare/dns', [CloudflareController::class, 'deleteAllDns']);
+    Route::post('/cloudflare/dns/setup-runcloud', [CloudflareController::class, 'setupRunCloudDns']);
+    Route::post('/cloudflare/dns', [CloudflareController::class, 'setupRunCloudDns']);
 });
 
 // Admin API Routes (Requires Admin Role)

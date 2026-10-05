@@ -2,6 +2,7 @@
 
 namespace App\Services\RunCloud;
 
+use App\Services\Cloudflare\CloudflareService;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -15,14 +16,16 @@ class RunCloudService
     // Strictly PHP 8.1 for deployment
     public const DEFAULT_PHP_VERSION = 'php81';
 
+    protected CloudflareService $cloudflareService;
     protected string $baseUrl;
     protected ?string $apiKey;
     protected ?string $apiSecret;
     protected ?string $apiToken;
     protected int $timeout;
 
-    public function __construct()
+    public function __construct(?CloudflareService $cloudflareService = null)
     {
+        $this->cloudflareService = $cloudflareService ?? app(CloudflareService::class);
         $this->baseUrl = rtrim((string) Config::get('services.runcloud.base_url', 'https://manage.runcloud.io/api/v3'), '/');
         $this->apiKey = Config::get('services.runcloud.api_key');
         $this->apiSecret = Config::get('services.runcloud.api_secret');
@@ -93,10 +96,23 @@ class RunCloudService
             throw new Exception('RunCloud created web application but failed to return an ID.');
         }
 
-        // 5. Configure Domain with WWW enabled, preferred redirection unset ("none"), and Cloudflare DNS
+        // 5. Configure Domain with WWW enabled and preferred redirection unset ("none") (No RunCloud DNS integration)
         $domainConfig = $this->configureDomain($server, $appId, $domain);
 
-        // 6. Configure Advanced SSL / AutoSSL
+        // 6. Direct Cloudflare DNS Configuration: delete all existing records, then add @ and www A records for the RunCloud server
+        $dnsSetup = null;
+        try {
+            $serverIp = $this->getServerIp($server);
+            $dnsSetup = $this->cloudflareService->setupRunCloudDns($domain, $serverIp);
+        } catch (Exception $e) {
+            Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
+                'domain' => $domain,
+                'server_id' => $server,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // 7. Configure Advanced SSL / AutoSSL
         $sslConfig = $this->configureAutoSsl($server, $appId);
 
         Log::info('Successfully created RunCloud Empty Web Application', [
@@ -117,7 +133,8 @@ class RunCloudService
             'public_path' => '/public_html',
             'www_enabled' => true,
             'preferred_domain' => 'unset (none)',
-            'dns_integration' => 'cloudflare',
+            'dns_integration' => 'cloudflare_direct',
+            'dns_setup' => $dnsSetup,
             'ssl' => 'AutoSSL (Advanced)',
             'data' => $createdApp,
         ];
@@ -138,6 +155,65 @@ class RunCloudService
         }
 
         return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Get details of a specific RunCloud server.
+     *
+     * @param int $serverId
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function getServer(int $serverId): array
+    {
+        $response = $this->client()->get("/servers/{$serverId}");
+
+        if (! $response->successful()) {
+            $this->handleApiError("Failed to fetch RunCloud server {$serverId}", $response);
+        }
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Resolve the public IP address for a RunCloud server.
+     *
+     * @param int|null $serverId
+     * @return string
+     * @throws Exception
+     */
+    public function getServerIp(?int $serverId = null): string
+    {
+        // 1. Direct configuration override if provided
+        $configuredIp = Config::get('services.runcloud.server_ip');
+        if (! empty($configuredIp)) {
+            return (string) $configuredIp;
+        }
+
+        $server = $serverId ?? (int) Config::get('services.runcloud.server_id');
+
+        if (! $server) {
+            $servers = $this->getServers();
+            $serverData = $servers[0] ?? [];
+            $ip = $serverData['ipAddress'] ?? $serverData['ip_address'] ?? $serverData['ip'] ?? null;
+            if (! empty($ip)) {
+                return (string) $ip;
+            }
+            $server = (int) ($serverData['id'] ?? 0);
+        }
+
+        if (! $server) {
+            throw new Exception('No RunCloud server ID configured or found.');
+        }
+
+        $serverDetails = $this->getServer($server);
+        $ip = $serverDetails['ipAddress'] ?? $serverDetails['ip_address'] ?? $serverDetails['ip'] ?? null;
+
+        if (empty($ip)) {
+            throw new Exception("Unable to determine IP address for RunCloud server {$server}.");
+        }
+
+        return (string) $ip;
     }
 
     /**
@@ -254,7 +330,7 @@ class RunCloudService
     }
 
     /**
-     * Rule 3, 4, 5, 6: Configure Domain, enable WWW, unset preferred redirection, attach Cloudflare DNS.
+     * Rule 3, 4, 5: Configure Domain, enable WWW, unset preferred redirection (no RunCloud DNS integration).
      */
     protected function configureDomain(int $serverId, int $appId, string $domain): array
     {
@@ -263,9 +339,6 @@ class RunCloudService
             'www' => true,                       // Rule 4: Enable WWW
             'redirection' => 'none',             // Rule 5: Preferred domain version unset
             'type' => 'primary',
-            'dnsIntegration' => 'cloudflare',    // Rule 6: Cloudflare DNS Integration
-            'proxied' => true,                   // Rule 6: Set as Proxied
-            'allowDnsIntegration' => true,       // Rule 6: Allow DNS record creation/update
         ];
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
