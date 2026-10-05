@@ -49,6 +49,11 @@ class CloudflareService
         return $this->workerService->deleteWorkerRoute($zoneId, $routeId);
     }
 
+    public function purgeCache(string $domain): array
+    {
+        return $this->workerService->purgeCache($domain);
+    }
+
     // --- DNS Operations ---
 
     public function setupRunCloudDns(string $domain, string $serverIp, bool $proxied = true): array

@@ -73,6 +73,11 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 }
                 return Http::response(['success' => false], 404);
             },
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'zone-abc-123'],
+            ], 200),
         ]);
 
         $response = $this->actingAs($this->user, 'sanctum')
@@ -84,6 +89,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('data.domain', 'example.com')
             ->assertJsonPath('data.version', 'www')
+            ->assertJsonPath('data.cache_purged', true)
             ->assertJsonPath('data.routes.0.pattern', 'www.example.com/*')
             ->assertJsonPath('data.routes.0.script', CloudflareService::WORKER_WWW_MAIN)
             ->assertJsonPath('data.routes.0.action', 'created')
@@ -103,6 +109,12 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 && $request->method() === 'POST'
                 && $request['pattern'] === 'example.com/*'
                 && $request['script'] === 'domain-redirect-root-to-www';
+        });
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache'
+                && $request->method() === 'POST'
+                && $request['purge_everything'] === true;
         });
     }
 
@@ -135,6 +147,11 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 }
                 return Http::response(['success' => false], 404);
             },
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'zone-abc-123'],
+            ], 200),
         ]);
 
         $response = $this->actingAs($this->user, 'sanctum')
@@ -146,6 +163,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('data.domain', 'example.com')
             ->assertJsonPath('data.version', 'nonwww')
+            ->assertJsonPath('data.cache_purged', true)
             ->assertJsonPath('data.routes.0.pattern', 'example.com/*')
             ->assertJsonPath('data.routes.0.script', CloudflareService::WORKER_ROOT_MAIN)
             ->assertJsonPath('data.routes.1.pattern', 'www.example.com/*')
@@ -163,6 +181,12 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 && $request->method() === 'POST'
                 && $request['pattern'] === 'www.example.com/*'
                 && $request['script'] === 'domain-redirect-www-to-root';
+        });
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache'
+                && $request->method() === 'POST'
+                && $request['purge_everything'] === true;
         });
     }
 
@@ -206,6 +230,11 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 }
                 return Http::response(['success' => false], 404);
             },
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'zone-abc-123'],
+            ], 200),
         ]);
 
         $response = $this->actingAs($this->user, 'sanctum')
@@ -215,8 +244,14 @@ class CloudflareWorkersAndDnsTest extends TestCase
             ]);
 
         $response->assertStatus(200)
+            ->assertJsonPath('data.cache_purged', true)
             ->assertJsonPath('data.routes.0.action', 'updated')
             ->assertJsonPath('data.routes.1.action', 'updated');
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache'
+                && $request->method() === 'POST';
+        });
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes/existing-route-root'
@@ -425,6 +460,37 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === 'www'
                 && $request['content'] === '198.51.100.55';
+        });
+    }
+
+    public function test_purge_cache_endpoint(): void
+    {
+        Http::fake([
+            'https://api.cloudflare.com/client/v4/zones?name=example.com' => Http::response([
+                'success' => true,
+                'result' => [
+                    ['id' => 'zone-abc-123', 'name' => 'example.com'],
+                ],
+            ], 200),
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'zone-abc-123'],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/cloudflare/cache/purge', [
+                'domain' => 'example.com',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('message', 'Cloudflare cache purged successfully.');
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache'
+                && $request->method() === 'POST'
+                && $request['purge_everything'] === true;
         });
     }
 }

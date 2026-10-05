@@ -121,12 +121,23 @@ class CloudflareWorkerService
             }
         }
 
+        // Purge cache after assigning worker routes so changes take effect immediately
+        $cachePurged = false;
+        try {
+            $this->client->purgeCache($zoneId, true);
+            $cachePurged = true;
+            Log::info("Cloudflare cache purged successfully for zone {$zoneId} after assigning worker routes.");
+        } catch (Exception $e) {
+            Log::warning("Failed to purge cache for zone {$zoneId} after assigning worker routes: " . $e->getMessage());
+        }
+
         Log::info('Cloudflare worker routes updated successfully', [
             'domain' => $domain,
             'root_domain' => $rootDomain,
             'version' => $versionClean,
             'zone_id' => $zoneId,
             'routes' => $results,
+            'cache_purged' => $cachePurged,
         ]);
 
         return [
@@ -135,7 +146,21 @@ class CloudflareWorkerService
             'version' => $versionClean,
             'zone_id' => $zoneId,
             'routes' => $results,
+            'cache_purged' => $cachePurged,
         ];
+    }
+
+    /**
+     * Purge all cache for a domain.
+     *
+     * @param string $domain
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function purgeCache(string $domain): array
+    {
+        $zoneId = $this->client->getZoneId($domain);
+        return $this->client->purgeCache($zoneId, true);
     }
 
     /**
