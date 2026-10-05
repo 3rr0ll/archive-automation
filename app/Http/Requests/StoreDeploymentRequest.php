@@ -2,7 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\DomainVersion;
+use App\Services\InternetArchive\InternetArchiveService;
+use Closure;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreDeploymentRequest extends FormRequest
 {
@@ -17,14 +22,25 @@ class StoreDeploymentRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-            'server_id' => ['required', 'exists:servers,id'],
+            'server_id' => ['required', 'integer', 'min:1'],
             'domain' => ['required', 'string', 'max:255'],
-            'version' => ['required', 'string', 'max:50'],
+            'version' => ['required', Rule::enum(DomainVersion::class)],
+            'archive_url' => [
+                'required',
+                'string',
+                'url',
+                'starts_with:https://',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (! app(InternetArchiveService::class)->isAllowedArchiveUrl((string) $value)) {
+                        $fail('The archive URL must use an allowed Wayback Archive host.');
+                    }
+                },
+            ],
         ];
     }
 }

@@ -54,4 +54,14 @@ return [
         'timeout' => (int) env('CLOUDFLARE_TIMEOUT', 30),
     ],
 
+    'internet_archive' => [
+        'allowed_archive_hosts' => array_filter(array_map(
+            'trim',
+            explode(',', (string) env('INTERNET_ARCHIVE_ALLOWED_HOSTS', 'archive.org,archive-it.org'))
+        )),
+        'timeout' => (int) env('INTERNET_ARCHIVE_TIMEOUT', 20),
+        'poll_delay' => (int) env('INTERNET_ARCHIVE_POLL_DELAY', 60),
+        'max_attempts' => (int) env('INTERNET_ARCHIVE_MAX_ATTEMPTS', 1440),
+    ],
+
 ];

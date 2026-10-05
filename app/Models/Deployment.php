@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
+use App\Enums\DomainVersion;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,8 @@ class Deployment extends Model
         'server_id',
         'domain',
         'version',
+        'archive_url',
+        'archive_status',
         'status',
         'current_step',
     ];
@@ -29,7 +33,9 @@ class Deployment extends Model
     protected function casts(): array
     {
         return [
+            'archive_status' => ArchiveStatus::class,
             'status' => DeploymentStatus::class,
+            'version' => DomainVersion::class,
         ];
     }
 

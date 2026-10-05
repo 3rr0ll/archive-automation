@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDeploymentRequest;
 use App\Http\Resources\DeploymentResource;
 use App\Jobs\DeployArchivedWebsite;
+use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,16 +80,26 @@ class DeploymentController extends Controller
             ], 422);
         }
 
+        $waitsForArchive = filled($deployment->archive_url);
+
         $deployment->update([
+            'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : $deployment->archive_status,
             'status' => DeploymentStatus::Pending,
-            'current_step' => 'queued',
+            'current_step' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
         ]);
         $deployment->logs()->create([
-            'step_name' => 'queued',
+            'step_name' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
             'status' => 'in_progress',
-            'message' => 'Deployment retry queued by an administrator.',
+            'message' => $waitsForArchive
+                ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
+                : 'Deployment retry queued by an administrator.',
         ]);
-        DeployArchivedWebsite::dispatch($deployment);
+
+        if ($waitsForArchive) {
+            WaitForWaybackArchive::dispatch($deployment);
+        } else {
+            DeployArchivedWebsite::dispatch($deployment);
+        }
 
         return response()->json([
             'data' => new DeploymentResource($deployment->fresh()->load('user:id,name,email', 'logs')),
@@ -132,14 +144,24 @@ class DeploymentController extends Controller
             'server_id' => $request->validated('server_id'),
             'domain' => $request->validated('domain'),
             'version' => $request->validated('version'),
-            'status' => 'pending',
-            'current_step' => 'queued',
+            'archive_url' => $request->validated('archive_url'),
+            'archive_status' => ArchiveStatus::Waiting,
+            'status' => DeploymentStatus::Pending,
+            'current_step' => 'waiting_for_archive',
         ]);
+
+        $deployment->logs()->create([
+            'step_name' => 'waiting_for_archive',
+            'status' => 'in_progress',
+            'message' => 'Recovery submitted. Waiting for the Wayback ZIP to become available.',
+        ]);
+
+        WaitForWaybackArchive::dispatch($deployment);
 
         return response()->json([
             'data' => new DeploymentResource($deployment),
-            'message' => 'Deployment queued.',
-        ], 201);
+            'message' => 'Recovery accepted and waiting for the Wayback ZIP.',
+        ], 202);
     }
 
     /**
