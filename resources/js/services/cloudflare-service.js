@@ -49,9 +49,19 @@ export async function deleteAllDnsRecords(domain) {
     return api.delete('/cloudflare/dns', { body: { domain } });
 }
 
+/**
+ * Purge Cloudflare cache for a domain.
+ *
+ * @param {string} domain
+ */
+export async function purgeCache(domain) {
+    return api.post('/cloudflare/cache/purge', { domain });
+}
+
 export default {
     changeWorkers,
     setupRunCloudDns,
     fetchDnsRecords,
     deleteAllDnsRecords,
+    purgeCache,
 };

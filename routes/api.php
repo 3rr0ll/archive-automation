@@ -32,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('/cloudflare/dns', [CloudflareController::class, 'deleteAllDns']);
     Route::post('/cloudflare/dns/setup-runcloud', [CloudflareController::class, 'setupRunCloudDns']);
     Route::post('/cloudflare/dns', [CloudflareController::class, 'setupRunCloudDns']);
+    Route::post('/cloudflare/cache/purge', [CloudflareController::class, 'purgeCache']);
 });
 
 // Admin API Routes (Requires Admin Role)

@@ -189,6 +189,27 @@ class CloudflareClient
     }
 
     /**
+     * Purge Cloudflare cache for a zone.
+     *
+     * @param string $zoneId
+     * @param bool $purgeEverything
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    public function purgeCache(string $zoneId, bool $purgeEverything = true): array
+    {
+        $payload = $purgeEverything ? ['purge_everything' => true] : [];
+
+        $response = $this->client()->post("/zones/{$zoneId}/purge_cache", $payload);
+
+        if (! $response->successful()) {
+            $this->handleApiError("Failed to purge cache for zone {$zoneId}", $response);
+        }
+
+        return $response->json('result', []);
+    }
+
+    /**
      * Normalize domain string: strips protocol, paths, ports, query strings, and whitespace.
      *
      * @param string $domain

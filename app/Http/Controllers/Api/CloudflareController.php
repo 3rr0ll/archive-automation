@@ -154,4 +154,35 @@ class CloudflareController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Purge Cloudflare cache for a domain.
+     */
+    public function purgeCache(Request $request): JsonResponse
+    {
+        $request->validate([
+            'domain' => ['required', 'string'],
+        ]);
+
+        $domain = (string) $request->input('domain');
+
+        try {
+            $result = $this->workerService->purgeCache($domain);
+
+            return response()->json([
+                'message' => 'Cloudflare cache purged successfully.',
+                'data' => $result,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Failed to purge Cloudflare cache', [
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to purge Cloudflare cache.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
