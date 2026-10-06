@@ -28,7 +28,7 @@ class DeploymentController extends Controller
         ]);
 
         $deployments = Deployment::query()
-            ->with('user:id,name,email')
+            ->with(['user:id,name,email', 'server'])
             ->when(isset($validated['user_id']), fn ($query) => $query->where('user_id', $validated['user_id']))
             ->when(isset($validated['status']), fn ($query) => $query->where('status', $validated['status']))
             ->latest()
@@ -44,6 +44,7 @@ class DeploymentController extends Controller
     {
         return new DeploymentResource($deployment->load([
             'user:id,name,email',
+            'server',
             'logs' => fn ($query) => $query->oldest(),
         ]));
     }
@@ -159,7 +160,7 @@ class DeploymentController extends Controller
         WaitForWaybackArchive::dispatch($deployment);
 
         return response()->json([
-            'data' => new DeploymentResource($deployment),
+            'data' => new DeploymentResource($deployment->load('server')),
             'message' => 'Recovery accepted and waiting for the Wayback ZIP.',
         ], 202);
     }
