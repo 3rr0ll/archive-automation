@@ -23,6 +23,12 @@ class DeploymentResource extends JsonResource
                 'email' => $this->user->email,
             ]),
             'server_id' => $this->server_id,
+            'server' => $this->whenLoaded('server', fn (): array => [
+                'id' => $this->server->id,
+                'server_id' => $this->server->server_id,
+                'name' => $this->server->name,
+                'ip_address' => $this->server->ip_address,
+            ]),
             'domain' => $this->domain,
             'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
             'archive_status' => $this->archive_status instanceof \BackedEnum ? $this->archive_status->value : $this->archive_status,

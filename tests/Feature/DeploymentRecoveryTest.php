@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\DeployArchivedWebsite;
 use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -21,6 +22,7 @@ class DeploymentRecoveryTest extends TestCase
         Queue::fake([WaitForWaybackArchive::class]);
         $admin = User::factory()->create(['role' => 'admin']);
         $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
 
         $response = $this->withToken($token)->postJson('/api/deployments', [
             'server_id' => 123,
@@ -32,6 +34,7 @@ class DeploymentRecoveryTest extends TestCase
         $response->assertAccepted()
             ->assertJsonPath('data.status', 'pending')
             ->assertJsonPath('data.archive_status', 'waiting')
+            ->assertJsonPath('data.server.server_id', 123)
             ->assertJsonPath('data.version', $version)
             ->assertJsonPath('data.current_step', 'waiting_for_archive')
             ->assertJsonPath('message', 'Recovery accepted and waiting for the Wayback ZIP.');
@@ -116,6 +119,25 @@ class DeploymentRecoveryTest extends TestCase
             'version' => 'non-www',
             'archive_url' => 'https://web.archive.org/download/example/example.zip',
         ])->assertForbidden();
+
+        $this->assertDatabaseCount('deployments', 0);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_recovery_requires_an_active_server_from_the_catalog(): void
+    {
+        Queue::fake([WaitForWaybackArchive::class]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123, 'is_active' => false]);
+
+        $this->withToken($token)->postJson('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'example.com',
+            'version' => 'non-www',
+            'archive_url' => 'https://web.archive.org/download/example/example.zip',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['server_id']);
 
         $this->assertDatabaseCount('deployments', 0);
         Queue::assertNothingPushed();

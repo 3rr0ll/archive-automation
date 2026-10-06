@@ -6,6 +6,7 @@ use App\Enums\DomainVersion;
 use App\Services\InternetArchive\InternetArchiveService;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -27,7 +28,13 @@ class StoreDeploymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'server_id' => ['required', 'integer', 'min:1'],
+            'server_id' => [
+                'required',
+                'integer',
+                Rule::exists('servers', 'server_id')->where(
+                    fn (Builder $query): Builder => $query->where('is_active', true)
+                ),
+            ],
             'domain' => ['required', 'string', 'max:255'],
             'version' => ['required', Rule::enum(DomainVersion::class)],
             'archive_url' => [

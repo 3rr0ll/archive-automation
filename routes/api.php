@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
 use App\Http\Controllers\Api\RunCloudController;
+use App\Http\Controllers\Api\ServerController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -37,6 +38,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 // Admin API Routes (Requires Admin Role)
 Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
+    Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
+    Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
+    Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
+    Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
+
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
     Route::post('/users/bulk-delete', [UserController::class, 'bulkDestroy']);

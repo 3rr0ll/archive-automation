@@ -17,10 +17,15 @@ class RunCloudService
     public const DEFAULT_PHP_VERSION = 'php81';
 
     protected CloudflareDnsService $cloudflareDnsService;
+
     protected string $baseUrl;
+
     protected ?string $apiKey;
+
     protected ?string $apiSecret;
+
     protected ?string $apiToken;
+
     protected int $timeout;
 
     public function __construct(?CloudflareDnsService $cloudflareDnsService = null)
@@ -37,9 +42,10 @@ class RunCloudService
      * Create an Empty Web Application on RunCloud.
      * Note: $version is intentionally ignored and not used by RunCloud.
      *
-     * @param string $domain The root domain (e.g. "example.com")
-     * @param int|null $serverId RunCloud server ID (optional; falls back to config)
+     * @param  string  $domain  The root domain (e.g. "example.com")
+     * @param  int|null  $serverId  RunCloud server ID (optional; falls back to config)
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function createEmptyWebApplication(string $domain, ?int $serverId = null): array
@@ -144,6 +150,7 @@ class RunCloudService
      * Get all connected servers from the RunCloud account.
      *
      * @return array<int, array<string, mixed>>
+     *
      * @throws Exception
      */
     public function getServers(): array
@@ -160,8 +167,8 @@ class RunCloudService
     /**
      * Get details of a specific RunCloud server.
      *
-     * @param int $serverId
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function getServer(int $serverId): array
@@ -178,8 +185,6 @@ class RunCloudService
     /**
      * Resolve the public IP address for a RunCloud server.
      *
-     * @param int|null $serverId
-     * @return string
      * @throws Exception
      */
     public function getServerIp(?int $serverId = null): string
@@ -234,7 +239,7 @@ class RunCloudService
         $cleanName = preg_replace('/[^a-z0-9_-]/', '', $nameWithoutTld) ?? '';
 
         if ($cleanName === '') {
-            $cleanName = 'app' . Str::random(6);
+            $cleanName = 'app'.Str::random(6);
         }
 
         return substr($cleanName, 0, 30);
@@ -278,7 +283,7 @@ class RunCloudService
                 }
             }
         } catch (Exception $e) {
-            Log::warning('RunCloud duplicate check failed to fetch webapps list: ' . $e->getMessage());
+            Log::warning('RunCloud duplicate check failed to fetch webapps list: '.$e->getMessage());
         }
 
         return null;

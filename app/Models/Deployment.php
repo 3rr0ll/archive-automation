@@ -46,7 +46,7 @@ class Deployment extends Model
 
     public function server(): BelongsTo
     {
-        return $this->belongsTo(Server::class);
+        return $this->belongsTo(Server::class, 'server_id', 'server_id');
     }
 
     public function logs(): HasMany
