@@ -25,4 +25,18 @@ class ApiCredentialFactory extends Factory
             'token_data_encrypted' => fake()->uuid(),
         ];
     }
+
+    public function internetArchive(): static
+    {
+        return $this->state(fn (): array => [
+            'service' => 'internet_archive',
+            'account_name' => 'Global Internet Archive settings',
+            'token_data_encrypted' => json_encode([
+                'allowed_hosts' => ['archive.org', 'archive-it.org'],
+                'timeout' => 20,
+                'poll_delay' => 60,
+                'max_attempts' => 1440,
+            ], JSON_THROW_ON_ERROR),
+        ]);
+    }
 }

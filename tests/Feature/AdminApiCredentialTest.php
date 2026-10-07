@@ -58,6 +58,50 @@ class AdminApiCredentialTest extends TestCase
         $this->assertSame('cf-api-token-123', ApiCredential::first()->tokenData());
     }
 
+    public function test_admin_can_create_internet_archive_settings(): void
+    {
+        [$admin, $token] = $this->actingAsAdmin();
+        $settings = json_encode([
+            'allowed_hosts' => ['archive.org', 'archive-it.org'],
+            'timeout' => 25,
+            'poll_delay' => 90,
+            'max_attempts' => 1000,
+        ], JSON_THROW_ON_ERROR);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/api-credentials', [
+                'user_id' => $admin->id,
+                'service' => 'internet_archive',
+                'account_name' => 'Global Internet Archive settings',
+                'token_data' => $settings,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.service', 'internet_archive')
+            ->assertJsonPath('data.token_data', $settings);
+
+        $this->assertSame($settings, ApiCredential::first()->tokenData());
+    }
+
+    public function test_internet_archive_settings_are_validated(): void
+    {
+        [$admin, $token] = $this->actingAsAdmin();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/api-credentials', [
+                'user_id' => $admin->id,
+                'service' => 'internet_archive',
+                'token_data' => json_encode([
+                    'allowed_hosts' => ['http://archive.org/download'],
+                    'timeout' => 0,
+                    'poll_delay' => 60,
+                    'max_attempts' => 1440,
+                ], JSON_THROW_ON_ERROR),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('token_data');
+    }
+
     public function test_admin_can_show_api_credential_with_token_data(): void
     {
         [, $token] = $this->actingAsAdmin();

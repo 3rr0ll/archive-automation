@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\InternetArchiveSettings;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -13,15 +15,19 @@ class StoreApiCredentialRequest extends FormRequest
     }
 
     /**
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
-            'service' => ['required', 'string', Rule::in(['runcloud', 'cloudflare', 'gsc'])],
+            'service' => ['required', 'string', Rule::in(['runcloud', 'cloudflare', 'gsc', 'internet_archive'])],
             'account_name' => ['nullable', 'string', 'max:255'],
-            'token_data' => ['required', 'string'],
+            'token_data' => [
+                'required',
+                'string',
+                Rule::when($this->input('service') === 'internet_archive', [new InternetArchiveSettings]),
+            ],
         ];
     }
 }

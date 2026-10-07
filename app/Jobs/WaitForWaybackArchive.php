@@ -6,6 +6,7 @@ use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\InternetArchive\InternetArchiveService;
+use App\Services\InternetArchive\InternetArchiveSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -14,7 +15,7 @@ class WaitForWaybackArchive implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 30;
+    public int $timeout = 150;
 
     public function __construct(
         public Deployment $deployment
@@ -31,7 +32,7 @@ class WaitForWaybackArchive implements ShouldQueue
         }
 
         if (! $archiveService->isArchiveReady((string) $this->deployment->archive_url)) {
-            $this->release(max(1, (int) config('services.internet_archive.poll_delay', 60)));
+            $this->release(app(InternetArchiveSettings::class)->all()['poll_delay']);
 
             return;
         }
@@ -61,7 +62,7 @@ class WaitForWaybackArchive implements ShouldQueue
 
     public function tries(): int
     {
-        return max(1, (int) config('services.internet_archive.max_attempts', 1440));
+        return app(InternetArchiveSettings::class)->all()['max_attempts'];
     }
 
     public function failed(?Throwable $exception): void

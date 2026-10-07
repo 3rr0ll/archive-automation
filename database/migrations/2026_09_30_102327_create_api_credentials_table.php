@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('api_credentials', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('service'); // 'runcloud', 'cloudflare', 'gsc'
+            $table->string('service'); // 'runcloud', 'cloudflare', 'gsc', 'internet_archive'
             $table->string('account_name')->nullable(); // e.g., specific Google account email
             $table->text('token_data_encrypted'); 
             $table->timestamps();
