@@ -3,11 +3,14 @@
 namespace App\Services\InternetArchive;
 
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 
 class InternetArchiveService
 {
+    public function __construct(
+        private InternetArchiveSettings $settings,
+    ) {}
+
     /**
      * Determine whether a user-supplied archive URL is safe to poll.
      */
@@ -19,7 +22,7 @@ class InternetArchiveService
             return false;
         }
 
-        $allowedHosts = Config::get('services.internet_archive.allowed_archive_hosts', []);
+        $allowedHosts = $this->settings->all()['allowed_hosts'];
 
         foreach ($allowedHosts as $allowedHost) {
             $allowedHost = strtolower(trim((string) $allowedHost));
@@ -43,7 +46,7 @@ class InternetArchiveService
         }
 
         try {
-            $response = Http::timeout((int) Config::get('services.internet_archive.timeout', 20))
+            $response = Http::timeout($this->settings->all()['timeout'])
                 ->accept('application/zip')
                 ->head($archiveUrl);
         } catch (ConnectionException) {
@@ -63,6 +66,25 @@ class InternetArchiveService
             'application/octet-stream',
             'binary/octet-stream',
         ], true) || str_contains($contentDisposition, '.zip');
+    }
+
+    /**
+     * Verify connectivity to an allowed Internet Archive host.
+     */
+    public function testConnection(string $url): bool
+    {
+        if (! $this->isAllowedArchiveUrl($url)) {
+            return false;
+        }
+
+        try {
+            $response = Http::timeout($this->settings->all()['timeout'])
+                ->head($url);
+        } catch (ConnectionException) {
+            return false;
+        }
+
+        return $response->status() < 500;
     }
 
     /**

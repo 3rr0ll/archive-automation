@@ -18,6 +18,7 @@ class ApiCredentialController extends Controller
     public function index(Request $request): JsonResponse
     {
         $credentials = ApiCredential::query()
+            ->where('service', '!=', 'internet_archive')
             ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
             ->when($request->filled('service'), fn ($query) => $query->where('service', $request->string('service')))
             ->latest()
@@ -59,6 +60,8 @@ class ApiCredentialController extends Controller
      */
     public function show(ApiCredential $apiCredential): JsonResponse
     {
+        abort_if($apiCredential->service === 'internet_archive', 404);
+
         return response()->json([
             'success' => true,
             'data' => (new ApiCredentialResource($apiCredential))->resolve(),
@@ -70,6 +73,8 @@ class ApiCredentialController extends Controller
      */
     public function update(UpdateApiCredentialRequest $request, ApiCredential $apiCredential): JsonResponse
     {
+        abort_if($apiCredential->service === 'internet_archive', 404);
+
         $data = $request->safe()->except('token_data');
 
         if ($request->filled('token_data')) {
@@ -90,6 +95,8 @@ class ApiCredentialController extends Controller
      */
     public function destroy(ApiCredential $apiCredential): JsonResponse
     {
+        abort_if($apiCredential->service === 'internet_archive', 404);
+
         $apiCredential->delete();
 
         return response()->json([

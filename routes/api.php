@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ApiCredentialController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
+use App\Http\Controllers\Api\InternetArchiveSettingsController;
 use App\Http\Controllers\Api\RunCloudController;
 use App\Http\Controllers\Api\ServerController;
 use App\Http\Controllers\Api\UserController;
@@ -38,6 +39,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 // Admin API Routes (Requires Admin Role)
 Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
+    Route::get('/admin/settings/internet-archive', [InternetArchiveSettingsController::class, 'show']);
+    Route::put('/admin/settings/internet-archive', [InternetArchiveSettingsController::class, 'update']);
+    Route::post('/admin/settings/internet-archive/test', [InternetArchiveSettingsController::class, 'test']);
+
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
     Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
