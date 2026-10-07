@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\DeployArchivedWebsite;
 use App\Jobs\WaitForWaybackArchive;
+use App\Models\ApiCredential;
 use App\Models\Deployment;
 use App\Models\User;
 use App\Services\InternetArchive\InternetArchiveService;
@@ -36,6 +37,30 @@ class WaitForWaybackArchiveTest extends TestCase
         ]);
         Queue::assertNotPushed(DeployArchivedWebsite::class);
         Http::assertSentCount(1);
+    }
+
+    public function test_database_settings_override_archive_environment_defaults(): void
+    {
+        Http::preventStrayRequests();
+        Queue::fake([DeployArchivedWebsite::class]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        ApiCredential::factory()->for($admin)->internetArchive()->create([
+            'token_data_encrypted' => json_encode([
+                'allowed_hosts' => ['example-archive.test'],
+                'timeout' => 15,
+                'poll_delay' => 75,
+                'max_attempts' => 321,
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        $archiveUrl = 'https://downloads.example-archive.test/example.zip';
+        Http::fake([$archiveUrl => Http::response(status: 202)]);
+        $job = (new WaitForWaybackArchive($this->deployment($archiveUrl)))->withFakeQueueInteractions();
+
+        $job->handle(app(InternetArchiveService::class));
+
+        $job->assertReleased(75);
+        $this->assertSame(321, $job->tries());
+        Http::assertSent(fn ($request): bool => $request->url() === $archiveUrl);
     }
 
     public function test_queues_deployment_once_when_zip_becomes_ready(): void
