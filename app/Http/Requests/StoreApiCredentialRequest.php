@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -13,7 +14,7 @@ class StoreApiCredentialRequest extends FormRequest
     }
 
     /**
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -21,7 +22,7 @@ class StoreApiCredentialRequest extends FormRequest
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'service' => ['required', 'string', Rule::in(['runcloud', 'cloudflare', 'gsc'])],
             'account_name' => ['nullable', 'string', 'max:255'],
-            'token_data' => ['required', 'string'],
+            'token_data' => ['required', 'string', 'max:65535'],
         ];
     }
 }

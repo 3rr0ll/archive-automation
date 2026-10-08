@@ -19,7 +19,7 @@ class AdminApiCredentialTest extends TestCase
         return [$admin, $token];
     }
 
-    public function test_admin_can_list_api_credentials_without_token_data(): void
+    public function test_admin_can_list_api_credentials_without_exposing_token_data(): void
     {
         [, $token] = $this->actingAsAdmin();
         ApiCredential::factory()->create([
@@ -33,6 +33,7 @@ class AdminApiCredentialTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.has_token', true)
             ->assertJsonMissingPath('data.0.token_data');
     }
 
@@ -52,13 +53,14 @@ class AdminApiCredentialTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.service', 'cloudflare')
-            ->assertJsonPath('data.token_data', 'cf-api-token-123');
+            ->assertJsonPath('data.has_token', true)
+            ->assertJsonMissingPath('data.token_data');
 
         $this->assertDatabaseCount('api_credentials', 1);
         $this->assertSame('cf-api-token-123', ApiCredential::first()->tokenData());
     }
 
-    public function test_admin_can_show_api_credential_with_token_data(): void
+    public function test_admin_can_show_api_credential_without_exposing_token_data(): void
     {
         [, $token] = $this->actingAsAdmin();
         $credential = ApiCredential::factory()->create([
@@ -72,7 +74,8 @@ class AdminApiCredentialTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.id', $credential->id)
-            ->assertJsonPath('data.token_data', 'gsc-secret');
+            ->assertJsonPath('data.has_token', true)
+            ->assertJsonMissingPath('data.token_data');
     }
 
     public function test_admin_can_update_api_credential(): void
@@ -93,7 +96,8 @@ class AdminApiCredentialTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.account_name', 'new-account')
-            ->assertJsonPath('data.token_data', 'new-token');
+            ->assertJsonPath('data.has_token', true)
+            ->assertJsonMissingPath('data.token_data');
 
         $this->assertSame('new-token', $credential->fresh()->tokenData());
     }
@@ -127,6 +131,16 @@ class AdminApiCredentialTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('meta.total', 1)
             ->assertJsonPath('data.0.service', 'runcloud');
+    }
+
+    public function test_index_filters_are_validated(): void
+    {
+        [, $token] = $this->actingAsAdmin();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/api-credentials?service=unknown&per_page=1000')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['service', 'per_page']);
     }
 
     public function test_non_admin_cannot_manage_api_credentials(): void
