@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="bg-[#fafafa]">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,49 +7,46 @@
 
     <title>{{ $title ?? 'Archive Automation' }}</title>
 
+    @fonts
+
     <!-- Scripts and Styles -->
     <tallstackui:script />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    
+    @php
+        $authData = [
+            'name' => auth()->user()?->name ?? 'Guest',
+            'email' => auth()->user()?->email ?? 'guest@example.com',
+            'initial' => auth()->check() ? strtoupper(substr(auth()->user()->name, 0, 1)) : 'G'
+        ];
+    @endphp
+    
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('auth', {
+                user: {!! json_encode($authData) !!}
+            });
+        });
+    </script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col font-sans">
+<body class="bg-[#fafafa] text-zinc-900 min-h-screen antialiased flex flex-col font-sans selection:bg-zinc-950 selection:text-white"
+      x-data="{ tallStackUiMenuMobile: false }">
     <x-toast />
     <x-dialog />
 
-    <!-- Navigation Bar -->
-    <header class="bg-slate-900 border-b border-slate-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
-            <div class="flex items-center space-x-3">
-                <span class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                    <svg class="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                    </svg>
-                    Archive Automation
-                </span>
-            </div>
+    <!-- Application Sidebar -->
+    <x-sidebar />
 
-            <div class="flex items-center gap-4" x-data="userNav">
-                <span class="text-sm text-slate-300 font-medium" x-show="userName" x-text="userName" x-cloak></span>
-                <span class="text-sm text-slate-500 font-medium animate-pulse" x-show="isLoadingUser && !userName">Loading...</span>
-                <button type="button"
-                        @click="handleLogout"
-                        :disabled="isLoggingOut"
-                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white rounded-md border border-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">
-                    <span x-show="isLoggingOut" x-cloak class="animate-spin inline-block size-3 border-2 border-slate-400 border-t-white rounded-full"></span>
-                    <span x-text="isLoggingOut ? 'Logging out...' : 'Logout'">Logout</span>
-                </button>
-            </div>
-        </div>
-    </header>
+    <!-- Main Shell -->
+    <div class="flex-1 flex flex-col md:pl-64">
+        <!-- Top Navigation Header -->
+        <x-navbar />
 
-    <!-- Main Content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {{ $slot ?? '' }}
-        @yield('content')
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
-        Archive Automation &copy; {{ date('Y') }}
-    </footer>
+        <!-- Main Content Area -->
+        <main class="flex-1 max-w-8xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {{ $slot ?? '' }}
+            @yield('content')
+        </main>
+    </div>
 </body>
 </html>

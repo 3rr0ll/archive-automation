@@ -11,11 +11,18 @@ export async function login({ email, password, remember = false }) {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_token_issued_at');
 
-    return api.post('/login', {
+    const data = await api.post('/login', {
         email,
         password,
         remember,
     });
+
+    if (data?.access_token) {
+        localStorage.setItem('auth_token', data.access_token);
+        localStorage.setItem('auth_token_issued_at', Date.now().toString());
+    }
+
+    return data;
 }
 
 let currentUserPromise = null;
