@@ -7,12 +7,18 @@ use App\Http\Requests\BulkDeleteUsersRequest;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
+use App\Services\Users\UserAdministrationService;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules;
 
 class UserController extends Controller
 {
+    public function __construct(
+        private UserAdministrationService $userAdministrationService,
+    ) {}
+
     /**
      * List all users (admin only).
      */
@@ -78,22 +84,14 @@ class UserController extends Controller
      */
     public function destroy(Request $request, User $user): JsonResponse
     {
-        if ($request->user()->is($user)) {
+        try {
+            $this->userAdministrationService->delete($request->user(), $user);
+        } catch (DomainException $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'You cannot delete your own account.',
+                'message' => $exception->getMessage(),
             ], 422);
         }
-
-        if ($user->isAdmin()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You cannot delete another admin account.',
-            ], 422);
-        }
-
-        $user->tokens()->delete();
-        $user->delete();
 
         return response()->json([
             'success' => true,
@@ -106,48 +104,32 @@ class UserController extends Controller
      */
     public function bulkDestroy(BulkDeleteUsersRequest $request): JsonResponse
     {
-        $actorId = $request->user()->id;
+        $result = $this->userAdministrationService->bulkDelete(
+            $request->user(),
+            $request->validated('ids'),
+        );
 
-        $ids = collect($request->validated('ids'))
-            ->reject(fn (int $id): bool => $id === $actorId)
-            ->values();
-
-        if ($ids->isEmpty()) {
+        if ($result['deleted_count'] === 0 && $result['skipped_self'] && $result['skipped_admin_ids'] === []) {
             return response()->json([
                 'success' => false,
                 'message' => 'No users deleted. You cannot delete your own account.',
             ], 422);
         }
 
-        $users = User::query()->whereIn('id', $ids)->get();
-        $deletable = $users->reject(fn (User $user): bool => $user->isAdmin())->values();
-
-        if ($deletable->isEmpty()) {
+        if ($result['deleted_count'] === 0) {
             return response()->json([
                 'success' => false,
                 'message' => 'No users deleted. Admin accounts cannot be deleted.',
             ], 422);
         }
 
-        $deletedIds = [];
-
-        foreach ($deletable as $user) {
-            $user->tokens()->delete();
-            $user->delete();
-            $deletedIds[] = $user->id;
-        }
-
         return response()->json([
             'success' => true,
             'message' => 'Users deleted successfully.',
             'data' => [
-                'deleted_ids' => $deletedIds,
-                'deleted_count' => count($deletedIds),
-                'skipped_admin_ids' => $users
-                    ->filter(fn (User $user): bool => $user->isAdmin())
-                    ->pluck('id')
-                    ->values()
-                    ->all(),
+                'deleted_ids' => $result['deleted_ids'],
+                'deleted_count' => $result['deleted_count'],
+                'skipped_admin_ids' => $result['skipped_admin_ids'],
             ],
         ]);
     }
@@ -157,22 +139,22 @@ class UserController extends Controller
      */
     public function resetPassword(Request $request, User $user): JsonResponse
     {
-        if ($user->isAdmin() && ! $request->user()->is($user)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You cannot reset another admin account password.',
-            ], 422);
-        }
-
         $request->validate([
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $user->update([
-            'password' => $request->password,
-        ]);
-
-        $user->tokens()->delete();
+        try {
+            $this->userAdministrationService->resetPassword(
+                $request->user(),
+                $user,
+                (string) $request->input('password'),
+            );
+        } catch (DomainException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,

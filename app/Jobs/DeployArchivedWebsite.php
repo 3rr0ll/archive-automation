@@ -2,10 +2,8 @@
 
 namespace App\Jobs;
 
-use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
-use App\Services\InternetArchive\InternetArchiveService;
-use App\Services\RunCloud\RunCloudService;
+use App\Services\Deployment\ArchiveDeploymentService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -17,16 +15,8 @@ class DeployArchivedWebsite implements ShouldQueue
         public Deployment $deployment
     ) {}
 
-    public function handle(
-        InternetArchiveService $archiveService,
-        RunCloudService $runCloudService
-    ): void {
-        $this->deployment->refresh();
-
-        if ($this->deployment->status === DeploymentStatus::Cancelled) {
-            return;
-        }
-
-        // Multi-step archive extraction and web deployment workflow
+    public function handle(ArchiveDeploymentService $deploymentService): void
+    {
+        $deploymentService->deploy($this->deployment);
     }
 }

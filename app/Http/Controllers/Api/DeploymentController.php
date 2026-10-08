@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\ArchiveStatus;
-use App\Enums\DeploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminDeploymentIndexRequest;
 use App\Http\Requests\BulkDeploymentRequest;
 use App\Http\Requests\DeploymentLogsRequest;
 use App\Http\Requests\StoreDeploymentRequest;
 use App\Http\Resources\DeploymentResource;
-use App\Jobs\DeployArchivedWebsite;
-use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
+use App\Services\Deployment\DeploymentLifecycleService;
+use App\Services\Deployment\DeploymentStatisticsService;
+use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +19,11 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class DeploymentController extends Controller
 {
+    public function __construct(
+        private DeploymentLifecycleService $lifecycleService,
+        private DeploymentStatisticsService $statisticsService,
+    ) {}
+
     /**
      * Display deployments across all users for administrators.
      */
@@ -44,36 +48,9 @@ class DeploymentController extends Controller
             'sort_direction',
             'per_page',
         ]));
-        $statusCounts = array_fill_keys(array_column(DeploymentStatus::cases(), 'value'), 0);
-        $archiveStatusCounts = array_fill_keys(array_column(ArchiveStatus::cases(), 'value'), 0);
-
-        foreach ((clone $query)->selectRaw('status, COUNT(*) as aggregate')->groupBy('status')->pluck('aggregate', 'status') as $status => $count) {
-            $statusCounts[$status] = (int) $count;
-        }
-
-        foreach ((clone $query)->selectRaw('archive_status, COUNT(*) as aggregate')->groupBy('archive_status')->pluck('aggregate', 'archive_status') as $status => $count) {
-            if ($status !== null) {
-                $archiveStatusCounts[$status] = (int) $count;
-            }
-        }
-
-        $stepCounts = (clone $query)
-            ->selectRaw('current_step, COUNT(*) as aggregate')
-            ->whereNotNull('current_step')
-            ->groupBy('current_step')
-            ->pluck('aggregate', 'current_step')
-            ->map(fn ($count): int => (int) $count)
-            ->all();
 
         return response()->json([
-            'data' => [
-                'total' => array_sum($statusCounts),
-                'active' => $statusCounts[DeploymentStatus::Pending->value]
-                    + $statusCounts[DeploymentStatus::Processing->value],
-                'status_counts' => $statusCounts,
-                'archive_status_counts' => $archiveStatusCounts,
-                'current_step_counts' => $stepCounts,
-            ],
+            'data' => $this->statisticsService->calculate($query),
         ]);
     }
 
@@ -120,45 +97,45 @@ class DeploymentController extends Controller
 
     public function cancel(Deployment $deployment): JsonResponse
     {
-        if (! in_array($deployment->status, [DeploymentStatus::Pending, DeploymentStatus::Processing], true)) {
+        try {
+            $deployment = $this->lifecycleService->cancel($deployment);
+        } catch (DomainException $exception) {
             return response()->json([
-                'message' => 'Only pending or processing deployments can be cancelled.',
+                'message' => $exception->getMessage(),
             ], 422);
         }
 
-        $this->markCancelled($deployment);
-
         return response()->json([
-            'data' => new DeploymentResource($deployment->fresh()->load('user:id,name,email', 'logs')),
+            'data' => new DeploymentResource($deployment->load('user:id,name,email', 'logs')),
             'message' => 'Deployment cancelled.',
         ]);
     }
 
     public function retry(Deployment $deployment): JsonResponse
     {
-        if (! in_array($deployment->status, [DeploymentStatus::Failed, DeploymentStatus::Cancelled], true)) {
+        try {
+            $deployment = $this->lifecycleService->retry($deployment);
+        } catch (DomainException $exception) {
             return response()->json([
-                'message' => 'Only failed or cancelled deployments can be retried.',
+                'message' => $exception->getMessage(),
             ], 422);
         }
 
-        $this->queueRetry($deployment);
-
         return response()->json([
-            'data' => new DeploymentResource($deployment->fresh()->load('user:id,name,email', 'logs')),
+            'data' => new DeploymentResource($deployment->load('user:id,name,email', 'logs')),
             'message' => 'Deployment retry queued.',
         ], 202);
     }
 
     public function adminDestroy(Deployment $deployment): JsonResponse
     {
-        if ($deployment->status === DeploymentStatus::Processing) {
+        try {
+            $this->lifecycleService->delete($deployment);
+        } catch (DomainException $exception) {
             return response()->json([
-                'message' => 'Cancel a processing deployment before deleting it.',
+                'message' => $exception->getMessage(),
             ], 422);
         }
-
-        $deployment->delete();
 
         return response()->json([
             'message' => 'Deployment deleted.',
@@ -167,94 +144,25 @@ class DeploymentController extends Controller
 
     public function bulkCancel(BulkDeploymentRequest $request): JsonResponse
     {
-        $deployments = Deployment::query()->whereKey($request->validated('ids'))->get()->keyBy('id');
-        $processedIds = [];
-        $skipped = [];
-
-        foreach ($request->validated('ids') as $id) {
-            $deployment = $deployments->get($id);
-
-            if (! $deployment instanceof Deployment) {
-                $skipped[] = ['id' => $id, 'reason' => 'Deployment no longer exists.'];
-
-                continue;
-            }
-
-            if (! in_array($deployment->status, [DeploymentStatus::Pending, DeploymentStatus::Processing], true)) {
-                $skipped[] = ['id' => $id, 'reason' => 'Only pending or processing deployments can be cancelled.'];
-
-                continue;
-            }
-
-            $this->markCancelled($deployment);
-            $processedIds[] = $id;
-        }
-
         return response()->json([
             'message' => 'Bulk cancellation completed.',
-            'data' => ['processed_ids' => $processedIds, 'skipped' => $skipped],
+            'data' => $this->lifecycleService->bulkCancel($request->validated('ids')),
         ]);
     }
 
     public function bulkRetry(BulkDeploymentRequest $request): JsonResponse
     {
-        $deployments = Deployment::query()->whereKey($request->validated('ids'))->get()->keyBy('id');
-        $processedIds = [];
-        $skipped = [];
-
-        foreach ($request->validated('ids') as $id) {
-            $deployment = $deployments->get($id);
-
-            if (! $deployment instanceof Deployment) {
-                $skipped[] = ['id' => $id, 'reason' => 'Deployment no longer exists.'];
-
-                continue;
-            }
-
-            if (! in_array($deployment->status, [DeploymentStatus::Failed, DeploymentStatus::Cancelled], true)) {
-                $skipped[] = ['id' => $id, 'reason' => 'Only failed or cancelled deployments can be retried.'];
-
-                continue;
-            }
-
-            $this->queueRetry($deployment);
-            $processedIds[] = $id;
-        }
-
         return response()->json([
             'message' => 'Bulk retry completed.',
-            'data' => ['processed_ids' => $processedIds, 'skipped' => $skipped],
+            'data' => $this->lifecycleService->bulkRetry($request->validated('ids')),
         ], 202);
     }
 
     public function bulkDestroy(BulkDeploymentRequest $request): JsonResponse
     {
-        $deployments = Deployment::query()->whereKey($request->validated('ids'))->get()->keyBy('id');
-        $processedIds = [];
-        $skipped = [];
-
-        foreach ($request->validated('ids') as $id) {
-            $deployment = $deployments->get($id);
-
-            if (! $deployment instanceof Deployment) {
-                $skipped[] = ['id' => $id, 'reason' => 'Deployment no longer exists.'];
-
-                continue;
-            }
-
-            if ($deployment->status === DeploymentStatus::Processing) {
-                $skipped[] = ['id' => $id, 'reason' => 'Cancel a processing deployment before deleting it.'];
-
-                continue;
-            }
-
-            $deployment->delete();
-            $processedIds[] = $id;
-        }
-
         return response()->json([
             'message' => 'Bulk deletion completed.',
-            'data' => ['processed_ids' => $processedIds, 'skipped' => $skipped],
+            'data' => $this->lifecycleService->bulkDelete($request->validated('ids')),
         ]);
     }
 
@@ -275,24 +183,7 @@ class DeploymentController extends Controller
      */
     public function store(StoreDeploymentRequest $request): JsonResponse
     {
-        $deployment = Deployment::create([
-            'user_id' => $request->user()->id,
-            'server_id' => $request->validated('server_id'),
-            'domain' => $request->validated('domain'),
-            'version' => $request->validated('version'),
-            'archive_url' => $request->validated('archive_url'),
-            'archive_status' => ArchiveStatus::Waiting,
-            'status' => DeploymentStatus::Pending,
-            'current_step' => 'waiting_for_archive',
-        ]);
-
-        $deployment->logs()->create([
-            'step_name' => 'waiting_for_archive',
-            'status' => 'in_progress',
-            'message' => 'Recovery submitted. Waiting for the Wayback ZIP to become available.',
-        ]);
-
-        WaitForWaybackArchive::dispatch($deployment);
+        $deployment = $this->lifecycleService->submit($request->user(), $request->validated());
 
         return response()->json([
             'data' => new DeploymentResource($deployment->load('server')),
@@ -313,7 +204,11 @@ class DeploymentController extends Controller
      */
     public function destroy(Deployment $deployment): JsonResponse
     {
-        $deployment->delete();
+        try {
+            $this->lifecycleService->delete($deployment);
+        } catch (DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
             'message' => 'Deployment deleted.',
@@ -334,44 +229,5 @@ class DeploymentController extends Controller
             ->when(isset($filters['current_step']), fn (Builder $query) => $query->where('current_step', $filters['current_step']))
             ->when(isset($filters['date_from']), fn (Builder $query) => $query->whereDate('created_at', '>=', $filters['date_from']))
             ->when(isset($filters['date_to']), fn (Builder $query) => $query->whereDate('created_at', '<=', $filters['date_to']));
-    }
-
-    private function markCancelled(Deployment $deployment): void
-    {
-        $deployment->update([
-            'status' => DeploymentStatus::Cancelled,
-            'current_step' => 'cancelled',
-        ]);
-        $deployment->logs()->create([
-            'step_name' => 'cancelled',
-            'status' => 'warning',
-            'message' => 'Deployment cancelled by an administrator.',
-        ]);
-    }
-
-    private function queueRetry(Deployment $deployment): void
-    {
-        $waitsForArchive = filled($deployment->archive_url);
-
-        $deployment->update([
-            'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : $deployment->archive_status,
-            'status' => DeploymentStatus::Pending,
-            'current_step' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
-        ]);
-        $deployment->logs()->create([
-            'step_name' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
-            'status' => 'in_progress',
-            'message' => $waitsForArchive
-                ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
-                : 'Deployment retry queued by an administrator.',
-        ]);
-
-        if ($waitsForArchive) {
-            WaitForWaybackArchive::dispatch($deployment);
-
-            return;
-        }
-
-        DeployArchivedWebsite::dispatch($deployment);
     }
 }

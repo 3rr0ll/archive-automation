@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateInternetArchiveSettingsRequest;
-use App\Models\ApiCredential;
-use App\Models\User;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\InternetArchive\InternetArchiveSettings;
+use App\Services\InternetArchive\InternetArchiveSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class InternetArchiveSettingsController extends Controller
 {
@@ -25,53 +23,14 @@ class InternetArchiveSettingsController extends Controller
 
     public function update(
         UpdateInternetArchiveSettingsRequest $request,
-        InternetArchiveSettings $settings,
+        InternetArchiveSettingsService $settingsService,
     ): JsonResponse {
-        $validated = $request->validated();
-        $payload = [
-            'allowed_hosts' => array_values(array_map(
-                fn (string $host): string => strtolower(trim($host)),
-                $validated['allowed_hosts'],
-            )),
-            'timeout' => $validated['timeout'],
-            'poll_delay' => $validated['poll_delay'],
-            'max_attempts' => $validated['max_attempts'],
-        ];
-
-        DB::transaction(function () use ($request, $payload): void {
-            User::query()->whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
-
-            $credential = ApiCredential::query()
-                ->where('service', 'internet_archive')
-                ->latest('updated_at')
-                ->latest('id')
-                ->lockForUpdate()
-                ->first();
-            $attributes = [
-                'user_id' => $request->user()->id,
-                'account_name' => 'Global Internet Archive settings',
-                'token_data_encrypted' => json_encode($payload, JSON_THROW_ON_ERROR),
-            ];
-
-            if ($credential === null) {
-                $credential = ApiCredential::create([
-                    ...$attributes,
-                    'service' => 'internet_archive',
-                ]);
-            } else {
-                $credential->update($attributes);
-            }
-
-            ApiCredential::query()
-                ->where('service', 'internet_archive')
-                ->whereKeyNot($credential->getKey())
-                ->delete();
-        });
+        $settings = $settingsService->update($request->user(), $request->validated());
 
         return response()->json([
             'success' => true,
             'message' => 'Internet Archive settings updated successfully.',
-            'data' => $settings->all(),
+            'data' => $settings,
             'source' => 'database',
         ]);
     }
