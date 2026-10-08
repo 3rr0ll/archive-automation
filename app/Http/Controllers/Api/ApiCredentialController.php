@@ -3,26 +3,26 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\IndexApiCredentialRequest;
 use App\Http\Requests\StoreApiCredentialRequest;
 use App\Http\Requests\UpdateApiCredentialRequest;
 use App\Http\Resources\ApiCredentialResource;
 use App\Models\ApiCredential;
+use App\Services\Credentials\ApiCredentialService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class ApiCredentialController extends Controller
 {
+    public function __construct(
+        private ApiCredentialService $credentialService,
+    ) {}
+
     /**
      * List API credentials (admin only).
      */
-    public function index(Request $request): JsonResponse
+    public function index(IndexApiCredentialRequest $request): JsonResponse
     {
-        $credentials = ApiCredential::query()
-            ->where('service', '!=', 'internet_archive')
-            ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
-            ->when($request->filled('service'), fn ($query) => $query->where('service', $request->string('service')))
-            ->latest()
-            ->paginate($request->integer('per_page', 15));
+        $credentials = $this->credentialService->paginate($request->validated());
 
         return response()->json([
             'success' => true,
@@ -41,12 +41,7 @@ class ApiCredentialController extends Controller
      */
     public function store(StoreApiCredentialRequest $request): JsonResponse
     {
-        $credential = ApiCredential::create([
-            'user_id' => $request->validated('user_id'),
-            'service' => $request->validated('service'),
-            'account_name' => $request->validated('account_name'),
-            'token_data_encrypted' => $request->validated('token_data'),
-        ]);
+        $credential = $this->credentialService->create($request->validated());
 
         return response()->json([
             'success' => true,
@@ -60,11 +55,11 @@ class ApiCredentialController extends Controller
      */
     public function show(ApiCredential $apiCredential): JsonResponse
     {
-        abort_if($apiCredential->service === 'internet_archive', 404);
+        $credential = $this->credentialService->accessible($apiCredential);
 
         return response()->json([
             'success' => true,
-            'data' => (new ApiCredentialResource($apiCredential))->resolve(),
+            'data' => (new ApiCredentialResource($credential))->resolve(),
         ]);
     }
 
@@ -73,20 +68,12 @@ class ApiCredentialController extends Controller
      */
     public function update(UpdateApiCredentialRequest $request, ApiCredential $apiCredential): JsonResponse
     {
-        abort_if($apiCredential->service === 'internet_archive', 404);
-
-        $data = $request->safe()->except('token_data');
-
-        if ($request->filled('token_data')) {
-            $data['token_data_encrypted'] = $request->validated('token_data');
-        }
-
-        $apiCredential->update($data);
+        $credential = $this->credentialService->update($apiCredential, $request->validated());
 
         return response()->json([
             'success' => true,
             'message' => 'API credential updated successfully.',
-            'data' => (new ApiCredentialResource($apiCredential->fresh()))->resolve(),
+            'data' => (new ApiCredentialResource($credential))->resolve(),
         ]);
     }
 
@@ -95,9 +82,7 @@ class ApiCredentialController extends Controller
      */
     public function destroy(ApiCredential $apiCredential): JsonResponse
     {
-        abort_if($apiCredential->service === 'internet_archive', 404);
-
-        $apiCredential->delete();
+        $this->credentialService->delete($apiCredential);
 
         return response()->json([
             'success' => true,
