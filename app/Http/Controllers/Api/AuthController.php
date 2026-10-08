@@ -3,54 +3,41 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\LoginRequest;
+use App\Http\Requests\RefreshTokenRequest;
 use App\Models\User;
+use App\Services\Auth\AuthenticationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private AuthenticationService $authenticationService,
+    ) {}
+
     /**
      * Handle an incoming authentication request for API.
      */
-    public function login(Request $request): JsonResponse
+    public function login(LoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string'],
-            'device_name' => ['nullable', 'string'],
-            'remember' => ['nullable', 'boolean'],
-        ]);
-
-        if (! Auth::attempt($request->only('email', 'password'), $request->boolean('remember'))) {
-            throw ValidationException::withMessages([
-                'email' => [__('auth.failed')],
-            ]);
-        }
+        $authenticated = $this->authenticationService->authenticate(
+            $request->validated('email'),
+            $request->validated('password'),
+            $request->boolean('remember'),
+            $request->validated('device_name') ?? 'web-browser',
+        );
 
         if ($request->hasSession()) {
             $request->session()->regenerate();
         }
 
-        /** @var User $user */
-        $user = Auth::user();
-        $deviceName = $request->device_name ?? 'web-browser';
-        $token = $user->createToken($deviceName)->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Login successful',
-            'token_type' => 'Bearer',
-            'access_token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
-        ]);
+        return $this->tokenResponse(
+            $authenticated['user'],
+            $authenticated['access_token'],
+            'Login successful',
+        );
     }
 
     /**
@@ -58,11 +45,10 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->user()?->currentAccessToken();
+        $user = $request->user();
 
-        // Only delete database personal access tokens; TransientToken (cookie sessions) has no delete() method
-        if ($token instanceof PersonalAccessToken) {
-            $token->delete();
+        if ($user instanceof User) {
+            $this->authenticationService->revokeCurrentToken($user);
         }
 
         Auth::guard('web')->logout();
@@ -78,29 +64,30 @@ class AuthController extends Controller
         ]);
     }
 
-
     /**
      * Refresh the authenticated user's token by rotating it.
      */
-    public function refresh(Request $request): JsonResponse
+    public function refresh(RefreshTokenRequest $request): JsonResponse
     {
         $user = $request->user();
-        $deviceName = $request->device_name ?? 'refreshed-token';
 
-        // Revoke the current token if it is a personal access token
-        $currentToken = $user?->currentAccessToken();
-        if ($currentToken instanceof PersonalAccessToken) {
-            $currentToken->delete();
-        }
+        abort_unless($user instanceof User, 401);
 
-        // Issue a fresh token
-        $newToken = $user->createToken($deviceName)->plainTextToken;
+        $token = $this->authenticationService->rotateToken(
+            $user,
+            $request->validated('device_name') ?? 'refreshed-token',
+        );
 
+        return $this->tokenResponse($user, $token, 'Token refreshed successfully');
+    }
+
+    private function tokenResponse(User $user, string $token, string $message): JsonResponse
+    {
         return response()->json([
             'success' => true,
-            'message' => 'Token refreshed successfully',
+            'message' => $message,
             'token_type' => 'Bearer',
-            'access_token' => $newToken,
+            'access_token' => $token,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
