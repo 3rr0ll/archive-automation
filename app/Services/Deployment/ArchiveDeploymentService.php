@@ -1,0 +1,108 @@
+<?php
+
+namespace App\Services\Deployment;
+
+use App\Enums\DeploymentStatus;
+use App\Models\Deployment;
+use App\Services\InternetArchive\InternetArchiveService;
+use App\Services\RunCloud\RunCloudService;
+use RuntimeException;
+use Throwable;
+
+class ArchiveDeploymentService
+{
+    public function __construct(
+        private InternetArchiveService $archiveService,
+        private RunCloudService $runCloudService,
+    ) {}
+
+    public function deploy(Deployment $deployment): Deployment
+    {
+        $deployment->refresh();
+
+        if (in_array($deployment->status, [DeploymentStatus::Cancelled, DeploymentStatus::Completed], true)) {
+            return $deployment;
+        }
+
+        try {
+            $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
+
+            $version = $deployment->version instanceof \BackedEnum
+                ? $deployment->version->value
+                : (string) $deployment->version;
+            $destinationPath = storage_path('app/private/deployments/'.$deployment->id);
+
+            if (! $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath)) {
+                throw new RuntimeException('The archived website could not be downloaded.');
+            }
+
+            $deployment->refresh();
+            if ($deployment->status === DeploymentStatus::Cancelled) {
+                return $deployment;
+            }
+
+            $this->transition($deployment, 'provisioning_web_app', 'Provisioning the RunCloud web application.');
+            $result = $this->runCloudService->createEmptyWebApplication(
+                $deployment->domain,
+                (int) $deployment->server_id,
+            );
+
+            if (! empty($result['already_exists'])) {
+                throw new RuntimeException('A RunCloud web application already exists for this domain.');
+            }
+
+            $deployment->refresh();
+            if ($deployment->status === DeploymentStatus::Cancelled) {
+                return $deployment;
+            }
+
+            $deployment->update([
+                'status' => DeploymentStatus::Completed,
+                'current_step' => 'completed',
+            ]);
+            $deployment->logs()->create([
+                'step_name' => 'completed',
+                'status' => 'success',
+                'message' => 'Archived website deployment completed.',
+            ]);
+
+            return $deployment->refresh();
+        } catch (Throwable $exception) {
+            $deployment->refresh();
+
+            if ($deployment->status !== DeploymentStatus::Cancelled) {
+                $deployment->update([
+                    'status' => DeploymentStatus::Failed,
+                    'current_step' => 'deployment_failed',
+                ]);
+                $deployment->logs()->create([
+                    'step_name' => 'deployment_failed',
+                    'status' => 'error',
+                    'message' => 'Archived website deployment failed. Review the server logs for details.',
+                ]);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function transition(
+        Deployment $deployment,
+        string $step,
+        string $message,
+        ?DeploymentStatus $status = null,
+    ): void {
+        $attributes = ['current_step' => $step];
+
+        if ($status !== null) {
+            $attributes['status'] = $status;
+        }
+
+        $deployment->update($attributes);
+        $deployment->logs()->create([
+            'step_name' => $step,
+            'status' => 'in_progress',
+            'message' => $message,
+        ]);
+    }
+}
