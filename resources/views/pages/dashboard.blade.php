@@ -1,29 +1,23 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-6" x-data="dashboardOverview">
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
-        <h1 class="text-2xl font-bold tracking-tight text-white">Dashboard</h1>
-        <p class="text-slate-400 text-sm mt-1">
-            Welcome back, <span class="text-slate-200 font-medium" x-show="userName" x-text="userName" x-cloak></span><span class="text-slate-500 font-medium animate-pulse" x-show="isLoading && !userName">Loading...</span>. Manage deployments, servers, and automated archiving.
-        </p>
-    </div>
+<div class="space-y-8" x-data="dashboardOverview">
 
+    <!-- Top Search Bar -->
+    <x-dashboard.search-bar />
 
-    <!-- Quick Stats & Overview -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Deployments</span>
-            <p class="text-3xl font-extrabold text-white mt-2" x-text="stats.activeDeployments">0</p>
+    <!-- Main Grid Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Queue & Failed Domains -->
+        <div class="lg:col-span-4 xl:col-span-3 space-y-8">
+            <x-dashboard.queue />
+            <x-dashboard.failed-domains />
         </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Connected Servers</span>
-            <p class="text-3xl font-extrabold text-white mt-2" x-text="stats.connectedServers">0</p>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Queue Worker Status</span>
-            <p class="text-3xl font-extrabold text-emerald-400 mt-2" x-text="stats.queueWorkerStatus">Ready</p>
-        </div>
+
+        <!-- Right Column: Domains (Successful) -->
+        <x-dashboard.domain-list />
+
     </div>
 </div>
 @endsection
