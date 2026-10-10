@@ -53,7 +53,7 @@ class ApiAuthTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/user');
 
         $response->assertStatus(200)
@@ -66,7 +66,7 @@ class ApiAuthTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/logout');
 
         $response->assertStatus(200)
@@ -81,7 +81,7 @@ class ApiAuthTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/refresh');
 
         $response->assertStatus(200)
@@ -97,6 +97,23 @@ class ApiAuthTest extends TestCase
         $this->assertCount(1, $user->fresh()->tokens);
     }
 
+    public function test_refresh_validates_and_uses_the_device_name(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('old-device')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/refresh', ['device_name' => 'mobile-app'])
+            ->assertOk();
+
+        $this->assertSame('mobile-app', $user->fresh()->tokens()->sole()->name);
+
+        $this->withHeader('Authorization', 'Bearer '.$user->createToken('validation-token')->plainTextToken)
+            ->postJson('/api/refresh', ['device_name' => str_repeat('a', 256)])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('device_name');
+    }
+
     public function test_user_can_logout_via_session_without_transient_token_error(): void
     {
         $user = User::factory()->create();
@@ -110,4 +127,3 @@ class ApiAuthTest extends TestCase
         $this->assertGuest('web');
     }
 }
-
