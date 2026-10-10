@@ -375,9 +375,9 @@ class CloudflareWorkersAndDnsTest extends TestCase
             ], 200),
 
             // RunCloud system users
-            'https://manage.runcloud.io/api/v3/servers/99/system-users' => Http::response([
+            'https://manage.runcloud.io/api/v3/servers/99/users' => Http::response([
                 'data' => [
-                    ['id' => 1, 'username' => 'runcloud'],
+                    ['id' => 1645, 'username' => 'runcloud'],
                 ],
             ], 200),
 
@@ -435,6 +435,13 @@ class CloudflareWorkersAndDnsTest extends TestCase
 
         $this->assertTrue($result['success']);
         $this->assertEquals('cloudflare_direct', $result['dns_integration']);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/custom'
+                && $request['user'] === 1645
+                && $request['phpVersion'] === 'php81rc'
+                && $request['stack'] === 'hybrid';
+        });
 
         // Assert domain payload sent to RunCloud does NOT contain dnsIntegration
         Http::assertSent(function ($request) {

@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 class RunCloudService
 {
     // Strictly PHP 8.1 for deployment
-    public const DEFAULT_PHP_VERSION = 'php81';
+    public const DEFAULT_PHP_VERSION = 'php81rc';
 
     protected CloudflareDnsService $cloudflareDnsService;
 
@@ -294,20 +294,21 @@ class RunCloudService
      */
     public function getRunCloudSystemUserId(int $serverId): int
     {
-        $response = $this->client()->get("/servers/{$serverId}/system-users");
+        $response = $this->client()->get("/servers/{$serverId}/users");
 
-        if ($response->successful()) {
-            $users = $response->json('data') ?? $response->json() ?? [];
+        if (! $response->successful()) {
+            $this->handleApiError("Failed to fetch RunCloud system users for server {$serverId}", $response);
+        }
 
-            foreach ($users as $user) {
-                if (strtolower($user['username'] ?? '') === 'runcloud') {
-                    return (int) $user['id'];
-                }
+        $users = $response->json('data') ?? $response->json() ?? [];
+
+        foreach ($users as $user) {
+            if (strtolower($user['username'] ?? '') === 'runcloud') {
+                return (int) $user['id'];
             }
         }
 
-        // Fallback: 1 is the default primary system user ID for "runcloud"
-        return 1;
+        throw new Exception("RunCloud system user 'runcloud' was not found on server {$serverId}.");
     }
 
     /**
@@ -321,7 +322,7 @@ class RunCloudService
             'user' => $systemUserId,
             'publicPath' => '/public_html',
             'phpVersion' => self::DEFAULT_PHP_VERSION, // Strictly PHP 8.1
-            'stack' => 'native',
+            'stack' => 'hybrid',
             'timezone' => 'UTC',
         ];
 
