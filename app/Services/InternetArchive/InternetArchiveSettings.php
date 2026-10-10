@@ -2,7 +2,7 @@
 
 namespace App\Services\InternetArchive;
 
-use App\Models\ApiCredential;
+use App\Models\EnvironmentVariable;
 
 class InternetArchiveSettings
 {
@@ -23,7 +23,7 @@ class InternetArchiveSettings
             return $defaults;
         }
 
-        $settings = json_decode((string) $credential->tokenData(), true);
+        $settings = json_decode((string) $credential->value, true);
 
         if (! is_array($settings)) {
             return $defaults;
@@ -42,10 +42,10 @@ class InternetArchiveSettings
         return $this->databaseCredential() !== null;
     }
 
-    private function databaseCredential(): ?ApiCredential
+    private function databaseCredential(): ?EnvironmentVariable
     {
-        return ApiCredential::query()
-            ->where('service', 'internet_archive')
+        return EnvironmentVariable::query()
+            ->where('key', 'INTERNET_ARCHIVE_SETTINGS')
             ->latest('updated_at')
             ->latest('id')
             ->first();

@@ -53,8 +53,8 @@ class User extends Authenticatable
             ->exists();
     }
 
-    public function apiCredentials(): HasMany
+    public function environmentVariables(): HasMany
     {
-        return $this->hasMany(ApiCredential::class);
+        return $this->hasMany(EnvironmentVariable::class);
     }
 }

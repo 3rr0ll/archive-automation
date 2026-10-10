@@ -2,7 +2,7 @@
 
 namespace App\Services\Cloudflare;
 
-use App\Models\ApiCredential;
+use App\Models\EnvironmentVariable;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -47,9 +47,9 @@ class CloudflareClient
         // Fallback to stored credentials from database
         if (empty($token) && (empty($apiKey) || empty($email))) {
             try {
-                $credential = ApiCredential::where('service', 'cloudflare')->latest()->first();
-                if ($credential && ! empty($credential->tokenData())) {
-                    $token = $credential->tokenData();
+                $credential = EnvironmentVariable::where('key', 'CLOUDFLARE_API_TOKEN')->latest()->first();
+                if ($credential && ! empty($credential->value)) {
+                    $token = $credential->value;
                 }
             } catch (Exception) {
                 // Table might not exist or database unavailable during certain tests

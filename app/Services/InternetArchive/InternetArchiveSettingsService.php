@@ -2,7 +2,7 @@
 
 namespace App\Services\InternetArchive;
 
-use App\Models\ApiCredential;
+use App\Models\EnvironmentVariable;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -31,29 +31,31 @@ class InternetArchiveSettingsService
         DB::transaction(function () use ($actor, $payload): void {
             User::query()->whereKey($actor->id)->lockForUpdate()->firstOrFail();
 
-            $credential = ApiCredential::query()
-                ->where('service', 'internet_archive')
+            $credential = EnvironmentVariable::query()
+                ->where('key', 'INTERNET_ARCHIVE_SETTINGS')
                 ->latest('updated_at')
                 ->latest('id')
                 ->lockForUpdate()
                 ->first();
             $attributes = [
                 'user_id' => $actor->id,
-                'account_name' => 'Global Internet Archive settings',
-                'token_data_encrypted' => json_encode($payload, JSON_THROW_ON_ERROR),
+                'type' => 'config',
+                'environments' => 'Production',
+                'note' => 'Global Internet Archive settings',
+                'value' => json_encode($payload, JSON_THROW_ON_ERROR),
             ];
 
             if ($credential === null) {
-                $credential = ApiCredential::create([
+                $credential = EnvironmentVariable::create([
                     ...$attributes,
-                    'service' => 'internet_archive',
+                    'key' => 'INTERNET_ARCHIVE_SETTINGS',
                 ]);
             } else {
                 $credential->update($attributes);
             }
 
-            ApiCredential::query()
-                ->where('service', 'internet_archive')
+            EnvironmentVariable::query()
+                ->where('key', 'INTERNET_ARCHIVE_SETTINGS')
                 ->whereKeyNot($credential->getKey())
                 ->delete();
         });

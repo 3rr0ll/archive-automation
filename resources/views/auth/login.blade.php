@@ -15,7 +15,7 @@
 
 
 <body class="bg-white text-zinc-900 flex items-center justify-center min-h-screen p-4 font-sans antialiased selection:bg-zinc-950 selection:text-white" style="background-color: #ffffff;">
-    <x-login-card />
+    <x-auth.login-card />
 </body>
 </html>
 

@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\ApiCredentialController;
+use App\Http\Controllers\Api\EnvironmentVariableController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
@@ -57,11 +57,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
     Route::put('/users/{user}/password', [UserController::class, 'resetPassword']);
 
-    Route::get('/api-credentials', [ApiCredentialController::class, 'index'])->name('api-credentials.index');
-    Route::post('/api-credentials', [ApiCredentialController::class, 'store'])->name('api-credentials.store');
-    Route::get('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'show'])->name('api-credentials.show');
-    Route::put('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'update'])->name('api-credentials.update');
-    Route::delete('/api-credentials/{apiCredential}', [ApiCredentialController::class, 'destroy'])->name('api-credentials.destroy');
+    Route::apiResource('environment-variables', EnvironmentVariableController::class);
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
