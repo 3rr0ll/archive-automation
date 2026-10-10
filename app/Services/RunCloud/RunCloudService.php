@@ -378,6 +378,27 @@ class RunCloudService
      */
     protected function client(): PendingRequest
     {
+        $apiToken = $this->apiToken;
+        $apiKey = $this->apiKey;
+        $apiSecret = $this->apiSecret;
+
+        // Fallback to database EnvironmentVariables
+        if (empty($apiToken) && empty($apiKey)) {
+            try {
+                $dbToken = \App\Models\EnvironmentVariable::where('key', 'RUNCLOUD_API_TOKEN')->latest()->first();
+                if ($dbToken && ! empty($dbToken->value)) {
+                    $apiToken = $dbToken->value;
+                } else {
+                    $dbKey = \App\Models\EnvironmentVariable::where('key', 'RUNCLOUD_API_KEY')->latest()->first();
+                    if ($dbKey && ! empty($dbKey->value)) {
+                        $apiKey = $dbKey->value;
+                    }
+                }
+            } catch (Exception) {
+                // Ignore DB errors
+            }
+        }
+
         $client = Http::baseUrl($this->baseUrl)
             ->timeout($this->timeout)
             ->withHeaders([
@@ -386,21 +407,21 @@ class RunCloudService
             ]);
 
         // Bearer Token Authentication (Workspaces / v3 / Single API Key)
-        if (! empty($this->apiToken)) {
-            return $client->withToken($this->apiToken);
+        if (! empty($apiToken)) {
+            return $client->withToken($apiToken);
         }
 
         // If only API Key is provided (without secret), use it as Bearer token
-        if (! empty($this->apiKey) && empty($this->apiSecret)) {
-            return $client->withToken($this->apiKey);
+        if (! empty($apiKey) && empty($apiSecret)) {
+            return $client->withToken($apiKey);
         }
 
         // Basic Authentication (API Key : API Secret for legacy v2)
-        if (! empty($this->apiKey) && ! empty($this->apiSecret)) {
-            return $client->withBasicAuth($this->apiKey, $this->apiSecret);
+        if (! empty($apiKey) && ! empty($apiSecret)) {
+            return $client->withBasicAuth($apiKey, $apiSecret);
         }
 
-        throw new Exception('RunCloud credentials not configured. Please supply RUNCLOUD_API_KEY or RUNCLOUD_API_TOKEN in your .env file.');
+        throw new Exception('RunCloud credentials not configured. Please add RUNCLOUD_API_KEY or RUNCLOUD_API_TOKEN in your Environment Variables UI or .env file.');
     }
 
     /**

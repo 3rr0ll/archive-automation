@@ -17,5 +17,9 @@ Route::middleware('guest')->group(function (): void {
 
 // Protected Page Routes (Requires Authentication)
 Route::middleware('auth')->group(function (): void {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard', [\App\Http\Controllers\Web\DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/environment-variables', function () {
+        $variables = \App\Models\EnvironmentVariable::with('user')->orderBy('created_at', 'desc')->get();
+        return view('pages.environment-variables', compact('variables'));
+    })->name('environment-variables');
 });

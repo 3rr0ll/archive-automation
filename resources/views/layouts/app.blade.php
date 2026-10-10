@@ -35,12 +35,12 @@
     <x-dialog />
 
     <!-- Application Sidebar -->
-    <x-sidebar />
+    <x-global.sidebar />
 
     <!-- Main Shell -->
     <div class="flex-1 flex flex-col md:pl-64">
         <!-- Top Navigation Header -->
-        <x-navbar />
+        <x-global.navbar />
 
         <!-- Main Content Area -->
         <main class="flex-1 max-w-8xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
