@@ -8,7 +8,9 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -67,6 +69,69 @@ class DeploymentRecoveryTest extends TestCase
             'www' => ['www'],
             'non-www' => ['non-www'],
         ];
+    }
+
+    public function test_admin_can_submit_an_uploaded_zip_for_immediate_deployment(): void
+    {
+        Storage::fake('local');
+        Queue::fake([WaitForWaybackArchive::class, DeployArchivedWebsite::class]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
+
+        $response = $this->withToken($token)->post('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'example.com',
+            'version' => 'www',
+            'archive' => UploadedFile::fake()->create('website.zip', 10, 'application/zip'),
+        ], ['Accept' => 'application/json']);
+
+        $response->assertAccepted()
+            ->assertJsonPath('data.archive_source', 'upload')
+            ->assertJsonPath('data.archive_original_name', 'website.zip')
+            ->assertJsonPath('data.archive_status', 'ready')
+            ->assertJsonPath('data.current_step', 'archive_ready')
+            ->assertJsonPath('message', 'Uploaded ZIP accepted and recovery queued.');
+
+        $deployment = Deployment::findOrFail($response->json('data.id'));
+
+        $this->assertNull($deployment->archive_url);
+        Storage::disk('local')->assertExists($deployment->archive_path);
+        Queue::assertPushed(
+            DeployArchivedWebsite::class,
+            fn (DeployArchivedWebsite $job): bool => $job->deployment->is($deployment)
+        );
+        Queue::assertNotPushed(WaitForWaybackArchive::class);
+    }
+
+    public function test_recovery_requires_exactly_one_archive_source(): void
+    {
+        Storage::fake('local');
+        Queue::fake();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
+
+        $this->withToken($token)->post('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'example.com',
+            'version' => 'www',
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archive_url', 'archive']);
+
+        $this->withToken($token)->post('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'example.com',
+            'version' => 'www',
+            'archive_url' => 'https://web.archive.org/download/example/example.zip',
+            'archive' => UploadedFile::fake()->create('website.zip', 10, 'application/zip'),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['archive_url', 'archive']);
+
+        $this->assertDatabaseCount('deployments', 0);
+        Queue::assertNothingPushed();
     }
 
     public function test_returns_422_for_invalid_domain_version(): void

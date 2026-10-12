@@ -31,6 +31,8 @@ class DeploymentResource extends JsonResource
             ]),
             'domain' => $this->domain,
             'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
+            'archive_source' => $this->archive_source,
+            'archive_original_name' => $this->archive_original_name,
             'archive_status' => $this->archive_status instanceof \BackedEnum ? $this->archive_status->value : $this->archive_status,
             'status' => $this->status instanceof \BackedEnum ? $this->status->value : $this->status,
             'current_step' => $this->current_step,

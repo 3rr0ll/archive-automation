@@ -9,37 +9,77 @@ use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
 use App\Models\User;
 use DomainException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
+use Throwable;
 
 class DeploymentLifecycleService
 {
     /**
-     * @param  array{server_id: int, domain: string, version: string, archive_url: string}  $data
+     * @param  array{server_id: int, domain: string, version: string, archive_url?: string|null, archive?: UploadedFile|null}  $data
      */
     public function submit(User $user, array $data): Deployment
     {
-        $deployment = DB::transaction(function () use ($user, $data): Deployment {
-            $deployment = Deployment::create([
-                'user_id' => $user->id,
-                'server_id' => $data['server_id'],
-                'domain' => $data['domain'],
-                'version' => $data['version'],
-                'archive_url' => $data['archive_url'],
-                'archive_status' => ArchiveStatus::Waiting,
-                'status' => DeploymentStatus::Pending,
-                'current_step' => 'waiting_for_archive',
-            ]);
+        $upload = $data['archive'] ?? null;
+        $isUpload = $upload instanceof UploadedFile;
+        $storedPath = null;
 
-            $deployment->logs()->create([
-                'step_name' => 'waiting_for_archive',
-                'status' => 'in_progress',
-                'message' => 'Recovery submitted. Waiting for the Wayback ZIP to become available.',
-            ]);
+        try {
+            $deployment = DB::transaction(function () use ($user, $data, $upload, $isUpload, &$storedPath): Deployment {
+                $step = $isUpload ? 'archive_ready' : 'waiting_for_archive';
 
-            return $deployment;
-        });
+                $deployment = Deployment::create([
+                    'user_id' => $user->id,
+                    'server_id' => $data['server_id'],
+                    'domain' => $data['domain'],
+                    'version' => $data['version'],
+                    'archive_source' => $isUpload ? 'upload' : 'url',
+                    'archive_url' => $isUpload ? null : $data['archive_url'],
+                    'archive_original_name' => $isUpload ? $upload->getClientOriginalName() : null,
+                    'archive_status' => $isUpload ? ArchiveStatus::Ready : ArchiveStatus::Waiting,
+                    'status' => DeploymentStatus::Pending,
+                    'current_step' => $step,
+                ]);
 
-        WaitForWaybackArchive::dispatch($deployment);
+                if ($isUpload) {
+                    $storedPath = $upload->storeAs(
+                        "deployments/{$deployment->id}",
+                        'archive.zip',
+                        'local',
+                    );
+
+                    if (! is_string($storedPath)) {
+                        throw new RuntimeException('The uploaded ZIP could not be saved.');
+                    }
+
+                    $deployment->update(['archive_path' => $storedPath]);
+                }
+
+                $deployment->logs()->create([
+                    'step_name' => $step,
+                    'status' => $isUpload ? 'success' : 'in_progress',
+                    'message' => $isUpload
+                        ? 'Uploaded ZIP stored privately. Recovery deployment queued.'
+                        : 'Recovery submitted. Waiting for the Wayback ZIP to become available.',
+                ]);
+
+                return $deployment;
+            });
+        } catch (Throwable $exception) {
+            if (is_string($storedPath)) {
+                Storage::disk('local')->delete($storedPath);
+            }
+
+            throw $exception;
+        }
+
+        if ($isUpload) {
+            DeployArchivedWebsite::dispatch($deployment);
+        } else {
+            WaitForWaybackArchive::dispatch($deployment);
+        }
 
         return $deployment;
     }
@@ -73,14 +113,21 @@ class DeploymentLifecycleService
 
         $waitsForArchive = filled($deployment->archive_url);
 
-        DB::transaction(function () use ($deployment, $waitsForArchive): void {
+        if ($deployment->archive_source === 'upload'
+            && (blank($deployment->archive_path) || ! Storage::disk('local')->exists($deployment->archive_path))) {
+            throw new DomainException('The uploaded ZIP is no longer available. Upload it again before retrying.');
+        }
+
+        $readyStep = $deployment->archive_source === 'upload' ? 'archive_ready' : 'queued';
+
+        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep): void {
             $deployment->update([
-                'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : $deployment->archive_status,
+                'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : ArchiveStatus::Ready,
                 'status' => DeploymentStatus::Pending,
-                'current_step' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
+                'current_step' => $waitsForArchive ? 'waiting_for_archive' : $readyStep,
             ]);
             $deployment->logs()->create([
-                'step_name' => $waitsForArchive ? 'waiting_for_archive' : 'queued',
+                'step_name' => $waitsForArchive ? 'waiting_for_archive' : $readyStep,
                 'status' => 'in_progress',
                 'message' => $waitsForArchive
                     ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
@@ -103,7 +150,13 @@ class DeploymentLifecycleService
             throw new DomainException('Cancel a processing deployment before deleting it.');
         }
 
+        $archivePath = $deployment->archive_path;
         $deployment->delete();
+
+        if (filled($archivePath)) {
+            Storage::disk('local')->delete($archivePath);
+            Storage::disk('local')->deleteDirectory("deployments/{$deployment->id}");
+        }
     }
 
     /**

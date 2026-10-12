@@ -36,12 +36,18 @@ export function getApiHeaders(customHeaders = {}) {
  */
 export async function apiRequest(endpoint, { method = 'GET', body, headers = {}, ...options } = {}) {
     const url = apiUrl(endpoint);
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    const requestHeaders = getApiHeaders(headers);
+
+    if (isFormData) {
+        delete requestHeaders['Content-Type'];
+    }
 
     const response = await fetch(url, {
         method,
-        headers: getApiHeaders(headers),
+        headers: requestHeaders,
         credentials: 'same-origin',
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
         ...options,
     });
 

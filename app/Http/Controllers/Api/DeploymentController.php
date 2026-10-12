@@ -184,10 +184,13 @@ class DeploymentController extends Controller
     public function store(StoreDeploymentRequest $request): JsonResponse
     {
         $deployment = $this->lifecycleService->submit($request->user(), $request->validated());
+        $isUpload = $deployment->archive_source === 'upload';
 
         return response()->json([
             'data' => new DeploymentResource($deployment->load('server')),
-            'message' => 'Recovery accepted and waiting for the Wayback ZIP.',
+            'message' => $isUpload
+                ? 'Uploaded ZIP accepted and recovery queued.'
+                : 'Recovery accepted and waiting for the Wayback ZIP.',
         ], 202);
     }
 

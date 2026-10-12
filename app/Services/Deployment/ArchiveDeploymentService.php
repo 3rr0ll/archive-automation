@@ -6,6 +6,7 @@ use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
 
@@ -25,15 +26,25 @@ class ArchiveDeploymentService
         }
 
         try {
-            $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
-
-            $version = $deployment->version instanceof \BackedEnum
-                ? $deployment->version->value
-                : (string) $deployment->version;
             $destinationPath = storage_path('app/private/deployments/'.$deployment->id);
 
-            if (! $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath)) {
-                throw new RuntimeException('The archived website could not be downloaded.');
+            if ($deployment->archive_source === 'upload') {
+                $this->transition($deployment, 'preparing_archive', 'Preparing the uploaded ZIP.', DeploymentStatus::Processing);
+
+                if (blank($deployment->archive_path)
+                    || ! Storage::disk('local')->exists($deployment->archive_path)) {
+                    throw new RuntimeException('The uploaded ZIP is no longer available.');
+                }
+            } else {
+                $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
+
+                $version = $deployment->version instanceof \BackedEnum
+                    ? $deployment->version->value
+                    : (string) $deployment->version;
+
+                if (! $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath)) {
+                    throw new RuntimeException('The archived website could not be downloaded.');
+                }
             }
 
             $deployment->refresh();

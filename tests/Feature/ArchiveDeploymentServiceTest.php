@@ -8,6 +8,7 @@ use App\Services\Deployment\ArchiveDeploymentService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
@@ -72,6 +73,33 @@ class ArchiveDeploymentServiceTest extends TestCase
         $this->assertDatabaseMissing('deployment_logs', [
             'deployment_id' => $deployment->id,
             'message' => 'Sensitive provider response.',
+        ]);
+    }
+
+    public function test_it_uses_a_privately_uploaded_zip_without_downloading_it(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('deployments/1/archive.zip', 'zip contents');
+        $deployment = $this->deployment([
+            'id' => 1,
+            'archive_source' => 'upload',
+            'archive_url' => null,
+            'archive_path' => 'deployments/1/archive.zip',
+        ]);
+        $archiveService = Mockery::mock(InternetArchiveService::class);
+        $archiveService->shouldNotReceive('downloadSnapshot');
+        $runCloudService = Mockery::mock(RunCloudService::class);
+        $runCloudService->shouldReceive('createEmptyWebApplication')
+            ->once()
+            ->with('example.com', 123)
+            ->andReturn(['success' => true, 'web_app_id' => 501]);
+
+        $result = (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+
+        $this->assertSame('completed', $result->status->value);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'preparing_archive',
         ]);
     }
 
