@@ -54,9 +54,12 @@ class ArchiveDeploymentService
             }
 
             $this->transition($deployment, 'provisioning_web_app', 'Provisioning the RunCloud web application.');
+            $serverIp = $deployment->server?->ip_address;
+
             $result = $this->runCloudService->createEmptyWebApplication(
                 $deployment->domain,
                 (int) $deployment->server_id,
+                $serverIp,
             );
 
             if (! empty($result['already_exists'])) {
