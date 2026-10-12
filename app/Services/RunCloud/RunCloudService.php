@@ -2,10 +2,14 @@
 
 namespace App\Services\RunCloud;
 
+use App\Models\Deployment;
+use App\Models\EnvironmentVariable;
+use App\Models\Server;
 use App\Services\Cloudflare\CloudflareDnsService;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +43,23 @@ class RunCloudService
     }
 
     /**
+     * Retrieve an environment variable value from DB first, falling back to Config/.env.
+     */
+    protected function getEnvValue(string $key, mixed $default = null): mixed
+    {
+        try {
+            $record = EnvironmentVariable::where('key', $key)->latest('updated_at')->latest('id')->first();
+            if ($record && ! empty($record->value)) {
+                return $record->value;
+            }
+        } catch (Exception) {
+            // DB not available or table not migrated yet
+        }
+
+        return $default;
+    }
+
+    /**
      * Create an Empty Web Application on RunCloud.
      * Note: $version is intentionally ignored and not used by RunCloud.
      *
@@ -50,9 +71,30 @@ class RunCloudService
      */
     public function createEmptyWebApplication(string $domain, ?int $serverId = null): array
     {
-        $server = $serverId ?? (int) Config::get('services.runcloud.server_id');
+        // 1. Resolve Server ID: Use passed ID -> DB Server model -> EnvironmentVariable -> Config
+        $serverModel = null;
+        if ($serverId) {
+            $serverModel = Server::where('server_id', $serverId)->first();
+        }
 
-        // If no server was provided or configured, auto-select the first server from your account:
+        if (! $serverModel) {
+            $defaultServerId = $this->getEnvValue('RUNCLOUD_DEFAULT_SERVER_ID') 
+                ?? $this->getEnvValue('RUNCLOUD_SERVER_ID') 
+                ?? Config::get('services.runcloud.server_id');
+
+            if ($defaultServerId) {
+                $serverModel = Server::where('server_id', (int) $defaultServerId)->first();
+            }
+
+            // Fallback to active server in local DB if available
+            if (! $serverModel) {
+                $serverModel = Server::where('is_active', true)->first() ?? Server::first();
+            }
+        }
+
+        $server = $serverId ?? ($serverModel ? (int) $serverModel->server_id : null);
+
+        // If still not resolved from local DB or config, query RunCloud API as last resort
         if (! $server) {
             $servers = $this->getServers();
             $server = (int) ($servers[0]['id'] ?? 0);
@@ -65,8 +107,14 @@ class RunCloudService
         // Normalize domain (lowercase, remove any protocol or paths)
         $domain = $this->normalizeDomain($domain);
 
-        // 1. Generate Web Application Name (Rule: No TLD, max 30 chars)
+        // Generate Web Application Name (Rule: No TLD, max 30 chars)
         $webAppName = $this->generateWebAppName($domain);
+
+        // 2. Local duplicate check first (0 API requests)
+        $localDeployment = Deployment::where('domain', $domain)->first();
+        if ($localDeployment && $localDeployment->status?->value === 'completed') {
+            Log::info('Local duplicate check: domain already deployed according to database', ['domain' => $domain]);
+        }
 
         Log::info('Initiating RunCloud Empty Web Application creation', [
             'server_id' => $server,
@@ -75,27 +123,32 @@ class RunCloudService
             'php_version' => self::DEFAULT_PHP_VERSION,
         ]);
 
-        // 2. Duplicate Check
-        $existingApp = $this->findExistingWebApplication($server, $domain, $webAppName);
-        if ($existingApp) {
-            Log::warning('RunCloud Web Application already exists', [
-                'server_id' => $server,
-                'domain' => $domain,
-                'app_id' => $existingApp['id'] ?? null,
-            ]);
-
-            return [
-                'already_exists' => true,
-                'message' => 'Web application with this domain or name already exists on RunCloud.',
-                'app' => $existingApp,
-            ];
-        }
-
-        // 3. Resolve existing system user "runcloud"
+        // 3. Resolve system user "runcloud" ID (Check EnvironmentVariable model / cache first to save 1 API call)
         $systemUserId = $this->getRunCloudSystemUserId($server);
 
         // 4. Create the Custom/Empty Web Application on PHP 8.1
-        $createdApp = $this->createCustomWebApp($server, $webAppName, $domain, $systemUserId);
+        // Handles external/manual RunCloud creations optimistically: catches HTTP 422 if domain or name is already taken
+        $createResponse = $this->attemptCreateCustomWebApp($server, $webAppName, $domain, $systemUserId);
+
+        if (! $createResponse['success']) {
+            if ($createResponse['is_duplicate'] ?? false) {
+                Log::warning('RunCloud Web Application already exists (caught on creation)', [
+                    'server_id' => $server,
+                    'domain' => $domain,
+                    'message' => $createResponse['message'] ?? '',
+                ]);
+
+                return [
+                    'already_exists' => true,
+                    'message' => 'Web application with this domain or name already exists on RunCloud.',
+                    'app' => $createResponse['data'] ?? [],
+                ];
+            }
+
+            throw new Exception('RunCloud create webapp failed: ' . ($createResponse['message'] ?? 'Unknown error'));
+        }
+
+        $createdApp = $createResponse['data'];
         $appId = (int) ($createdApp['id'] ?? 0);
 
         if (! $appId) {
@@ -147,6 +200,53 @@ class RunCloudService
     }
 
     /**
+     * Attempt to create custom web app, detecting 422 duplicate/conflict responses without an upfront GET.
+     */
+    protected function attemptCreateCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array
+    {
+        $payload = [
+            'name' => $webAppName,
+            'domainName' => $domain,
+            'user' => $systemUserId,
+            'publicPath' => '/public_html',
+            'phpVersion' => self::DEFAULT_PHP_VERSION, // Strictly PHP 8.1
+            'stack' => 'hybrid',
+            'timezone' => 'UTC',
+        ];
+
+        $response = $this->client()->post("/servers/{$serverId}/webapps/custom", $payload);
+
+        if ($response->status() === 422) {
+            $responseBody = $response->json();
+            $message = json_encode($responseBody);
+
+            $isDuplicate = str_contains(strtolower($message), 'already been taken')
+                || str_contains(strtolower($message), 'already taken')
+                || str_contains(strtolower($message), 'already exists')
+                || str_contains(strtolower($message), 'has already been used');
+
+            if ($isDuplicate) {
+                return [
+                    'success' => false,
+                    'is_duplicate' => true,
+                    'message' => $responseBody['message'] ?? 'Web application or domain already exists on RunCloud.',
+                    'data' => $responseBody,
+                ];
+            }
+        }
+
+        if (! $response->successful()) {
+            $this->handleApiError('RunCloud create webapp failed', $response);
+        }
+
+        return [
+            'success' => true,
+            'is_duplicate' => false,
+            'data' => $response->json('data') ?? $response->json() ?? [],
+        ];
+    }
+
+    /**
      * Get all connected servers from the RunCloud account.
      *
      * @return array<int, array<string, mixed>>
@@ -184,19 +284,42 @@ class RunCloudService
 
     /**
      * Resolve the public IP address for a RunCloud server.
+     * Uses Server model first (0 API credits), then EnvironmentVariable, then Config, with caching.
      *
      * @throws Exception
      */
     public function getServerIp(?int $serverId = null): string
     {
-        // 1. Direct configuration override if provided
-        $configuredIp = Config::get('services.runcloud.server_ip');
+        // 1. Check local Server model (0 API credits)
+        if ($serverId) {
+            $serverModel = Server::where('server_id', $serverId)->first();
+            if ($serverModel && ! empty($serverModel->ip_address)) {
+                return (string) $serverModel->ip_address;
+            }
+        }
+
+        // 2. Direct configuration override if provided (EnvironmentVariable first, then Config)
+        $configuredIp = $this->getEnvValue('RUNCLOUD_DEFAULT_SERVER_IP')
+            ?? $this->getEnvValue('RUNCLOUD_SERVER_IP')
+            ?? Config::get('services.runcloud.server_ip');
+
         if (! empty($configuredIp)) {
             return (string) $configuredIp;
         }
 
-        $server = $serverId ?? (int) Config::get('services.runcloud.server_id');
+        // 3. Fallback to active server model in DB
+        $activeServer = Server::where('is_active', true)->first() ?? Server::first();
+        if ($activeServer && ! empty($activeServer->ip_address)) {
+            return (string) $activeServer->ip_address;
+        }
 
+        $defaultServerId = $this->getEnvValue('RUNCLOUD_DEFAULT_SERVER_ID')
+            ?? $this->getEnvValue('RUNCLOUD_SERVER_ID')
+            ?? Config::get('services.runcloud.server_id');
+
+        $server = $serverId ?? ($defaultServerId ? (int) $defaultServerId : null);
+
+        // 4. If still not found, check cache or query RunCloud API as last resort
         if (! $server) {
             $servers = $this->getServers();
             $serverData = $servers[0] ?? [];
@@ -211,14 +334,16 @@ class RunCloudService
             throw new Exception('No RunCloud server ID configured or found.');
         }
 
-        $serverDetails = $this->getServer($server);
-        $ip = $serverDetails['ipAddress'] ?? $serverDetails['ip_address'] ?? $serverDetails['ip'] ?? null;
+        return Cache::remember("runcloud_server_ip_{$server}", now()->addDays(7), function () use ($server) {
+            $serverDetails = $this->getServer($server);
+            $ip = $serverDetails['ipAddress'] ?? $serverDetails['ip_address'] ?? $serverDetails['ip'] ?? null;
 
-        if (empty($ip)) {
-            throw new Exception("Unable to determine IP address for RunCloud server {$server}.");
-        }
+            if (empty($ip)) {
+                throw new Exception("Unable to determine IP address for RunCloud server {$server}.");
+            }
 
-        return (string) $ip;
+            return (string) $ip;
+        });
     }
 
     /**
@@ -291,24 +416,37 @@ class RunCloudService
 
     /**
      * Rule 2: Get ID of existing system user "runcloud".
+     * Checks EnvironmentVariable (RUNCLOUD_USER_ID) and Cache first (0 API requests).
      */
     public function getRunCloudSystemUserId(int $serverId): int
     {
-        $response = $this->client()->get("/servers/{$serverId}/users");
+        // 1. Check EnvironmentVariable model or Config first (0 API calls)
+        $configuredUserId = $this->getEnvValue('RUNCLOUD_USER_ID')
+            ?? $this->getEnvValue('RUNCLOUD_SYSTEM_USER_ID')
+            ?? Config::get('services.runcloud.user_id');
 
-        if (! $response->successful()) {
-            $this->handleApiError("Failed to fetch RunCloud system users for server {$serverId}", $response);
+        if (! empty($configuredUserId)) {
+            return (int) $configuredUserId;
         }
 
-        $users = $response->json('data') ?? $response->json() ?? [];
+        // 2. Cache the result if fetched from API so it only ever calls once across all deployments
+        return (int) Cache::remember("runcloud_system_user_{$serverId}", now()->addDays(30), function () use ($serverId) {
+            $response = $this->client()->get("/servers/{$serverId}/users");
 
-        foreach ($users as $user) {
-            if (strtolower($user['username'] ?? '') === 'runcloud') {
-                return (int) $user['id'];
+            if (! $response->successful()) {
+                $this->handleApiError("Failed to fetch RunCloud system users for server {$serverId}", $response);
             }
-        }
 
-        throw new Exception("RunCloud system user 'runcloud' was not found on server {$serverId}.");
+            $users = $response->json('data') ?? $response->json() ?? [];
+
+            foreach ($users as $user) {
+                if (strtolower($user['username'] ?? '') === 'runcloud') {
+                    return (int) $user['id'];
+                }
+            }
+
+            throw new Exception("RunCloud system user 'runcloud' was not found on server {$serverId}.");
+        });
     }
 
     /**
@@ -379,26 +517,10 @@ class RunCloudService
      */
     protected function client(): PendingRequest
     {
-        $apiToken = $this->apiToken;
-        $apiKey = $this->apiKey;
-        $apiSecret = $this->apiSecret;
-
-        // Fallback to database EnvironmentVariables
-        if (empty($apiToken) && empty($apiKey)) {
-            try {
-                $dbToken = \App\Models\EnvironmentVariable::where('key', 'RUNCLOUD_API_TOKEN')->latest()->first();
-                if ($dbToken && ! empty($dbToken->value)) {
-                    $apiToken = $dbToken->value;
-                } else {
-                    $dbKey = \App\Models\EnvironmentVariable::where('key', 'RUNCLOUD_API_KEY')->latest()->first();
-                    if ($dbKey && ! empty($dbKey->value)) {
-                        $apiKey = $dbKey->value;
-                    }
-                }
-            } catch (Exception) {
-                // Ignore DB errors
-            }
-        }
+        // Prioritize database EnvironmentVariables as primary source of truth
+        $apiToken = $this->getEnvValue('RUNCLOUD_API_TOKEN', $this->apiToken);
+        $apiKey = $this->getEnvValue('RUNCLOUD_API_KEY', $this->apiKey);
+        $apiSecret = $this->getEnvValue('RUNCLOUD_API_SECRET', $this->apiSecret);
 
         $client = Http::baseUrl($this->baseUrl)
             ->timeout($this->timeout)
