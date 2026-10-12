@@ -20,6 +20,7 @@ class CreateRunCloudWebAppRequest extends FormRequest
                 'regex:/^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$/',
             ],
             'server_id' => ['nullable', 'integer'],
+            'server_ip' => ['nullable', 'string', 'ip'],
             'version' => ['nullable', 'string'],
         ];
     }

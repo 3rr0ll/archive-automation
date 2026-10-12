@@ -22,9 +22,10 @@ class RunCloudController extends Controller
     {
         $domain = (string) $request->validated('domain');
         $serverId = $request->validated('server_id') ? (int) $request->validated('server_id') : null;
+        $serverIp = $request->validated('server_ip') ? (string) $request->validated('server_ip') : null;
 
         try {
-            $result = $this->runCloudService->createEmptyWebApplication($domain, $serverId);
+            $result = $this->runCloudService->createEmptyWebApplication($domain, $serverId, $serverIp);
 
             if (! empty($result['already_exists'])) {
                 return response()->json([

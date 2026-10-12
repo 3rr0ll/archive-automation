@@ -69,7 +69,7 @@ class RunCloudService
      *
      * @throws Exception
      */
-    public function createEmptyWebApplication(string $domain, ?int $serverId = null): array
+    public function createEmptyWebApplication(string $domain, ?int $serverId = null, ?string $serverIp = null): array
     {
         // 1. Resolve Server ID: Use passed ID -> DB Server model -> EnvironmentVariable -> Config
         $serverModel = null;
@@ -155,14 +155,14 @@ class RunCloudService
             throw new Exception('RunCloud created web application but failed to return an ID.');
         }
 
-        // 5. Configure Domain with WWW enabled and preferred redirection unset ("none") (No RunCloud DNS integration)
-        $domainConfig = $this->configureDomain($server, $appId, $domain);
+        // Note: RunCloud automatically registers the primary domain upon creating custom webapp.
+        // We do NOT call POST /domains here to prevent a redundant API call and 422 errors.
 
-        // 6. Direct Cloudflare DNS Configuration: delete all existing records, then add @ and www A records for the RunCloud server
+        // 5. Direct Cloudflare DNS Configuration: delete all existing records, then add @ and www A records for the RunCloud server
         $dnsSetup = null;
         try {
-            $serverIp = $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $serverIp);
+            $resolvedIp = $serverIp ?: $this->getServerIp($server);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
@@ -171,7 +171,7 @@ class RunCloudService
             ]);
         }
 
-        // 7. Configure Advanced SSL / AutoSSL
+        // 6. Configure Advanced SSL / AutoSSL
         $sslConfig = $this->configureAutoSsl($server, $appId);
 
         Log::info('Successfully created RunCloud Empty Web Application', [
