@@ -57,7 +57,7 @@ return [
     'internet_archive' => [
         'allowed_archive_hosts' => array_filter(array_map(
             'trim',
-            explode(',', (string) env('INTERNET_ARCHIVE_ALLOWED_HOSTS', 'archive.org,archive-it.org'))
+            explode(',', (string) env('INTERNET_ARCHIVE_ALLOWED_HOSTS', 'archive.org,archive-it.org,waybackmachinedownloader.com'))
         )),
         'timeout' => (int) env('INTERNET_ARCHIVE_TIMEOUT', 20),
         'poll_delay' => (int) env('INTERNET_ARCHIVE_POLL_DELAY', 60),
