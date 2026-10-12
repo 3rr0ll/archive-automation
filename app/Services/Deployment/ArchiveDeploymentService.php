@@ -4,6 +4,7 @@ namespace App\Services\Deployment;
 
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
+use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
 use Illuminate\Support\Facades\Storage;
@@ -15,6 +16,7 @@ class ArchiveDeploymentService
     public function __construct(
         private InternetArchiveService $archiveService,
         private RunCloudService $runCloudService,
+        private CloudflareWorkerService $cloudflareWorkerService,
     ) {}
 
     public function deploy(Deployment $deployment): Deployment
@@ -27,6 +29,9 @@ class ArchiveDeploymentService
 
         try {
             $destinationPath = storage_path('app/private/deployments/'.$deployment->id);
+            $version = $deployment->version instanceof \BackedEnum
+                ? $deployment->version->value
+                : (string) $deployment->version;
 
             if ($deployment->archive_source === 'upload') {
                 $this->transition($deployment, 'preparing_archive', 'Preparing the uploaded ZIP.', DeploymentStatus::Processing);
@@ -37,10 +42,6 @@ class ArchiveDeploymentService
                 }
             } else {
                 $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
-
-                $version = $deployment->version instanceof \BackedEnum
-                    ? $deployment->version->value
-                    : (string) $deployment->version;
 
                 if (! $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath)) {
                     throw new RuntimeException('The archived website could not be downloaded.');
@@ -61,6 +62,19 @@ class ArchiveDeploymentService
             if (! empty($result['already_exists'])) {
                 throw new RuntimeException('A RunCloud web application already exists for this domain.');
             }
+
+            $deployment->refresh();
+            if ($deployment->status === DeploymentStatus::Cancelled) {
+                return $deployment;
+            }
+
+            $this->transition(
+                $deployment,
+                'configuring_cloudflare_workers',
+                'Assigning the Cloudflare Worker routes.',
+            );
+
+            $this->cloudflareWorkerService->changeWorkers($deployment->domain, $version);
 
             $deployment->refresh();
             if ($deployment->status === DeploymentStatus::Cancelled) {

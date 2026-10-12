@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Deployment;
 use App\Models\User;
+use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\Deployment\ArchiveDeploymentService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
@@ -30,14 +31,28 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->once()
             ->with('example.com', 123)
             ->andReturn(['success' => true, 'web_app_id' => 501]);
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')
+            ->once()
+            ->with('example.com', 'non-www')
+            ->andReturn(['routes' => []]);
 
-        $result = (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+        $result = (new ArchiveDeploymentService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+        ))->deploy($deployment);
 
         $this->assertSame('completed', $result->status->value);
         $this->assertSame('completed', $result->current_step);
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
             'step_name' => 'downloading_archive',
+            'status' => 'in_progress',
+        ]);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'configuring_cloudflare_workers',
             'status' => 'in_progress',
         ]);
         $this->assertDatabaseHas('deployment_logs', [
@@ -56,9 +71,15 @@ class ArchiveDeploymentServiceTest extends TestCase
         $runCloudService->shouldReceive('createEmptyWebApplication')
             ->once()
             ->andThrow(new RuntimeException('Sensitive provider response.'));
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldNotReceive('changeWorkers');
 
         try {
-            (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+            (new ArchiveDeploymentService(
+                $archiveService,
+                $runCloudService,
+                $cloudflareWorkerService,
+            ))->deploy($deployment);
             $this->fail('The provider exception was not rethrown.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Sensitive provider response.', $exception->getMessage());
@@ -73,6 +94,53 @@ class ArchiveDeploymentServiceTest extends TestCase
         $this->assertDatabaseMissing('deployment_logs', [
             'deployment_id' => $deployment->id,
             'message' => 'Sensitive provider response.',
+        ]);
+    }
+
+    public function test_it_does_not_complete_when_cloudflare_worker_setup_fails(): void
+    {
+        $deployment = $this->deployment(['version' => 'www']);
+        $archiveService = Mockery::mock(InternetArchiveService::class);
+        $archiveService->shouldReceive('downloadSnapshot')
+            ->once()
+            ->with('example.com', 'www', Mockery::type('string'))
+            ->andReturnTrue();
+        $runCloudService = Mockery::mock(RunCloudService::class);
+        $runCloudService->shouldReceive('createEmptyWebApplication')
+            ->once()
+            ->with('example.com', 123)
+            ->andReturn(['success' => true, 'web_app_id' => 501]);
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')
+            ->once()
+            ->with('example.com', 'www')
+            ->andThrow(new RuntimeException('Sensitive Cloudflare response.'));
+
+        try {
+            (new ArchiveDeploymentService(
+                $archiveService,
+                $runCloudService,
+                $cloudflareWorkerService,
+            ))->deploy($deployment);
+            $this->fail('The Cloudflare exception was not rethrown.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Sensitive Cloudflare response.', $exception->getMessage());
+        }
+
+        $this->assertSame('failed', $deployment->fresh()->status->value);
+        $this->assertSame('deployment_failed', $deployment->fresh()->current_step);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'configuring_cloudflare_workers',
+            'status' => 'in_progress',
+        ]);
+        $this->assertDatabaseMissing('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'completed',
+        ]);
+        $this->assertDatabaseMissing('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'message' => 'Sensitive Cloudflare response.',
         ]);
     }
 
@@ -93,8 +161,17 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->once()
             ->with('example.com', 123)
             ->andReturn(['success' => true, 'web_app_id' => 501]);
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')
+            ->once()
+            ->with('example.com', 'non-www')
+            ->andReturn(['routes' => []]);
 
-        $result = (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+        $result = (new ArchiveDeploymentService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+        ))->deploy($deployment);
 
         $this->assertSame('completed', $result->status->value);
         $this->assertDatabaseHas('deployment_logs', [
@@ -110,8 +187,14 @@ class ArchiveDeploymentServiceTest extends TestCase
         $archiveService->shouldNotReceive('downloadSnapshot');
         $runCloudService = Mockery::mock(RunCloudService::class);
         $runCloudService->shouldNotReceive('createEmptyWebApplication');
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldNotReceive('changeWorkers');
 
-        $result = (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+        $result = (new ArchiveDeploymentService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+        ))->deploy($deployment);
 
         $this->assertSame('cancelled', $result->status->value);
         $this->assertDatabaseCount('deployment_logs', 0);
@@ -130,8 +213,14 @@ class ArchiveDeploymentServiceTest extends TestCase
             });
         $runCloudService = Mockery::mock(RunCloudService::class);
         $runCloudService->shouldNotReceive('createEmptyWebApplication');
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldNotReceive('changeWorkers');
 
-        $result = (new ArchiveDeploymentService($archiveService, $runCloudService))->deploy($deployment);
+        $result = (new ArchiveDeploymentService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+        ))->deploy($deployment);
 
         $this->assertSame('cancelled', $result->status->value);
         $this->assertSame('cancelled', $result->current_step);
