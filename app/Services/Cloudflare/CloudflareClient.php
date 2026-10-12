@@ -33,6 +33,23 @@ class CloudflareClient
     }
 
     /**
+     * Retrieve an environment variable value from DB first, falling back to Config/.env.
+     */
+    protected function getEnvValue(string $key, mixed $default = null): mixed
+    {
+        try {
+            $record = EnvironmentVariable::where('key', $key)->latest('updated_at')->latest('id')->first();
+            if ($record && ! empty($record->value)) {
+                return $record->value;
+            }
+        } catch (Exception) {
+            // DB not available or table not migrated yet
+        }
+
+        return $default;
+    }
+
+    /**
      * Prepare authenticated HTTP client.
      *
      * @return PendingRequest
@@ -40,21 +57,10 @@ class CloudflareClient
      */
     public function client(): PendingRequest
     {
-        $token = $this->apiToken;
-        $apiKey = $this->apiKey;
-        $email = $this->email;
-
-        // Fallback to stored credentials from database
-        if (empty($token) && (empty($apiKey) || empty($email))) {
-            try {
-                $credential = EnvironmentVariable::where('key', 'CLOUDFLARE_API_TOKEN')->latest()->first();
-                if ($credential && ! empty($credential->value)) {
-                    $token = $credential->value;
-                }
-            } catch (Exception) {
-                // Table might not exist or database unavailable during certain tests
-            }
-        }
+        // Prioritize database EnvironmentVariables as primary source of truth
+        $token = $this->getEnvValue('CLOUDFLARE_API_TOKEN', $this->apiToken);
+        $apiKey = $this->getEnvValue('CLOUDFLARE_API_KEY', $this->apiKey);
+        $email = $this->getEnvValue('CLOUDFLARE_EMAIL', $this->email);
 
         $client = Http::baseUrl($this->baseUrl)
             ->timeout($this->timeout)
@@ -74,7 +80,7 @@ class CloudflareClient
             ]);
         }
 
-        throw new Exception('Cloudflare credentials not configured. Please supply CLOUDFLARE_API_TOKEN in your .env or save Cloudflare API credentials.');
+        throw new Exception('Cloudflare credentials not configured. Please supply CLOUDFLARE_API_TOKEN in your Environment Variables UI or .env file.');
     }
 
     /**
