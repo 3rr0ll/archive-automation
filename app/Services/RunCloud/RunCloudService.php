@@ -194,7 +194,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => 'AutoSSL (Advanced)',
+            'ssl' => "Let's Encrypt (HTTP-01)",
             'data' => $createdApp,
         ];
     }
@@ -497,17 +497,28 @@ class RunCloudService
     }
 
     /**
-     * Rule 7: Configure Advanced SSL/TLS & AutoSSL.
+     * Configure standard Let's Encrypt SSL via HTTP-01 challenge (No 402 Payment Required).
      */
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
         $payload = [
-            'sslMethod' => 'advanced',
             'provider' => 'letsencrypt',
-            'autoSsl' => true,
+            'authorizationMethod' => 'http-01',
+            'environment' => 'live',
+            'enableHttp' => true,
+            'enableHsts' => false,
         ];
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
+
+        if (! $response->successful()) {
+            Log::warning('RunCloud SSL installation returned non-200', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'status' => $response->status(),
+                'body' => $response->json() ?? $response->body(),
+            ]);
+        }
 
         return $response->json('data') ?? $response->json() ?? [];
     }
