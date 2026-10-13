@@ -3,12 +3,17 @@
 namespace App\Services\Credentials;
 
 use App\Models\ApiCredential;
+use App\Services\Logging\AuditLogger;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ApiCredentialService
 {
     private const RESERVED_SERVICES = ['internet_archive'];
+
+    public function __construct(
+        private AuditLogger $auditLogger,
+    ) {}
 
     /**
      * @param  array{user_id?: int, service?: string, per_page?: int}  $filters
@@ -30,12 +35,19 @@ class ApiCredentialService
      */
     public function create(array $data): ApiCredential
     {
-        return ApiCredential::create([
+        $credential = ApiCredential::create([
             'user_id' => $data['user_id'],
             'service' => $data['service'],
             'account_name' => $data['account_name'] ?? null,
             'token_data_encrypted' => $data['token_data'],
         ]);
+
+        $this->auditLogger->record('api-credential.created', $credential, [
+            'service' => $credential->service,
+            'owner_id' => $credential->user_id,
+        ]);
+
+        return $credential;
     }
 
     public function accessible(ApiCredential $credential): ApiCredential
@@ -62,6 +74,12 @@ class ApiCredentialService
 
         $credential->update($attributes);
 
+        $this->auditLogger->record('api-credential.updated', $credential, [
+            'service' => $credential->service,
+            'owner_id' => $credential->user_id,
+            'changed_fields' => array_keys($credential->getChanges()),
+        ]);
+
         return $credential->refresh();
     }
 
@@ -69,6 +87,10 @@ class ApiCredentialService
     {
         $this->ensureAccessible($credential);
         $credential->delete();
+        $this->auditLogger->record('api-credential.deleted', $credential, [
+            'service' => $credential->service,
+            'owner_id' => $credential->user_id,
+        ]);
     }
 
     private function ensureAccessible(ApiCredential $credential): void

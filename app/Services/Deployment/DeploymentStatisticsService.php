@@ -5,15 +5,32 @@ namespace App\Services\Deployment;
 use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
+use App\Services\Cache\ApplicationCache;
 use Illuminate\Database\Eloquent\Builder;
 
 class DeploymentStatisticsService
 {
+    public function __construct(
+        private ApplicationCache $cache,
+    ) {}
+
     /**
      * @param  Builder<Deployment>  $query
      * @return array{total: int, active: int, status_counts: array<string, int>, archive_status_counts: array<string, int>, current_step_counts: array<string, int>}
      */
-    public function calculate(Builder $query): array
+    public function calculate(Builder $query, array $filters = []): array
+    {
+        return $this->cache->rememberDeploymentStatistics(
+            $filters,
+            fn (): array => $this->calculateUncached($query),
+        );
+    }
+
+    /**
+     * @param  Builder<Deployment>  $query
+     * @return array{total: int, active: int, status_counts: array<string, int>, archive_status_counts: array<string, int>, current_step_counts: array<string, int>}
+     */
+    private function calculateUncached(Builder $query): array
     {
         $statusCounts = array_fill_keys(array_column(DeploymentStatus::cases(), 'value'), 0);
         $archiveStatusCounts = array_fill_keys(array_column(ArchiveStatus::cases(), 'value'), 0);

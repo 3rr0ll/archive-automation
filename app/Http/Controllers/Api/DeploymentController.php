@@ -43,14 +43,15 @@ class DeploymentController extends Controller
 
     public function statistics(AdminDeploymentIndexRequest $request): JsonResponse
     {
-        $query = $this->filteredAdminQuery($request->safe()->except([
+        $filters = $request->safe()->except([
             'sort_by',
             'sort_direction',
             'per_page',
-        ]));
+        ]);
+        $query = $this->filteredAdminQuery($filters);
 
         return response()->json([
-            'data' => $this->statisticsService->calculate($query),
+            'data' => $this->statisticsService->calculate($query, $filters),
         ]);
     }
 

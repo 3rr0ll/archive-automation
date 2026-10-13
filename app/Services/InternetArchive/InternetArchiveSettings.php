@@ -3,13 +3,26 @@
 namespace App\Services\InternetArchive;
 
 use App\Models\EnvironmentVariable;
+use App\Services\Cache\ApplicationCache;
 
 class InternetArchiveSettings
 {
+    public function __construct(
+        private ApplicationCache $cache,
+    ) {}
+
     /**
      * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int}
      */
     public function all(): array
+    {
+        return $this->cache->rememberInternetArchiveSettings(fn (): array => $this->resolve());
+    }
+
+    /**
+     * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int}
+     */
+    private function resolve(): array
     {
         $defaults = [
             'allowed_hosts' => array_values(config('services.internet_archive.allowed_archive_hosts', [])),

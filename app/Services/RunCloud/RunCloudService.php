@@ -5,11 +5,12 @@ namespace App\Services\RunCloud;
 use App\Models\Deployment;
 use App\Models\EnvironmentVariable;
 use App\Models\Server;
+use App\Services\Cache\ApplicationCache;
 use App\Services\Cloudflare\CloudflareDnsService;
+use App\Services\Http\ExternalHttpClient;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -32,9 +33,18 @@ class RunCloudService
 
     protected int $timeout;
 
-    public function __construct(?CloudflareDnsService $cloudflareDnsService = null)
-    {
+    protected ApplicationCache $cache;
+
+    protected ExternalHttpClient $httpClient;
+
+    public function __construct(
+        ?CloudflareDnsService $cloudflareDnsService = null,
+        ?ApplicationCache $cache = null,
+        ?ExternalHttpClient $httpClient = null,
+    ) {
         $this->cloudflareDnsService = $cloudflareDnsService ?? app(CloudflareDnsService::class);
+        $this->cache = $cache ?? app(ApplicationCache::class);
+        $this->httpClient = $httpClient ?? app(ExternalHttpClient::class);
         $this->baseUrl = rtrim((string) Config::get('services.runcloud.base_url', 'https://manage.runcloud.io/api/v3'), '/');
         $this->apiKey = Config::get('services.runcloud.api_key');
         $this->apiSecret = Config::get('services.runcloud.api_secret');
@@ -78,8 +88,8 @@ class RunCloudService
         }
 
         if (! $serverModel) {
-            $defaultServerId = $this->getEnvValue('RUNCLOUD_DEFAULT_SERVER_ID') 
-                ?? $this->getEnvValue('RUNCLOUD_SERVER_ID') 
+            $defaultServerId = $this->getEnvValue('RUNCLOUD_DEFAULT_SERVER_ID')
+                ?? $this->getEnvValue('RUNCLOUD_SERVER_ID')
                 ?? Config::get('services.runcloud.server_id');
 
             if ($defaultServerId) {
@@ -145,7 +155,7 @@ class RunCloudService
                 ];
             }
 
-            throw new Exception('RunCloud create webapp failed: ' . ($createResponse['message'] ?? 'Unknown error'));
+            throw new Exception('RunCloud create webapp failed: '.($createResponse['message'] ?? 'Unknown error'));
         }
 
         $createdApp = $createResponse['data'];
@@ -255,13 +265,15 @@ class RunCloudService
      */
     public function getServers(): array
     {
-        $response = $this->client()->get('/servers');
+        return $this->cache->rememberRunCloudServers(function (): array {
+            $response = $this->client()->get('/servers');
 
-        if (! $response->successful()) {
-            $this->handleApiError('Failed to fetch RunCloud servers', $response);
-        }
+            if (! $response->successful()) {
+                $this->handleApiError('Failed to fetch RunCloud servers', $response);
+            }
 
-        return $response->json('data') ?? $response->json() ?? [];
+            return $response->json('data') ?? $response->json() ?? [];
+        });
     }
 
     /**
@@ -273,13 +285,15 @@ class RunCloudService
      */
     public function getServer(int $serverId): array
     {
-        $response = $this->client()->get("/servers/{$serverId}");
+        return $this->cache->rememberRunCloudServer($serverId, function () use ($serverId): array {
+            $response = $this->client()->get("/servers/{$serverId}");
 
-        if (! $response->successful()) {
-            $this->handleApiError("Failed to fetch RunCloud server {$serverId}", $response);
-        }
+            if (! $response->successful()) {
+                $this->handleApiError("Failed to fetch RunCloud server {$serverId}", $response);
+            }
 
-        return $response->json('data') ?? $response->json() ?? [];
+            return $response->json('data') ?? $response->json() ?? [];
+        });
     }
 
     /**
@@ -334,7 +348,7 @@ class RunCloudService
             throw new Exception('No RunCloud server ID configured or found.');
         }
 
-        return Cache::remember("runcloud_server_ip_{$server}", now()->addDays(7), function () use ($server) {
+        return $this->cache->rememberRunCloudServerIp($server, function () use ($server): string {
             $serverDetails = $this->getServer($server);
             $ip = $serverDetails['ipAddress'] ?? $serverDetails['ip_address'] ?? $serverDetails['ip'] ?? null;
 
@@ -430,7 +444,7 @@ class RunCloudService
         }
 
         // 2. Cache the result if fetched from API so it only ever calls once across all deployments
-        return (int) Cache::remember("runcloud_system_user_{$serverId}", now()->addDays(30), function () use ($serverId) {
+        return $this->cache->rememberRunCloudSystemUserId($serverId, function () use ($serverId): int {
             $response = $this->client()->get("/servers/{$serverId}/users");
 
             if (! $response->successful()) {
@@ -522,12 +536,14 @@ class RunCloudService
         $apiKey = $this->getEnvValue('RUNCLOUD_API_KEY', $this->apiKey);
         $apiSecret = $this->getEnvValue('RUNCLOUD_API_SECRET', $this->apiSecret);
 
-        $client = Http::baseUrl($this->baseUrl)
-            ->timeout($this->timeout)
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-            ]);
+        $client = $this->httpClient->configure(
+            Http::baseUrl($this->baseUrl)
+                ->timeout($this->timeout)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ]),
+        );
 
         // Bearer Token Authentication (Workspaces / v3 / Single API Key)
         if (! empty($apiToken)) {

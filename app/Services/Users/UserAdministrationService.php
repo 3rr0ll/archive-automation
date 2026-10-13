@@ -3,11 +3,16 @@
 namespace App\Services\Users;
 
 use App\Models\User;
+use App\Services\Logging\AuditLogger;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
 class UserAdministrationService
 {
+    public function __construct(
+        private AuditLogger $auditLogger,
+    ) {}
+
     public function delete(User $actor, User $target): void
     {
         if ($actor->is($target)) {
@@ -22,6 +27,10 @@ class UserAdministrationService
             $target->tokens()->delete();
             $target->delete();
         });
+
+        $this->auditLogger->record('user.deleted', $target, [
+            'target_role' => $target->role,
+        ]);
     }
 
     /**
@@ -50,6 +59,13 @@ class UserAdministrationService
             }
         });
 
+        foreach ($deletable as $user) {
+            $this->auditLogger->record('user.deleted', $user, [
+                'operation' => 'bulk-delete',
+                'target_role' => $user->role,
+            ]);
+        }
+
         return [
             'deleted_ids' => $deletedIds,
             'deleted_count' => count($deletedIds),
@@ -63,6 +79,10 @@ class UserAdministrationService
         if ($target->isAdmin() && ! $actor->is($target)) {
             throw new DomainException('You cannot reset another admin account password.');
         }
+
+        $this->auditLogger->record('user.password-reset', $target, [
+            'tokens_revoked' => true,
+        ]);
 
         DB::transaction(function () use ($target, $password): void {
             $target->update(['password' => $password]);

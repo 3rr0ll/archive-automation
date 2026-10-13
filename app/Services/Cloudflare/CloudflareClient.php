@@ -3,6 +3,8 @@
 namespace App\Services\Cloudflare;
 
 use App\Models\EnvironmentVariable;
+use App\Services\Cache\ApplicationCache;
+use App\Services\Http\ExternalHttpClient;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -13,16 +15,27 @@ use Illuminate\Support\Facades\Log;
 class CloudflareClient
 {
     protected string $baseUrl;
+
     protected ?string $apiToken;
+
     protected ?string $apiKey;
+
     protected ?string $email;
+
     protected ?string $accountId;
+
     protected int $timeout;
+
+    protected ApplicationCache $cache;
+
+    protected ExternalHttpClient $httpClient;
 
     public function __construct(
         ?string $apiToken = null,
         ?string $apiKey = null,
-        ?string $email = null
+        ?string $email = null,
+        ?ApplicationCache $cache = null,
+        ?ExternalHttpClient $httpClient = null,
     ) {
         $this->baseUrl = rtrim((string) Config::get('services.cloudflare.base_url', 'https://api.cloudflare.com/client/v4'), '/');
         $this->apiToken = $apiToken ?? Config::get('services.cloudflare.api_token') ?? Config::get('services.cloudflare.token');
@@ -30,6 +43,8 @@ class CloudflareClient
         $this->email = $email ?? Config::get('services.cloudflare.email');
         $this->accountId = Config::get('services.cloudflare.account_id');
         $this->timeout = (int) Config::get('services.cloudflare.timeout', 30);
+        $this->cache = $cache ?? app(ApplicationCache::class);
+        $this->httpClient = $httpClient ?? app(ExternalHttpClient::class);
     }
 
     /**
@@ -52,7 +67,6 @@ class CloudflareClient
     /**
      * Prepare authenticated HTTP client.
      *
-     * @return PendingRequest
      * @throws Exception
      */
     public function client(): PendingRequest
@@ -62,12 +76,14 @@ class CloudflareClient
         $apiKey = $this->getEnvValue('CLOUDFLARE_API_KEY', $this->apiKey);
         $email = $this->getEnvValue('CLOUDFLARE_EMAIL', $this->email);
 
-        $client = Http::baseUrl($this->baseUrl)
-            ->timeout($this->timeout)
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-            ]);
+        $client = $this->httpClient->configure(
+            Http::baseUrl($this->baseUrl)
+                ->timeout($this->timeout)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ]),
+        );
 
         if (! empty($token)) {
             return $client->withToken($token);
@@ -87,7 +103,6 @@ class CloudflareClient
      * Find zone by walking domain labels from most-specific to least-specific.
      * Handles ccTLD second-level domains (e.g. rocketcasinos.it.com -> tries rocketcasinos.it.com, then it.com).
      *
-     * @param string $domain
      * @return array<string, mixed>|null
      */
     public function findZoneByDomain(string $domain): ?array
@@ -117,8 +132,6 @@ class CloudflareClient
     /**
      * Resolve Cloudflare Zone ID for a domain.
      *
-     * @param string $domain
-     * @return string
      * @throws Exception
      */
     public function getZoneId(string $domain): string
@@ -126,40 +139,42 @@ class CloudflareClient
         $normalized = $this->normalizeDomain($domain);
         $rootDomain = $this->getRootDomain($normalized);
 
-        // 1. Try querying with the root domain
-        $response = $this->client()->get('/zones', ['name' => $rootDomain]);
-        if ($response->successful()) {
-            $zones = $response->json('result') ?? [];
-            if (! empty($zones[0]['id'])) {
-                return (string) $zones[0]['id'];
-            }
-        }
-
-        // 2. If different, try querying with the normalized domain
-        if ($normalized !== $rootDomain) {
-            $response = $this->client()->get('/zones', ['name' => $normalized]);
+        return $this->cache->rememberCloudflareZone($rootDomain, function () use ($domain, $normalized, $rootDomain): string {
+            // 1. Try querying with the root domain
+            $response = $this->client()->get('/zones', ['name' => $rootDomain]);
             if ($response->successful()) {
                 $zones = $response->json('result') ?? [];
                 if (! empty($zones[0]['id'])) {
                     return (string) $zones[0]['id'];
                 }
             }
-        }
 
-        // 3. Multi-label fallback for ccTLDs
-        $zone = $this->findZoneByDomain($normalized);
-        if (! empty($zone['id'])) {
-            return (string) $zone['id'];
-        }
+            // 2. If different, try querying with the normalized domain
+            if ($normalized !== $rootDomain) {
+                $response = $this->client()->get('/zones', ['name' => $normalized]);
+                if ($response->successful()) {
+                    $zones = $response->json('result') ?? [];
+                    if (! empty($zones[0]['id'])) {
+                        return (string) $zones[0]['id'];
+                    }
+                }
+            }
 
-        throw new Exception("Cloudflare zone not found for domain [{$domain}].");
+            // 3. Multi-label fallback for ccTLDs
+            $zone = $this->findZoneByDomain($normalized);
+            if (! empty($zone['id'])) {
+                return (string) $zone['id'];
+            }
+
+            throw new Exception("Cloudflare zone not found for domain [{$domain}].");
+        });
     }
 
     /**
      * Create a zone on Cloudflare.
      *
-     * @param string $domain
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function createZone(string $domain): array
@@ -173,14 +188,16 @@ class CloudflareClient
             $this->handleApiError("Failed to create zone for {$domain}", $response);
         }
 
+        $this->cache->forgetCloudflareZone($this->getRootDomain($domain));
+
         return $response->json('result', []);
     }
 
     /**
      * Get details of a zone by zone ID.
      *
-     * @param string $zoneId
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function getZone(string $zoneId): array
@@ -197,9 +214,8 @@ class CloudflareClient
     /**
      * Purge Cloudflare cache for a zone.
      *
-     * @param string $zoneId
-     * @param bool $purgeEverything
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function purgeCache(string $zoneId, bool $purgeEverything = true): array
@@ -217,9 +233,6 @@ class CloudflareClient
 
     /**
      * Normalize domain string: strips protocol, paths, ports, query strings, and whitespace.
-     *
-     * @param string $domain
-     * @return string
      */
     public function normalizeDomain(string $domain): string
     {
@@ -234,9 +247,6 @@ class CloudflareClient
 
     /**
      * Get root domain (e.g. "www.example.com" -> "example.com").
-     *
-     * @param string $domain
-     * @return string
      */
     public function getRootDomain(string $domain): string
     {
@@ -252,9 +262,6 @@ class CloudflareClient
     /**
      * Handle and normalize API errors.
      *
-     * @param string $context
-     * @param Response $response
-     * @return void
      * @throws Exception
      */
     public function handleApiError(string $context, Response $response): void
