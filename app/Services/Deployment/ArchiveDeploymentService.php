@@ -7,6 +7,7 @@ use App\Models\Deployment;
 use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
@@ -56,11 +57,16 @@ class ArchiveDeploymentService
             $this->transition($deployment, 'provisioning_web_app', 'Provisioning the RunCloud web application.');
             $serverIp = $deployment->server?->ip_address;
 
-            $result = $this->runCloudService->createEmptyWebApplication(
-                $deployment->domain,
-                (int) $deployment->server_id,
-                $serverIp,
-            );
+            $result = filled($serverIp)
+                ? $this->runCloudService->createEmptyWebApplication(
+                    $deployment->domain,
+                    (int) $deployment->server_id,
+                    $serverIp,
+                )
+                : $this->runCloudService->createEmptyWebApplication(
+                    $deployment->domain,
+                    (int) $deployment->server_id,
+                );
 
             if (! empty($result['already_exists'])) {
                 throw new RuntimeException('A RunCloud web application already exists for this domain.');
@@ -97,6 +103,15 @@ class ArchiveDeploymentService
             return $deployment->refresh();
         } catch (Throwable $exception) {
             $deployment->refresh();
+
+            Log::error('Archived website deployment failed.', [
+                'deployment_id' => $deployment->id,
+                'domain' => $deployment->domain,
+                'server_id' => $deployment->server_id,
+                'current_step' => $deployment->current_step,
+                'exception' => $exception::class,
+                'error' => $exception->getMessage(),
+            ]);
 
             if ($deployment->status !== DeploymentStatus::Cancelled) {
                 $deployment->update([

@@ -4,12 +4,16 @@ namespace App\Services\InternetArchive;
 
 use App\Models\EnvironmentVariable;
 use App\Models\User;
+use App\Services\Cache\ApplicationCache;
+use App\Services\Logging\AuditLogger;
 use Illuminate\Support\Facades\DB;
 
 class InternetArchiveSettingsService
 {
     public function __construct(
         private InternetArchiveSettings $settings,
+        private ApplicationCache $cache,
+        private AuditLogger $auditLogger,
     ) {}
 
     /**
@@ -59,6 +63,15 @@ class InternetArchiveSettingsService
                 ->whereKeyNot($credential->getKey())
                 ->delete();
         });
+
+        $this->cache->forgetInternetArchiveSettings();
+        $this->auditLogger->record('internet-archive-settings.updated', context: [
+            'actor_id' => $actor->id,
+            'allowed_host_count' => count($payload['allowed_hosts']),
+            'timeout' => $payload['timeout'],
+            'poll_delay' => $payload['poll_delay'],
+            'max_attempts' => $payload['max_attempts'],
+        ]);
 
         return $this->settings->all();
     }

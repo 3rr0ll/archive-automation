@@ -8,6 +8,7 @@ use App\Jobs\DeployArchivedWebsite;
 use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
 use App\Models\User;
+use App\Services\Logging\AuditLogger;
 use DomainException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,10 @@ use Throwable;
 
 class DeploymentLifecycleService
 {
+    public function __construct(
+        private AuditLogger $auditLogger,
+    ) {}
+
     /**
      * @param  array{server_id: int, domain: string, version: string, archive_url?: string|null, archive?: UploadedFile|null}  $data
      */
@@ -81,6 +86,13 @@ class DeploymentLifecycleService
             WaitForWaybackArchive::dispatch($deployment);
         }
 
+        $this->auditLogger->record('deployment.submitted', $deployment, [
+            'user_id' => $user->id,
+            'server_id' => $deployment->server_id,
+            'domain' => $deployment->domain,
+            'archive_source' => $deployment->archive_source,
+        ]);
+
         return $deployment;
     }
 
@@ -101,6 +113,10 @@ class DeploymentLifecycleService
                 'message' => 'Deployment cancelled by an administrator.',
             ]);
         });
+
+        $this->auditLogger->record('deployment.cancelled', $deployment, [
+            'domain' => $deployment->domain,
+        ]);
 
         return $deployment->refresh();
     }
@@ -135,6 +151,11 @@ class DeploymentLifecycleService
             ]);
         });
 
+        $this->auditLogger->record('deployment.retried', $deployment, [
+            'domain' => $deployment->domain,
+            'waits_for_archive' => $waitsForArchive,
+        ]);
+
         if ($waitsForArchive) {
             WaitForWaybackArchive::dispatch($deployment);
         } else {
@@ -152,6 +173,10 @@ class DeploymentLifecycleService
 
         $archivePath = $deployment->archive_path;
         $deployment->delete();
+        $this->auditLogger->record('deployment.deleted', $deployment, [
+            'domain' => $deployment->domain,
+            'status' => $deployment->status->value,
+        ]);
 
         if (filled($archivePath)) {
             Storage::disk('local')->delete($archivePath);

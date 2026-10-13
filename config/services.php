@@ -2,6 +2,10 @@
 
 return [
 
+    'http' => [
+        'verify_ssl' => env('HTTP_VERIFY_SSL', true),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

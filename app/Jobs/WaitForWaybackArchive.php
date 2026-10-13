@@ -9,6 +9,7 @@ use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\InternetArchive\InternetArchiveSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class WaitForWaybackArchive implements ShouldQueue
@@ -22,6 +23,23 @@ class WaitForWaybackArchive implements ShouldQueue
     ) {}
 
     public function handle(InternetArchiveService $archiveService): void
+    {
+        $context = [
+            'deployment_id' => $this->deployment->id,
+            'domain' => $this->deployment->domain,
+            'job' => self::class,
+            'job_attempt' => $this->attempts(),
+        ];
+        Log::shareContext($context);
+
+        try {
+            $this->handlePolling($archiveService);
+        } finally {
+            Log::withoutContext(array_keys($context));
+        }
+    }
+
+    private function handlePolling(InternetArchiveService $archiveService): void
     {
         $this->deployment->refresh();
 
@@ -57,6 +75,8 @@ class WaitForWaybackArchive implements ShouldQueue
             'message' => 'The Wayback ZIP is ready. Recovery deployment queued.',
         ]);
 
+        Log::info('Wayback archive became ready.');
+
         DeployArchivedWebsite::dispatch($this->deployment);
     }
 
@@ -83,6 +103,14 @@ class WaitForWaybackArchive implements ShouldQueue
             'step_name' => 'archive_wait_failed',
             'status' => 'error',
             'message' => 'The Wayback ZIP did not become available before polling stopped.',
+        ]);
+
+        Log::error('Wayback archive polling exhausted its retries.', [
+            'deployment_id' => $this->deployment->id,
+            'domain' => $this->deployment->domain,
+            'job' => self::class,
+            'exception' => $exception?->getMessage(),
+            'exception_class' => $exception === null ? null : $exception::class,
         ]);
     }
 }
