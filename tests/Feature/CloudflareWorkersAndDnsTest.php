@@ -266,6 +266,83 @@ class CloudflareWorkersAndDnsTest extends TestCase
         });
     }
 
+    public function test_change_workers_uses_environment_variable_model(): void
+    {
+        \App\Models\EnvironmentVariable::create([
+            'key' => 'CLOUDFLARE_WORKER_WWW_MAIN',
+            'value' => 'custom-worker-www-main',
+            'type' => 'config',
+            'environments' => 'Production',
+            'user_id' => $this->user->id,
+        ]);
+
+        \App\Models\EnvironmentVariable::create([
+            'key' => 'CLOUDFLARE_WORKER_WWW_REDIRECT',
+            'value' => 'custom-worker-www-redirect',
+            'type' => 'config',
+            'environments' => 'Production',
+            'user_id' => $this->user->id,
+        ]);
+
+        Http::fake([
+            'https://api.cloudflare.com/client/v4/zones?name=example.com' => Http::response([
+                'success' => true,
+                'result' => [
+                    ['id' => 'zone-abc-123', 'name' => 'example.com'],
+                ],
+            ], 200),
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes' => Http::response([
+                'success' => true,
+                'result' => [],
+            ], 200),
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes*' => function ($request) {
+                if ($request->method() === 'POST') {
+                    $data = $request->data();
+                    return Http::response([
+                        'success' => true,
+                        'result' => [
+                            'id' => 'route-' . md5($data['pattern']),
+                            'pattern' => $data['pattern'],
+                            'script' => $data['script'],
+                        ],
+                    ], 200);
+                }
+                return Http::response(['success' => false], 404);
+            },
+
+            'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'zone-abc-123'],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/cloudflare/workers', [
+                'domain' => 'example.com',
+                'version' => 'www',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.routes.0.script', 'custom-worker-www-main')
+            ->assertJsonPath('data.routes.1.script', 'custom-worker-www-redirect');
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes'
+                && $request->method() === 'POST'
+                && $request['pattern'] === 'www.example.com/*'
+                && $request['script'] === 'custom-worker-www-main';
+        });
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes'
+                && $request->method() === 'POST'
+                && $request['pattern'] === 'example.com/*'
+                && $request['script'] === 'custom-worker-www-redirect';
+        });
+    }
+
     public function test_setup_runcloud_dns_deletes_all_records_and_adds_root_and_www_a_records(): void
     {
         Http::fake([

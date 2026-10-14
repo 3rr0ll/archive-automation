@@ -33,6 +33,7 @@ class EnvironmentVariableController extends Controller
         ]);
 
         $env = $this->service->create($validated, auth()->id());
+        $env->load('user');
 
         return response()->json($env);
     }
@@ -48,9 +49,12 @@ class EnvironmentVariableController extends Controller
             'key' => 'required|string|max:255|unique:environment_variables,key,' . $environmentVariable->id,
             'value' => 'required|string',
             'type' => 'required|string|in:secret,config',
+            'environments' => 'nullable|string',
+            'note' => 'nullable|string',
         ]);
 
         $env = $this->service->update($environmentVariable, $validated);
+        $env->load('user');
 
         return response()->json($env);
     }

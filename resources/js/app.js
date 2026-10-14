@@ -7,6 +7,8 @@ import { userNav } from './components/user-nav.js';
 import { dashboardOverview } from './components/dashboard-overview.js';
 import { queueData } from './components/queue.js';
 import { domainListData } from './components/domain-list.js';
+import { environmentVariablesPage } from './components/environment-variables.js';
+import { serversPage } from './components/servers.js';
 
 window.Alpine = Alpine;
 
@@ -15,6 +17,8 @@ Alpine.data('deploymentTable', deploymentTable);
 Alpine.data('userNav', userNav);
 Alpine.data('queueData', queueData);
 Alpine.data('domainListData', domainListData);
+Alpine.data('environmentVariablesPage', environmentVariablesPage);
+Alpine.data('serversPage', serversPage);
 
 Alpine.store('domainView', {
     mode: 'grid',

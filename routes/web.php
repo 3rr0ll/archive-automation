@@ -22,4 +22,8 @@ Route::middleware('auth')->group(function (): void {
         $variables = \App\Models\EnvironmentVariable::with('user')->orderBy('created_at', 'desc')->get();
         return view('pages.environment-variables', compact('variables'));
     })->name('environment-variables');
+    Route::get('/servers', function () {
+        $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
+        return view('pages.servers', compact('servers'));
+    })->name('servers');
 });
