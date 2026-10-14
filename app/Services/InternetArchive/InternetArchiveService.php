@@ -2,13 +2,16 @@
 
 namespace App\Services\InternetArchive;
 
+use App\Services\Http\ExternalHttpClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class InternetArchiveService
 {
     public function __construct(
         private InternetArchiveSettings $settings,
+        private ExternalHttpClient $httpClient,
     ) {}
 
     /**
@@ -46,10 +49,17 @@ class InternetArchiveService
         }
 
         try {
-            $response = Http::timeout($this->settings->all()['timeout'])
+            $response = $this->httpClient
+                ->configure(Http::timeout($this->settings->all()['timeout']))
                 ->accept('application/zip')
                 ->head($archiveUrl);
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
+            Log::debug('Internet Archive readiness check could not connect.', [
+                'host' => parse_url($archiveUrl, PHP_URL_HOST),
+                'exception' => $exception::class,
+                'error' => $exception->getMessage(),
+            ]);
+
             return false;
         }
 
@@ -78,9 +88,16 @@ class InternetArchiveService
         }
 
         try {
-            $response = Http::timeout($this->settings->all()['timeout'])
+            $response = $this->httpClient
+                ->configure(Http::timeout($this->settings->all()['timeout']))
                 ->head($url);
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
+            Log::warning('Internet Archive connection test could not connect.', [
+                'host' => parse_url($url, PHP_URL_HOST),
+                'exception' => $exception::class,
+                'error' => $exception->getMessage(),
+            ]);
+
             return false;
         }
 

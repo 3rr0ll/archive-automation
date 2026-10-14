@@ -6,10 +6,19 @@ use App\Models\Deployment;
 use App\Services\Deployment\ArchiveDeploymentService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class DeployArchivedWebsite implements ShouldQueue
 {
     use Queueable;
+
+    public int $tries = 3;
+
+    public int $timeout = 1800;
+
+    /** @var list<int> */
+    public array $backoff = [60, 300];
 
     public function __construct(
         public Deployment $deployment
@@ -17,6 +26,31 @@ class DeployArchivedWebsite implements ShouldQueue
 
     public function handle(ArchiveDeploymentService $deploymentService): void
     {
-        $deploymentService->deploy($this->deployment);
+        $context = [
+            'deployment_id' => $this->deployment->id,
+            'domain' => $this->deployment->domain,
+            'job' => self::class,
+            'job_attempt' => $this->attempts(),
+        ];
+        Log::shareContext($context);
+
+        try {
+            Log::info('Archive deployment job started.');
+            $deploymentService->deploy($this->deployment);
+            Log::info('Archive deployment job finished.');
+        } finally {
+            Log::withoutContext(array_keys($context));
+        }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        Log::error('Archive deployment job exhausted its retries.', [
+            'deployment_id' => $this->deployment->id,
+            'domain' => $this->deployment->domain,
+            'job' => self::class,
+            'exception' => $exception?->getMessage(),
+            'exception_class' => $exception === null ? null : $exception::class,
+        ]);
     }
 }

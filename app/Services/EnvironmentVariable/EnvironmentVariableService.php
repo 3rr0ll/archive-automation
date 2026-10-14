@@ -3,14 +3,17 @@
 namespace App\Services\EnvironmentVariable;
 
 use App\Models\EnvironmentVariable;
+use App\Services\Logging\AuditLogger;
 use Illuminate\Database\Eloquent\Collection;
 
 class EnvironmentVariableService
 {
+    public function __construct(
+        private AuditLogger $auditLogger,
+    ) {}
+
     /**
      * Get all environment variables.
-     *
-     * @return Collection
      */
     public function getAll(): Collection
     {
@@ -19,14 +22,10 @@ class EnvironmentVariableService
 
     /**
      * Create a new environment variable.
-     *
-     * @param array $data
-     * @param int|null $userId
-     * @return EnvironmentVariable
      */
     public function create(array $data, ?int $userId): EnvironmentVariable
     {
-        return EnvironmentVariable::create([
+        $variable = EnvironmentVariable::create([
             'key' => $data['key'],
             'value' => $data['value'],
             'type' => $data['type'],
@@ -34,14 +33,17 @@ class EnvironmentVariableService
             'note' => $data['note'] ?? null,
             'user_id' => $userId,
         ]);
+
+        $this->auditLogger->record('environment-variable.created', $variable, [
+            'key' => $variable->key,
+            'type' => $variable->type,
+        ]);
+
+        return $variable;
     }
 
     /**
      * Update an existing environment variable.
-     *
-     * @param EnvironmentVariable $environmentVariable
-     * @param array $data
-     * @return EnvironmentVariable
      */
     public function update(EnvironmentVariable $environmentVariable, array $data): EnvironmentVariable
     {
@@ -61,17 +63,26 @@ class EnvironmentVariableService
 
         $environmentVariable->update($updateData);
 
+        $this->auditLogger->record('environment-variable.updated', $environmentVariable, [
+            'key' => $environmentVariable->key,
+            'changed_fields' => array_keys($environmentVariable->getChanges()),
+        ]);
+
         return $environmentVariable;
     }
 
     /**
      * Delete an environment variable.
-     *
-     * @param EnvironmentVariable $environmentVariable
-     * @return bool|null
      */
     public function delete(EnvironmentVariable $environmentVariable): ?bool
     {
-        return $environmentVariable->delete();
+        $deleted = $environmentVariable->delete();
+
+        $this->auditLogger->record('environment-variable.deleted', $environmentVariable, [
+            'key' => $environmentVariable->key,
+            'type' => $environmentVariable->type,
+        ]);
+
+        return $deleted;
     }
 }

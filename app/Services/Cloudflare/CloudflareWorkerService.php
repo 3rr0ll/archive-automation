@@ -3,6 +3,7 @@
 namespace App\Services\Cloudflare;
 
 use App\Models\EnvironmentVariable;
+use App\Services\Cache\ApplicationCache;
 use Exception;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -11,12 +12,16 @@ class CloudflareWorkerService
 {
     // Default Worker script names
     public const WORKER_WWW_MAIN = 'all-scripts-worker-www';
+
     public const WORKER_WWW_REDIRECT = 'domain-redirect-root-to-www';
+
     public const WORKER_ROOT_MAIN = 'all-scripts-worker-root';
+
     public const WORKER_ROOT_REDIRECT = 'domain-redirect-www-to-root';
 
     public function __construct(
-        protected CloudflareClient $client
+        protected CloudflareClient $client,
+        private ApplicationCache $cache,
     ) {}
 
     /**
@@ -110,9 +115,10 @@ class CloudflareWorkerService
      *     domain.com/*     -> all-scripts-worker-root (or configured worker)
      *     www.domain.com/* -> domain-redirect-www-to-root (or configured worker)
      *
-     * @param string $domain The domain name
-     * @param string|null $version 'www' or 'nonwww' (optional; inferred if omitted)
+     * @param  string  $domain  The domain name
+     * @param  string|null  $version  'www' or 'nonwww' (optional; inferred if omitted)
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function changeWorkers(string $domain, ?string $version = null): array
@@ -212,7 +218,7 @@ class CloudflareWorkerService
             $cachePurged = true;
             Log::info("Cloudflare cache purged successfully for zone {$zoneId} after assigning worker routes.");
         } catch (Exception $e) {
-            Log::warning("Failed to purge cache for zone {$zoneId} after assigning worker routes: " . $e->getMessage());
+            Log::warning("Failed to purge cache for zone {$zoneId} after assigning worker routes: ".$e->getMessage());
         }
 
         Log::info('Cloudflare worker routes updated successfully', [
@@ -237,41 +243,44 @@ class CloudflareWorkerService
     /**
      * Purge all cache for a domain.
      *
-     * @param string $domain
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function purgeCache(string $domain): array
     {
         $zoneId = $this->client->getZoneId($domain);
+
         return $this->client->purgeCache($zoneId, true);
     }
 
     /**
      * Get all worker routes configured for a zone.
      *
-     * @param string $zoneId
      * @return array<int, array<string, mixed>>
+     *
      * @throws Exception
      */
     public function getWorkerRoutes(string $zoneId): array
     {
-        $response = $this->client->client()->get("/zones/{$zoneId}/workers/routes");
+        return $this->cache->rememberCloudflareWorkerRoutes($zoneId, function () use ($zoneId): array {
+            $response = $this->client->client()->get("/zones/{$zoneId}/workers/routes");
 
-        if (! $response->successful()) {
-            $this->client->handleApiError("Failed to fetch worker routes for zone {$zoneId}", $response);
-        }
+            if (! $response->successful()) {
+                $this->client->handleApiError("Failed to fetch worker routes for zone {$zoneId}", $response);
+            }
 
-        return $response->json('result') ?? [];
+            return $response->json('result') ?? [];
+        });
     }
 
     /**
      * Create a new worker route in a zone.
      *
-     * @param string $zoneId
-     * @param string $pattern Route pattern (e.g. "www.example.com/*")
-     * @param string $script Worker script name
+     * @param  string  $pattern  Route pattern (e.g. "www.example.com/*")
+     * @param  string  $script  Worker script name
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function createWorkerRoute(string $zoneId, string $pattern, string $script): array
@@ -287,17 +296,19 @@ class CloudflareWorkerService
             $this->client->handleApiError("Failed to create worker route [{$pattern}] for script [{$script}]", $response);
         }
 
+        $this->cache->forgetCloudflareWorkerRoutes($zoneId);
+
         return $response->json('result') ?? [];
     }
 
     /**
      * Update an existing worker route in a zone.
      *
-     * @param string $zoneId
-     * @param string $routeId Route ID
-     * @param string $pattern Route pattern
-     * @param string $script Worker script name
+     * @param  string  $routeId  Route ID
+     * @param  string  $pattern  Route pattern
+     * @param  string  $script  Worker script name
      * @return array<string, mixed>
+     *
      * @throws Exception
      */
     public function updateWorkerRoute(string $zoneId, string $routeId, string $pattern, string $script): array
@@ -313,23 +324,28 @@ class CloudflareWorkerService
             $this->client->handleApiError("Failed to update worker route [{$routeId}] to script [{$script}]", $response);
         }
 
+        $this->cache->forgetCloudflareWorkerRoutes($zoneId);
+
         return $response->json('result') ?? [];
     }
 
     /**
      * Delete an existing worker route in a zone.
-     *
-     * @param string $zoneId
-     * @param string $routeId
-     * @return bool
      */
     public function deleteWorkerRoute(string $zoneId, string $routeId): bool
     {
         try {
             $response = $this->client->client()->delete("/zones/{$zoneId}/workers/routes/{$routeId}");
-            return $response->successful();
+            $deleted = $response->successful();
+
+            if ($deleted) {
+                $this->cache->forgetCloudflareWorkerRoutes($zoneId);
+            }
+
+            return $deleted;
         } catch (Exception $e) {
-            Log::warning("Failed to delete worker route {$routeId}: " . $e->getMessage());
+            Log::warning("Failed to delete worker route {$routeId}: ".$e->getMessage());
+
             return false;
         }
     }
