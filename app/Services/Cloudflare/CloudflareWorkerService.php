@@ -2,12 +2,14 @@
 
 namespace App\Services\Cloudflare;
 
+use App\Models\EnvironmentVariable;
 use Exception;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
 class CloudflareWorkerService
 {
-    // Worker script names
+    // Default Worker script names
     public const WORKER_WWW_MAIN = 'all-scripts-worker-www';
     public const WORKER_WWW_REDIRECT = 'domain-redirect-root-to-www';
     public const WORKER_ROOT_MAIN = 'all-scripts-worker-root';
@@ -18,13 +20,95 @@ class CloudflareWorkerService
     ) {}
 
     /**
+     * Retrieve a setting from EnvironmentVariable model first, then env().
+     */
+    protected function getEnvValue(string $key, mixed $default = null): mixed
+    {
+        try {
+            $record = EnvironmentVariable::where('key', $key)->latest('updated_at')->latest('id')->first();
+            if ($record && ! empty($record->value)) {
+                return $record->value;
+            }
+        } catch (Exception) {
+            // DB not available or table not migrated yet
+        }
+
+        $envVal = env($key);
+        if ($envVal !== null && $envVal !== '') {
+            return $envVal;
+        }
+
+        return $default;
+    }
+
+    /**
+     * Get the worker script name for www main route.
+     *
+     * @throws Exception
+     */
+    public function getWorkerWwwMain(): string
+    {
+        $val = $this->getEnvValue('CLOUDFLARE_WORKER_WWW_MAIN', self::WORKER_WWW_MAIN);
+        if (empty($val)) {
+            throw new Exception('Cloudflare worker script for WWW main route is not configured. Please supply CLOUDFLARE_WORKER_WWW_MAIN in Environment Variables.');
+        }
+
+        return (string) $val;
+    }
+
+    /**
+     * Get the worker script name for root-to-www redirect route.
+     *
+     * @throws Exception
+     */
+    public function getWorkerWwwRedirect(): string
+    {
+        $val = $this->getEnvValue('CLOUDFLARE_WORKER_WWW_REDIRECT', self::WORKER_WWW_REDIRECT);
+        if (empty($val)) {
+            throw new Exception('Cloudflare worker script for WWW redirect route is not configured. Please supply CLOUDFLARE_WORKER_WWW_REDIRECT in Environment Variables.');
+        }
+
+        return (string) $val;
+    }
+
+    /**
+     * Get the worker script name for non-www / root main route.
+     *
+     * @throws Exception
+     */
+    public function getWorkerRootMain(): string
+    {
+        $val = $this->getEnvValue('CLOUDFLARE_WORKER_ROOT_MAIN', self::WORKER_ROOT_MAIN);
+        if (empty($val)) {
+            throw new Exception('Cloudflare worker script for Root main route is not configured. Please supply CLOUDFLARE_WORKER_ROOT_MAIN in Environment Variables.');
+        }
+
+        return (string) $val;
+    }
+
+    /**
+     * Get the worker script name for www-to-root redirect route.
+     *
+     * @throws Exception
+     */
+    public function getWorkerRootRedirect(): string
+    {
+        $val = $this->getEnvValue('CLOUDFLARE_WORKER_ROOT_REDIRECT', self::WORKER_ROOT_REDIRECT);
+        if (empty($val)) {
+            throw new Exception('Cloudflare worker script for Root redirect route is not configured. Please supply CLOUDFLARE_WORKER_ROOT_REDIRECT in Environment Variables.');
+        }
+
+        return (string) $val;
+    }
+
+    /**
      * Change Cloudflare Worker routes for a domain:
      * - www version:
-     *     www.domain.com/* -> all-scripts-worker-www
-     *     domain.com/*     -> domain-redirect-root-to-www
+     *     www.domain.com/* -> all-scripts-worker-www (or configured worker)
+     *     domain.com/*     -> domain-redirect-root-to-www (or configured worker)
      * - nonwww version:
-     *     domain.com/*     -> all-scripts-worker-root
-     *     www.domain.com/* -> domain-redirect-www-to-root
+     *     domain.com/*     -> all-scripts-worker-root (or configured worker)
+     *     www.domain.com/* -> domain-redirect-www-to-root (or configured worker)
      *
      * @param string $domain The domain name
      * @param string|null $version 'www' or 'nonwww' (optional; inferred if omitted)
@@ -48,22 +132,22 @@ class CloudflareWorkerService
             $targetRoutes = [
                 [
                     'pattern' => "www.{$rootDomain}/*",
-                    'script' => self::WORKER_WWW_MAIN,
+                    'script' => $this->getWorkerWwwMain(),
                 ],
                 [
                     'pattern' => "{$rootDomain}/*",
-                    'script' => self::WORKER_WWW_REDIRECT,
+                    'script' => $this->getWorkerWwwRedirect(),
                 ],
             ];
         } else {
             $targetRoutes = [
                 [
                     'pattern' => "{$rootDomain}/*",
-                    'script' => self::WORKER_ROOT_MAIN,
+                    'script' => $this->getWorkerRootMain(),
                 ],
                 [
                     'pattern' => "www.{$rootDomain}/*",
-                    'script' => self::WORKER_ROOT_REDIRECT,
+                    'script' => $this->getWorkerRootRedirect(),
                 ],
             ];
         }

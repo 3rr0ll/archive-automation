@@ -33,6 +33,7 @@
       x-data="{ tallStackUiMenuMobile: false }">
     <x-toast />
     <x-dialog />
+    <x-global.confirmation-modal />
 
     <!-- Application Sidebar -->
     <x-global.sidebar />

@@ -38,90 +38,109 @@ class ServerApiTest extends TestCase
             ->assertJsonPath('data.0.ip_address', '198.13.62.143');
     }
 
-    public function test_admin_can_create_a_server(): void
+    public function test_admin_can_sync_servers_from_runcloud(): void
     {
-        $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/servers', [
-                'server_id' => 344845,
-                'name' => 'DEV SERVER',
-                'ip_address' => '198.13.62.143',
-                'is_active' => true,
-            ])
-            ->assertCreated()
-            ->assertJsonPath('data.server_id', 344845)
-            ->assertJsonPath('data.name', 'DEV SERVER');
+        \Illuminate\Support\Facades\Http::fake([
+            'https://manage.runcloud.io/api/v3/servers' => \Illuminate\Support\Facades\Http::response([
+                'data' => [
+                    [
+                        'id' => 12345,
+                        'name' => 'RUNCLOUD PRODUCTION',
+                        'ipAddress' => '1.2.3.4',
+                    ],
+                    [
+                        'id' => 67890,
+                        'name' => 'RUNCLOUD STAGING',
+                        'ipAddress' => '5.6.7.8',
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/servers/sync');
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Servers synced successfully from RunCloud.')
+            ->assertJsonCount(2, 'data');
 
         $this->assertDatabaseHas('servers', [
-            'server_id' => 344845,
-            'name' => 'DEV SERVER',
-            'ip_address' => '198.13.62.143',
+            'server_id' => 12345,
+            'name' => 'RUNCLOUD PRODUCTION',
+            'ip_address' => '1.2.3.4',
+            'is_active' => true,
+        ]);
+
+        $this->assertDatabaseHas('servers', [
+            'server_id' => 67890,
+            'name' => 'RUNCLOUD STAGING',
+            'ip_address' => '5.6.7.8',
             'is_active' => true,
         ]);
     }
 
-    public function test_admin_can_update_a_server(): void
+    public function test_admin_can_toggle_server_active_state(): void
     {
-        $server = Server::factory()->create(['server_id' => 344845]);
+        $server = Server::factory()->create([
+            'server_id' => 344845,
+            'is_active' => true,
+        ]);
 
+        // Toggle to inactive
         $this->actingAs($this->admin, 'sanctum')
-            ->putJson("/api/servers/{$server->id}", [
-                'name' => 'Updated server',
-                'is_active' => false,
+            ->patchJson("/api/servers/{$server->id}/toggle-active")
+            ->assertOk()
+            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('message', 'Server deactivated.');
+
+        $this->assertDatabaseHas('servers', [
+            'id' => $server->id,
+            'is_active' => false,
+        ]);
+
+        // Explicitly set to active
+        $this->actingAs($this->admin, 'sanctum')
+            ->patchJson("/api/servers/{$server->id}/toggle-active", [
+                'is_active' => true,
             ])
             ->assertOk()
-            ->assertJsonPath('data.server_id', 344845)
-            ->assertJsonPath('data.name', 'Updated server')
-            ->assertJsonPath('data.is_active', false);
+            ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('message', 'Server activated.');
+
+        $this->assertDatabaseHas('servers', [
+            'id' => $server->id,
+            'is_active' => true,
+        ]);
     }
 
-    public function test_admin_can_delete_an_unused_server(): void
+    public function test_direct_create_or_delete_routes_are_not_available(): void
     {
         $server = Server::factory()->create();
 
         $this->actingAs($this->admin, 'sanctum')
-            ->deleteJson("/api/servers/{$server->id}")
-            ->assertOk()
-            ->assertJsonPath('message', 'Server deleted successfully.');
-
-        $this->assertDatabaseMissing('servers', ['id' => $server->id]);
-    }
-
-    public function test_server_with_deployment_history_must_be_deactivated_instead_of_deleted(): void
-    {
-        $server = Server::factory()->create(['server_id' => 344845]);
-        Deployment::create([
-            'user_id' => $this->admin->id,
-            'server_id' => $server->server_id,
-            'domain' => 'example.com',
-            'version' => 'non-www',
-            'status' => 'pending',
-        ]);
+            ->postJson('/api/servers', ['name' => 'New Server'])
+            ->assertStatus(405);
 
         $this->actingAs($this->admin, 'sanctum')
             ->deleteJson("/api/servers/{$server->id}")
-            ->assertUnprocessable()
-            ->assertJsonPath(
-                'message',
-                'A server with deployment history cannot be deleted. Deactivate it instead.'
-            );
-
-        $this->assertDatabaseHas('servers', ['id' => $server->id]);
+            ->assertStatus(405);
     }
 
     public function test_regular_user_cannot_manage_servers(): void
     {
         $user = User::factory()->create(['role' => 'user']);
+        $server = Server::factory()->create();
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/servers')
             ->assertForbidden();
 
         $this->actingAs($user, 'sanctum')
-            ->postJson('/api/servers', [
-                'server_id' => 344845,
-                'name' => 'DEV SERVER',
-                'ip_address' => '198.13.62.143',
-            ])
+            ->postJson('/api/servers/sync')
+            ->assertForbidden();
+
+        $this->actingAs($user, 'sanctum')
+            ->patchJson("/api/servers/{$server->id}/toggle-active")
             ->assertForbidden();
     }
 }
