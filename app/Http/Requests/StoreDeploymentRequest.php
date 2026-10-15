@@ -39,7 +39,6 @@ class StoreDeploymentRequest extends FormRequest
             'version' => ['required', Rule::enum(DomainVersion::class)],
             'archive_url' => [
                 'nullable',
-                'required_without:archive',
                 Rule::prohibitedIf(fn (): bool => $this->hasFile('archive')),
                 'string',
                 'url',
@@ -56,7 +55,6 @@ class StoreDeploymentRequest extends FormRequest
             ],
             'archive' => [
                 'nullable',
-                'required_without:archive_url',
                 Rule::prohibitedIf(fn (): bool => $this->filled('archive_url')),
                 'file',
                 'mimes:zip',

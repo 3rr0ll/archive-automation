@@ -106,12 +106,58 @@ class InternetArchiveService
     }
 
     /**
+     * Look up the closest available Wayback Machine snapshot URL for a domain.
+     *
+     * @return array{available: bool, url: ?string, timestamp: ?string}|null
+     */
+    public function findLatestSnapshot(string $domain): ?array
+    {
+        $domain = preg_replace('#^https?://#i', '', trim($domain));
+        $domain = rtrim((string) $domain, '/');
+
+        $baseUrl = rtrim($this->settings->all()['wayback_url'] ?? 'https://archive.org/wayback/available', '/');
+        $separator = str_contains($baseUrl, '?') ? '&' : '?';
+        $url = $baseUrl.$separator.'url='.urlencode($domain);
+
+        try {
+            $response = $this->httpClient
+                ->configure(Http::timeout($this->settings->all()['timeout']))
+                ->get($url);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $data = $response->json();
+            $closest = $data['archived_snapshots']['closest'] ?? null;
+
+            if (is_array($closest) && ! empty($closest['available']) && ! empty($closest['url'])) {
+                return [
+                    'available' => true,
+                    'url' => (string) $closest['url'],
+                    'timestamp' => (string) ($closest['timestamp'] ?? ''),
+                ];
+            }
+
+            return null;
+        } catch (Throwable $exception) {
+            Log::warning('Failed querying Wayback availability API.', [
+                'domain' => $domain,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
      * Retrieve available snapshot versions for a domain.
      */
     public function getAvailableSnapshots(string $domain): array
     {
-        // Integration logic for Internet Archive / Wayback Machine
-        return [];
+        $latest = $this->findLatestSnapshot($domain);
+
+        return $latest !== null ? [$latest] : [];
     }
 
     /**

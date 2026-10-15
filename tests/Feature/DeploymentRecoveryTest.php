@@ -104,21 +104,40 @@ class DeploymentRecoveryTest extends TestCase
         Queue::assertNotPushed(WaitForWaybackArchive::class);
     }
 
-    public function test_recovery_requires_exactly_one_archive_source(): void
+    public function test_recovery_allows_omitting_archive_url_to_auto_discover_archive(): void
+    {
+        Storage::fake('local');
+        Queue::fake([WaitForWaybackArchive::class]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
+
+        $response = $this->withToken($token)->post('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'example.com',
+            'version' => 'www',
+        ], ['Accept' => 'application/json']);
+
+        $response->assertAccepted()
+            ->assertJsonPath('data.archive_source', 'url')
+            ->assertJsonPath('data.archive_status', 'waiting')
+            ->assertJsonPath('data.current_step', 'waiting_for_archive');
+
+        $this->assertDatabaseHas('deployments', [
+            'domain' => 'example.com',
+            'archive_url' => null,
+            'archive_status' => 'waiting',
+        ]);
+        Queue::assertPushed(WaitForWaybackArchive::class);
+    }
+
+    public function test_recovery_prohibits_both_archive_url_and_uploaded_zip(): void
     {
         Storage::fake('local');
         Queue::fake();
         $admin = User::factory()->create(['role' => 'admin']);
         $token = $admin->createToken('test-token')->plainTextToken;
         Server::factory()->create(['server_id' => 123]);
-
-        $this->withToken($token)->post('/api/deployments', [
-            'server_id' => 123,
-            'domain' => 'example.com',
-            'version' => 'www',
-        ], ['Accept' => 'application/json'])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['archive_url', 'archive']);
 
         $this->withToken($token)->post('/api/deployments', [
             'server_id' => 123,

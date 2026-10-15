@@ -12,7 +12,7 @@ class InternetArchiveSettings
     ) {}
 
     /**
-     * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int}
+     * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int, wayback_url: string}
      */
     public function all(): array
     {
@@ -20,7 +20,7 @@ class InternetArchiveSettings
     }
 
     /**
-     * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int}
+     * @return array{allowed_hosts: list<string>, timeout: int, poll_delay: int, max_attempts: int, wayback_url: string}
      */
     private function resolve(): array
     {
@@ -29,7 +29,20 @@ class InternetArchiveSettings
             'timeout' => (int) config('services.internet_archive.timeout', 20),
             'poll_delay' => (int) config('services.internet_archive.poll_delay', 60),
             'max_attempts' => (int) config('services.internet_archive.max_attempts', 1440),
+            'wayback_url' => (string) config('services.internet_archive.wayback_url', 'https://archive.org/wayback/available'),
         ];
+
+        // Check for dedicated WAYBACK_URL or WAYBACK_API_URL in EnvironmentVariable
+        $waybackVar = EnvironmentVariable::query()
+            ->whereIn('key', ['WAYBACK_URL', 'WAYBACK_API_URL', 'WAYBACK_LINK'])
+            ->latest('updated_at')
+            ->latest('id')
+            ->first();
+
+        if ($waybackVar !== null && filled($waybackVar->value)) {
+            $defaults['wayback_url'] = trim((string) $waybackVar->value);
+        }
+
         $credential = $this->databaseCredential();
 
         if ($credential === null) {
@@ -47,6 +60,9 @@ class InternetArchiveSettings
             'timeout' => $this->positiveInteger($settings['timeout'] ?? null, $defaults['timeout']),
             'poll_delay' => $this->positiveInteger($settings['poll_delay'] ?? null, $defaults['poll_delay']),
             'max_attempts' => $this->positiveInteger($settings['max_attempts'] ?? null, $defaults['max_attempts']),
+            'wayback_url' => filled($settings['wayback_url'] ?? null)
+                ? trim((string) $settings['wayback_url'])
+                : $defaults['wayback_url'],
         ];
     }
 
