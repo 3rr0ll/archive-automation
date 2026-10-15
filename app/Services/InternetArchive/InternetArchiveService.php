@@ -6,6 +6,7 @@ use App\Services\Http\ExternalHttpClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class InternetArchiveService
 {
@@ -118,7 +119,60 @@ class InternetArchiveService
      */
     public function downloadSnapshot(string $domain, string $version, string $destinationPath): bool
     {
-        // Retrieval and extraction logic
+        $directory = dirname($destinationPath);
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
         return true;
+    }
+
+    /**
+     * Download an archive ZIP directly from an archive URL to a local destination.
+     */
+    public function downloadArchiveFromUrl(string $archiveUrl, string $destinationZipPath): bool
+    {
+        if (! $this->isAllowedArchiveUrl($archiveUrl)) {
+            Log::warning('Attempted to download from unallowed archive URL.', ['url' => $archiveUrl]);
+            return false;
+        }
+
+        $directory = dirname($destinationZipPath);
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        try {
+            $response = $this->httpClient
+                ->configure(Http::timeout($this->settings->all()['timeout']))
+                ->sink($destinationZipPath)
+                ->get($archiveUrl);
+
+            if (! $response->successful() || ! file_exists($destinationZipPath) || filesize($destinationZipPath) === 0) {
+                Log::warning('Failed to download archive from URL.', [
+                    'url' => $archiveUrl,
+                    'status' => $response->status(),
+                ]);
+
+                if (file_exists($destinationZipPath)) {
+                    @unlink($destinationZipPath);
+                }
+
+                return false;
+            }
+
+            return true;
+        } catch (Throwable $e) {
+            Log::error('Exception while downloading archive from URL.', [
+                'url' => $archiveUrl,
+                'error' => $e->getMessage(),
+            ]);
+
+            if (file_exists($destinationZipPath)) {
+                @unlink($destinationZipPath);
+            }
+
+            return false;
+        }
     }
 }

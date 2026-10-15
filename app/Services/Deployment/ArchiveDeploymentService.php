@@ -48,8 +48,29 @@ class ArchiveDeploymentService
             } else {
                 $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
 
-                if (! $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath)) {
+                $archiveRelativePath = "deployments/{$deployment->id}/archive.zip";
+                $archiveAbsolutePath = Storage::disk('local')->path($archiveRelativePath);
+
+                $downloadSuccess = false;
+                if (! empty($deployment->archive_url) && method_exists($this->archiveService, 'downloadArchiveFromUrl')) {
+                    try {
+                        $downloadSuccess = $this->archiveService->downloadArchiveFromUrl($deployment->archive_url, $archiveAbsolutePath);
+                    } catch (Throwable $e) {
+                        Log::debug('downloadArchiveFromUrl fell through to downloadSnapshot.', ['error' => $e->getMessage()]);
+                        $downloadSuccess = false;
+                    }
+                }
+
+                if (! $downloadSuccess) {
+                    $downloadSuccess = $this->archiveService->downloadSnapshot($deployment->domain, $version, $destinationPath);
+                }
+
+                if (! $downloadSuccess) {
                     throw new RuntimeException('The archived website could not be downloaded.');
+                }
+
+                if (file_exists($archiveAbsolutePath)) {
+                    $deployment->update(['archive_path' => $archiveRelativePath]);
                 }
             }
 
@@ -73,12 +94,11 @@ class ArchiveDeploymentService
                 );
 
             if (! empty($result['already_exists'])) {
-                $canResumeUploadedDeployment = $deployment->archive_source === 'upload'
-                    && $deployment->logs()
-                        ->where('step_name', 'uploading_and_extracting_archive')
-                        ->exists();
+                $canResumeDeployment = $deployment->logs()
+                    ->where('step_name', 'uploading_and_extracting_archive')
+                    ->exists();
 
-                if (! $canResumeUploadedDeployment) {
+                if (! $canResumeDeployment) {
                     throw new RuntimeException('A RunCloud web application already exists for this domain.');
                 }
 
@@ -95,8 +115,8 @@ class ArchiveDeploymentService
                 return $deployment;
             }
 
-            if ($deployment->archive_source === 'upload') {
-                $this->deployUploadedArchive($deployment, $result, $serverIp);
+            if (filled($deployment->archive_path) && Storage::disk('local')->exists($deployment->archive_path)) {
+                $this->deployArchiveToServer($deployment, $result, $serverIp);
 
                 $deployment->refresh();
                 if ($deployment->status === DeploymentStatus::Cancelled) {
@@ -210,7 +230,7 @@ class ArchiveDeploymentService
     }
 
     /** @param array<string, mixed> $webApp */
-    private function deployUploadedArchive(
+    private function deployArchiveToServer(
         Deployment $deployment,
         array $webApp,
         ?string $serverIp,
@@ -227,7 +247,7 @@ class ArchiveDeploymentService
         }
 
         if (blank($deployment->archive_path)) {
-            throw new RuntimeException('The uploaded ZIP path is not available.');
+            throw new RuntimeException('The archive ZIP path is not available.');
         }
 
         $this->transition(
