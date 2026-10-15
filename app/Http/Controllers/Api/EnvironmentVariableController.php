@@ -18,7 +18,12 @@ class EnvironmentVariableController extends Controller
 
     public function index()
     {
-        $variables = $this->service->getAll();
+        $variables = $this->service->getAll()->map(function ($env) {
+            if ($env->type === 'secret') {
+                $env->value = null;
+            }
+            return $env;
+        });
         return response()->json($variables);
     }
 
@@ -35,11 +40,18 @@ class EnvironmentVariableController extends Controller
         $env = $this->service->create($validated, auth()->id());
         $env->load('user');
 
+        if ($env->type === 'secret') {
+            $env->value = null;
+        }
+
         return response()->json($env);
     }
 
     public function show(EnvironmentVariable $environmentVariable)
     {
+        if ($environmentVariable->type === 'secret') {
+            $environmentVariable->value = null;
+        }
         return response()->json($environmentVariable);
     }
 
@@ -47,14 +59,25 @@ class EnvironmentVariableController extends Controller
     {
         $validated = $request->validate([
             'key' => 'required|string|max:255|unique:environment_variables,key,' . $environmentVariable->id,
-            'value' => 'required|string',
+            'value' => 'nullable|string',
             'type' => 'required|string|in:secret,config',
             'environments' => 'nullable|string',
             'note' => 'nullable|string',
         ]);
 
+        // If secret and value is empty/not provided, preserve existing value
+        if ($environmentVariable->type === 'secret' && ($validated['value'] === null || $validated['value'] === '')) {
+            unset($validated['value']);
+        } elseif (!isset($validated['value'])) {
+            $validated['value'] = '';
+        }
+
         $env = $this->service->update($environmentVariable, $validated);
         $env->load('user');
+
+        if ($env->type === 'secret') {
+            $env->value = null;
+        }
 
         return response()->json($env);
     }

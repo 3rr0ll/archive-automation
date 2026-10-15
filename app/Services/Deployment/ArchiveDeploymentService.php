@@ -5,6 +5,7 @@ namespace App\Services\Deployment;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\Cloudflare\CloudflareWorkerService;
+use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
 use App\Services\Sftp\SftpArchiveService;
@@ -19,6 +20,7 @@ class ArchiveDeploymentService
         private InternetArchiveService $archiveService,
         private RunCloudService $runCloudService,
         private CloudflareWorkerService $cloudflareWorkerService,
+        private GoogleSearchConsoleService $searchConsoleService,
         private SftpArchiveService $sftpArchiveService,
     ) {}
 
@@ -115,6 +117,10 @@ class ArchiveDeploymentService
                 return $deployment;
             }
 
+            if (config('services.google_search_console.enabled')) {
+                $this->registerWithSearchConsole($deployment);
+            }
+
             $deployment->update([
                 'status' => DeploymentStatus::Completed,
                 'current_step' => 'completed',
@@ -151,6 +157,35 @@ class ArchiveDeploymentService
             }
 
             throw $exception;
+        }
+    }
+
+    private function registerWithSearchConsole(Deployment $deployment): void
+    {
+        $this->transition(
+            $deployment,
+            'registering_search_console',
+            'Registering the domain, sitemap, and indexing request with Google Search Console.',
+        );
+
+        try {
+            $this->searchConsoleService->registerDomain($deployment->domain);
+            $deployment->logs()->create([
+                'step_name' => 'registering_search_console',
+                'status' => 'success',
+                'message' => 'Google Search Console registration completed.',
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Google Search Console registration failed.', [
+                'deployment_id' => $deployment->id,
+                'domain' => $deployment->domain,
+                'error' => $exception->getMessage(),
+            ]);
+            $deployment->logs()->create([
+                'step_name' => 'registering_search_console',
+                'status' => 'error',
+                'message' => 'Google Search Console registration failed. The site was still deployed.',
+            ]);
         }
     }
 

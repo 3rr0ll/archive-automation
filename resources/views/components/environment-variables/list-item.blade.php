@@ -1,12 +1,26 @@
-@props(['id', 'name', 'type', 'environments', 'note' => null, 'date', 'initial' => 'J'])
+@props(['id', 'name', 'date', 'initial' => 'J', 'type' => 'secret', 'value' => null])
 
-<li class="bg-white first:rounded-t-lg last:rounded-b-lg">
+<li class="bg-white first:rounded-t-lg last:rounded-b-lg" x-data="{ showConfigValue: false }">
     <div class="px-4 py-4 sm:px-6 flex items-center justify-between">
         <div class="flex items-center gap-3 flex-1 min-w-0">
             <div class="flex-shrink-0 text-zinc-400">
                 <x-lucide-lock class="h-4 w-4" />
             </div>
-            <p class="text-sm font-medium text-zinc-900 font-mono truncate">{{ $name }}</p>
+            <div class="flex items-center gap-2.5 min-w-0">
+                <p class="text-sm font-medium text-zinc-900 font-mono truncate">{{ $name }}</p>
+                @if(isset($type) && $type === 'config')
+                    <button type="button" 
+                            @click="showConfigValue = !showConfigValue" 
+                            class="text-zinc-400 hover:text-zinc-600 focus:outline-none p-0.5 rounded transition-colors cursor-pointer"
+                            :title="showConfigValue ? 'Hide value' : 'Show value'">
+                        <x-lucide-eye x-show="!showConfigValue" class="h-3.5 w-3.5" />
+                        <x-lucide-eye-off x-show="showConfigValue" style="display: none;" class="h-3.5 w-3.5" />
+                    </button>
+                    <span x-show="showConfigValue" style="display: none;" class="text-xs font-mono text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200 truncate max-w-xs">
+                        {{ $value ?? '' }}
+                    </span>
+                @endif
+            </div>
         </div>
         <div class="flex items-center justify-between gap-8 flex-shrink-0">
 

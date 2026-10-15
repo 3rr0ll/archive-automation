@@ -68,6 +68,12 @@ return [
         'max_attempts' => (int) env('INTERNET_ARCHIVE_MAX_ATTEMPTS', 1440),
     ],
 
+    'google_search_console' => [
+        'enabled' => (bool) env('GOOGLE_SEARCH_CONSOLE_ENABLED', false),
+        'credentials_path' => env('GOOGLE_SEARCH_CONSOLE_CREDENTIALS_PATH'),
+        'timeout' => (int) env('GOOGLE_SEARCH_CONSOLE_TIMEOUT', 30),
+        'indexing_daily_quota' => (int) env('GOOGLE_INDEXING_DAILY_QUOTA', 200),
+        'indexing_max_rounds' => (int) env('GOOGLE_INDEXING_MAX_ROUNDS', 60),
     'sftp' => [
         'port' => (int) env('SFTP_PORT', 22),
         'username' => env('SFTP_USERNAME'),

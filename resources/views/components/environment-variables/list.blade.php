@@ -1,26 +1,45 @@
 <div class="bg-white border border-zinc-200 rounded-lg">
     <ul role="list">
         <!-- Dynamic list rendering from Alpine items state -->
-        <template x-for="(item, index) in items" :key="item.id">
+        <template x-for="(item, index) in filteredItems" :key="item.id">
             <li class="bg-white hover:bg-zinc-50/50 transition-colors relative"
                 x-data="{ open: false }"
                 :class="[
                     index === 0 ? 'rounded-t-lg' : '',
-                    index === items.length - 1 ? 'rounded-b-lg' : 'border-b border-zinc-200',
+                    index === filteredItems.length - 1 ? 'rounded-b-lg' : 'border-b border-zinc-200',
                     open ? 'z-30' : 'z-10'
                 ]">
                 <!-- Row Header (Always visible) -->
                 <div class="px-4 py-4 sm:px-6 flex items-center justify-between"
                      :class="[
                          index === 0 ? 'rounded-t-lg' : '',
-                         index === items.length - 1 && editingId !== item.id ? 'rounded-b-lg' : '',
+                         index === filteredItems.length - 1 && editingId !== item.id ? 'rounded-b-lg' : '',
                          editingId === item.id ? 'border-b border-zinc-100 bg-zinc-50/40' : ''
                      ]">
-                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <div class="flex items-center gap-3 flex-1 min-w-0" x-data="{ showConfigValue: false }">
                         <div class="flex-shrink-0 text-zinc-400">
                             <x-lucide-lock class="h-4 w-4" />
                         </div>
-                        <p class="text-sm font-medium text-zinc-900 font-mono truncate" x-text="item.key"></p>
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <p class="text-sm font-medium text-zinc-900 font-mono truncate" x-text="item.key"></p>
+                            
+                            <!-- Config Eye Icon toggle & Value Display -->
+                            <template x-if="item.type === 'config'">
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" 
+                                            @click="showConfigValue = !showConfigValue" 
+                                            class="text-zinc-400 hover:text-zinc-600 focus:outline-none p-0.5 rounded transition-colors cursor-pointer"
+                                            :title="showConfigValue ? 'Hide value' : 'Show value'">
+                                        <x-lucide-eye x-show="!showConfigValue" class="h-3.5 w-3.5" />
+                                        <x-lucide-eye-off x-show="showConfigValue" style="display: none;" class="h-3.5 w-3.5" />
+                                    </button>
+                                    <span x-show="showConfigValue" 
+                                          style="display: none;" 
+                                          class="text-xs font-mono text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200 truncate max-w-xs"
+                                          x-text="item.value || ''"></span>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                     <div class="flex items-center justify-between gap-6 flex-shrink-0">
                         <div class="hidden sm:flex items-center gap-4 text-xs text-zinc-500 whitespace-nowrap">
@@ -89,8 +108,11 @@
                         <label class="block text-xs font-semibold text-zinc-700 mb-1.5">Value</label>
                         <textarea rows="3" 
                                   x-model="editForm.value" 
-                                  placeholder="Enter value" 
+                                  :placeholder="editForm.type === 'secret' ? 'Enter a new secret value to replace it (existing secret is hidden)' : 'Enter value'" 
                                   class="block w-full rounded-md border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 font-mono focus:border-zinc-400 focus:outline-none focus:ring-0 transition resize-y"></textarea>
+                        <template x-if="editForm.type === 'secret'">
+                            <p class="text-[11px] text-zinc-500 mt-1">Secret values are encrypted and cannot be viewed. Leave blank to keep existing value, or enter a new value to update.</p>
+                        </template>
                         <template x-if="editForm.errors.value">
                             <p class="text-xs text-red-500 mt-1" x-text="editForm.errors.value[0]"></p>
                         </template>
@@ -152,9 +174,15 @@
         </template>
 
         <!-- Empty State -->
-        <template x-if="items.length === 0">
-            <li class="px-4 py-8 text-center text-zinc-500 text-sm">
-                No environment variables added yet.
+        <template x-if="filteredItems.length === 0">
+            <li class="px-6 py-12 text-center text-zinc-500 text-sm">
+                <div class="flex flex-col items-center justify-center">
+                    <div class="size-10 rounded-full bg-zinc-100 flex items-center justify-center mb-3">
+                        <x-lucide-lock class="size-5 text-zinc-400" />
+                    </div>
+                    <span class="font-medium text-zinc-700 mb-1">No variables found</span>
+                    <span class="text-xs text-zinc-400" x-text="searchQuery || typeFilter !== 'all' ? 'Try adjusting your search or filters.' : 'Get started by adding your first variable.'"></span>
+                </div>
             </li>
         </template>
     </ul>

@@ -19,7 +19,15 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [\App\Http\Controllers\Web\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/environment-variables', function () {
-        $variables = \App\Models\EnvironmentVariable::with('user')->orderBy('created_at', 'desc')->get();
+        $variables = \App\Models\EnvironmentVariable::with('user')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($env) {
+                if ($env->type === 'secret') {
+                    $env->value = null;
+                }
+                return $env;
+            });
         return view('pages.environment-variables', compact('variables'));
     })->name('environment-variables');
     Route::get('/servers', function () {
