@@ -1,9 +1,10 @@
 <?php
 
-use App\Http\Controllers\Api\EnvironmentVariableController;
+use App\Http\Controllers\Api\ArchiveController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
+use App\Http\Controllers\Api\EnvironmentVariableController;
 use App\Http\Controllers\Api\InternetArchiveSettingsController;
 use App\Http\Controllers\Api\RunCloudController;
 use App\Http\Controllers\Api\ServerController;
@@ -48,6 +49,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
+    Route::post('/servers/{server}/archives/unzip', [ArchiveController::class, 'unzip'])
+        ->name('servers.archives.unzip');
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

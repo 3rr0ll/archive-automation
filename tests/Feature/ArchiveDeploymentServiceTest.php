@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Models\User;
 use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\Deployment\ArchiveDeploymentService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
+use App\Services\Sftp\SftpArchiveService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
@@ -36,11 +38,14 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->once()
             ->with('example.com', 'non-www')
             ->andReturn(['routes' => []]);
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
 
         $result = (new ArchiveDeploymentService(
             $archiveService,
             $runCloudService,
             $cloudflareWorkerService,
+            $sftpArchiveService,
         ))->deploy($deployment);
 
         $this->assertSame('completed', $result->status->value);
@@ -73,12 +78,15 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->andThrow(new RuntimeException('Sensitive provider response.'));
         $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
         $cloudflareWorkerService->shouldNotReceive('changeWorkers');
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
 
         try {
             (new ArchiveDeploymentService(
                 $archiveService,
                 $runCloudService,
                 $cloudflareWorkerService,
+                $sftpArchiveService,
             ))->deploy($deployment);
             $this->fail('The provider exception was not rethrown.');
         } catch (RuntimeException $exception) {
@@ -115,12 +123,15 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->once()
             ->with('example.com', 'www')
             ->andThrow(new RuntimeException('Sensitive Cloudflare response.'));
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
 
         try {
             (new ArchiveDeploymentService(
                 $archiveService,
                 $runCloudService,
                 $cloudflareWorkerService,
+                $sftpArchiveService,
             ))->deploy($deployment);
             $this->fail('The Cloudflare exception was not rethrown.');
         } catch (RuntimeException $exception) {
@@ -148,6 +159,10 @@ class ArchiveDeploymentServiceTest extends TestCase
     {
         Storage::fake('local');
         Storage::disk('local')->put('deployments/1/archive.zip', 'zip contents');
+        Server::factory()->create([
+            'server_id' => 123,
+            'ip_address' => '192.0.2.10',
+        ]);
         $deployment = $this->deployment([
             'id' => 1,
             'archive_source' => 'upload',
@@ -159,24 +174,117 @@ class ArchiveDeploymentServiceTest extends TestCase
         $runCloudService = Mockery::mock(RunCloudService::class);
         $runCloudService->shouldReceive('createEmptyWebApplication')
             ->once()
-            ->with('example.com', 123)
-            ->andReturn(['success' => true, 'web_app_id' => 501]);
+            ->with('example.com', 123, '192.0.2.10')
+            ->andReturn([
+                'success' => true,
+                'web_app_id' => 501,
+                'web_app_name' => 'example',
+            ]);
         $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
         $cloudflareWorkerService->shouldReceive('changeWorkers')
             ->once()
             ->with('example.com', 'non-www')
             ->andReturn(['routes' => []]);
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldReceive('uploadAndExtract')
+            ->once()
+            ->with(
+                '192.0.2.10',
+                Mockery::on(fn (string $path): bool => str_ends_with(
+                    str_replace('\\', '/', $path),
+                    '/deployments/1/archive.zip',
+                )),
+                '/home/runcloud/webapps/example/archive-1.zip',
+                '/home/runcloud/webapps/example/public_html',
+                true,
+                true,
+            )
+            ->andReturn([
+                'entries_extracted' => 3,
+                'archive_deleted' => true,
+                'archive_uploaded' => true,
+                'archive_path' => '/home/runcloud/webapps/example/archive-1.zip',
+                'destination_path' => '/home/runcloud/webapps/example/public_html',
+                'deleted_index_files' => ['/home/runcloud/webapps/example/public_html/index.html'],
+            ]);
 
         $result = (new ArchiveDeploymentService(
             $archiveService,
             $runCloudService,
             $cloudflareWorkerService,
+            $sftpArchiveService,
         ))->deploy($deployment);
 
         $this->assertSame('completed', $result->status->value);
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
             'step_name' => 'preparing_archive',
+        ]);
+    }
+
+    public function test_uploaded_deployment_retry_reuses_the_web_app_created_by_an_earlier_attempt(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('deployments/1/archive.zip', 'zip contents');
+        Server::factory()->create([
+            'server_id' => 123,
+            'ip_address' => '192.0.2.10',
+        ]);
+        $deployment = $this->deployment([
+            'id' => 1,
+            'archive_source' => 'upload',
+            'archive_url' => null,
+            'archive_path' => 'deployments/1/archive.zip',
+            'status' => 'failed',
+            'current_step' => 'deployment_failed',
+        ]);
+        $deployment->logs()->create([
+            'step_name' => 'uploading_and_extracting_archive',
+            'status' => 'in_progress',
+            'message' => 'Previous attempt reached the SFTP step.',
+        ]);
+
+        $archiveService = Mockery::mock(InternetArchiveService::class);
+        $archiveService->shouldNotReceive('downloadSnapshot');
+        $runCloudService = Mockery::mock(RunCloudService::class);
+        $runCloudService->shouldReceive('createEmptyWebApplication')
+            ->once()
+            ->with('example.com', 123, '192.0.2.10')
+            ->andReturn(['already_exists' => true]);
+        $runCloudService->shouldReceive('generateWebAppName')
+            ->once()
+            ->with('example.com')
+            ->andReturn('example');
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')
+            ->once()
+            ->with('example.com', 'non-www')
+            ->andReturn(['routes' => []]);
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldReceive('uploadAndExtract')
+            ->once()
+            ->andReturn([
+                'entries_extracted' => 3,
+                'archive_deleted' => true,
+                'archive_uploaded' => true,
+                'archive_path' => '/home/runcloud/webapps/example/archive-1.zip',
+                'destination_path' => '/home/runcloud/webapps/example/public_html',
+                'deleted_index_files' => [],
+            ]);
+
+        $result = (new ArchiveDeploymentService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+            $sftpArchiveService,
+        ))->deploy($deployment);
+
+        $this->assertSame('completed', $result->status->value);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'provisioning_web_app',
+            'status' => 'success',
+            'message' => 'Reusing the RunCloud web application created by an earlier deployment attempt.',
         ]);
     }
 
@@ -189,11 +297,14 @@ class ArchiveDeploymentServiceTest extends TestCase
         $runCloudService->shouldNotReceive('createEmptyWebApplication');
         $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
         $cloudflareWorkerService->shouldNotReceive('changeWorkers');
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
 
         $result = (new ArchiveDeploymentService(
             $archiveService,
             $runCloudService,
             $cloudflareWorkerService,
+            $sftpArchiveService,
         ))->deploy($deployment);
 
         $this->assertSame('cancelled', $result->status->value);
@@ -215,11 +326,14 @@ class ArchiveDeploymentServiceTest extends TestCase
         $runCloudService->shouldNotReceive('createEmptyWebApplication');
         $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
         $cloudflareWorkerService->shouldNotReceive('changeWorkers');
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
 
         $result = (new ArchiveDeploymentService(
             $archiveService,
             $runCloudService,
             $cloudflareWorkerService,
+            $sftpArchiveService,
         ))->deploy($deployment);
 
         $this->assertSame('cancelled', $result->status->value);

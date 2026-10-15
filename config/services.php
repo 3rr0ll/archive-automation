@@ -68,4 +68,25 @@ return [
         'max_attempts' => (int) env('INTERNET_ARCHIVE_MAX_ATTEMPTS', 1440),
     ],
 
+    'sftp' => [
+        'port' => (int) env('SFTP_PORT', 22),
+        'username' => env('SFTP_USERNAME'),
+        'password' => env('SFTP_PASSWORD'),
+        'private_key' => env('SFTP_PRIVATE_KEY'),
+        'private_key_path' => env('SFTP_PRIVATE_KEY_PATH'),
+        'private_key_passphrase' => env('SFTP_PRIVATE_KEY_PASSPHRASE'),
+        'host_fingerprint' => env('SFTP_HOST_FINGERPRINT'),
+        'timeout' => (int) env('SFTP_TIMEOUT', 1800),
+        'max_archive_entries' => (int) env('SFTP_MAX_ARCHIVE_ENTRIES', 10000),
+        'webapps_root' => env('SFTP_WEBAPPS_ROOT', '/home/runcloud/webapps'),
+        'allowed_roots' => array_filter(array_map(
+            'trim',
+            explode(',', (string) env('SFTP_ALLOWED_ROOTS', '/home/runcloud')),
+        )),
+        'default_index_files' => array_filter(array_map(
+            'trim',
+            explode(',', (string) env('SFTP_DEFAULT_INDEX_FILES', 'index.html,index.htm')),
+        )),
+    ],
+
 ];

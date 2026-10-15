@@ -20,6 +20,10 @@ class EnvironmentVariable extends Model
         'value' => 'encrypted',
     ];
 
+    protected $hidden = [
+        'value',
+    ];
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

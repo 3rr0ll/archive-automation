@@ -48,6 +48,8 @@ class EnvironmentVariableController extends Controller
             'key' => 'required|string|max:255|unique:environment_variables,key,' . $environmentVariable->id,
             'value' => 'required|string',
             'type' => 'required|string|in:secret,config',
+            'environments' => 'nullable|string',
+            'note' => 'nullable|string',
         ]);
 
         $env = $this->service->update($environmentVariable, $validated);

@@ -4,6 +4,7 @@
 <div class="mx-auto py-6" x-data="{
     showModal: false,
     isSubmitting: false,
+    editingId: null,
     formData: {
         type: 'secret',
         key: '',
@@ -12,12 +13,33 @@
         environments: 'Production'
     },
     errors: {},
+    openCreate() {
+        this.editingId = null;
+        this.formData = { type: 'secret', key: '', value: '', note: '', environments: 'Production' };
+        this.errors = {};
+        this.showModal = true;
+    },
+    openEdit(variable) {
+        this.editingId = variable.id;
+        this.formData = {
+            type: variable.type || 'secret',
+            key: variable.key,
+            value: '',
+            note: variable.note || '',
+            environments: variable.environments || 'Production'
+        };
+        this.errors = {};
+        this.showModal = true;
+    },
     async submitForm() {
         this.isSubmitting = true;
         this.errors = {};
         try {
-            const response = await fetch('/api/environment-variables', {
-                method: 'POST',
+            const endpoint = this.editingId
+                ? `/api/environment-variables/${this.editingId}`
+                : '/api/environment-variables';
+            const response = await fetch(endpoint, {
+                method: this.editingId ? 'PUT' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -42,7 +64,7 @@
             this.isSubmitting = false;
         }
     }
-}">
+}" @edit-environment-variable.window="openEdit($event.detail)">
     
     <!-- Header Section -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -53,7 +75,7 @@
             </p>
         </div>
         <div class="flex items-center gap-3">
-            <button type="button" @click="showModal = true" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors">
+            <button type="button" @click="openCreate()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors">
                 Add Environment Variable
             </button>
         </div>
@@ -75,7 +97,7 @@
                          class="pointer-events-auto w-screen max-w-md">
                         <div class="flex h-full flex-col bg-white shadow-xl">
                             <div class="px-4 py-6 sm:px-6 flex items-start justify-between border-b border-zinc-200">
-                                <h2 class="text-base font-semibold leading-6 text-zinc-900" id="slide-over-title">Add Environment Variable</h2>
+                                <h2 class="text-base font-semibold leading-6 text-zinc-900" id="slide-over-title" x-text="editingId ? 'Update Environment Variable' : 'Add Environment Variable'"></h2>
                                 <div class="ml-3 flex h-7 items-center">
                                     <button type="button" @click="showModal = false" class="relative rounded-md bg-white text-zinc-400 hover:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2">
                                         <span class="sr-only">Close panel</span>
@@ -124,6 +146,7 @@
                                             <div class="mt-2">
                                                 <input type="text" name="value" id="value" x-model="formData.value" required class="block w-full rounded-md border-zinc-300 py-2 text-zinc-900 focus:ring-zinc-900 focus:border-zinc-900 sm:text-sm sm:leading-6">
                                             </div>
+                                            <p x-show="editingId" class="mt-1 text-xs text-zinc-500">Saved values are hidden. Enter the new value to replace it.</p>
                                             <template x-if="errors.value"><span class="text-xs text-red-500 mt-1" x-text="errors.value[0]"></span></template>
                                         </div>
                                         
@@ -141,7 +164,7 @@
                                             Import .env
                                         </button>
                                         <button type="submit" :disabled="isSubmitting" class="ml-4 inline-flex justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50">
-                                            <span x-show="!isSubmitting">Save</span>
+                                            <span x-show="!isSubmitting" x-text="editingId ? 'Update' : 'Save'"></span>
                                             <span x-show="isSubmitting">Saving...</span>
                                         </button>
                                     </div>
@@ -191,8 +214,11 @@
         <ul role="list" class="divide-y divide-zinc-200">
             @forelse($variables as $variable)
                 <x-environment-variables.list-item 
-                    id="{{ $variable->id }}"
-                    name="{{ $variable->key }}" 
+                    :id="$variable->id"
+                    :name="$variable->key"
+                    :type="$variable->type"
+                    :environments="$variable->environments"
+                    :note="$variable->note"
                     date="{{ $variable->created_at->format('M d') }}" 
                     initial="{{ $variable->user ? substr($variable->user->name, 0, 1) : 'U' }}" 
                 />
