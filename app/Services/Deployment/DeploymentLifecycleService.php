@@ -41,7 +41,7 @@ class DeploymentLifecycleService
                     'domain' => $data['domain'],
                     'version' => $data['version'],
                     'archive_source' => $isUpload ? 'upload' : 'url',
-                    'archive_url' => $isUpload ? null : $data['archive_url'],
+                    'archive_url' => $isUpload ? null : ($data['archive_url'] ?? null),
                     'archive_original_name' => $isUpload ? $upload->getClientOriginalName() : null,
                     'archive_status' => $isUpload ? ArchiveStatus::Ready : ArchiveStatus::Waiting,
                     'status' => DeploymentStatus::Pending,

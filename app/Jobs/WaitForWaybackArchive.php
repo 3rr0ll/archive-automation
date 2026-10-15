@@ -49,6 +49,23 @@ class WaitForWaybackArchive implements ShouldQueue
             return;
         }
 
+        if (blank($this->deployment->archive_url)) {
+            $snapshot = $archiveService->findLatestSnapshot($this->deployment->domain);
+            if ($snapshot !== null && ! empty($snapshot['url'])) {
+                $this->deployment->update(['archive_url' => $snapshot['url']]);
+                $this->deployment->refresh();
+                $this->deployment->logs()->create([
+                    'step_name' => 'waiting_for_archive',
+                    'status' => 'in_progress',
+                    'message' => 'Found snapshot on Wayback Machine: '.$snapshot['url'],
+                ]);
+            } else {
+                $this->release(app(InternetArchiveSettings::class)->all()['poll_delay']);
+
+                return;
+            }
+        }
+
         if (! $archiveService->isArchiveReady((string) $this->deployment->archive_url)) {
             $this->release(app(InternetArchiveSettings::class)->all()['poll_delay']);
 
