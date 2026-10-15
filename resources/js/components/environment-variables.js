@@ -9,6 +9,9 @@ export function environmentVariablesPage(initialVariables = []) {
         variables: [
             { key: '', value: '', showValue: false }
         ],
+        searchQuery: '',
+        typeFilter: 'all',
+        sortBy: 'updated_desc',
         errors: {},
         editingId: null,
         editForm: {
@@ -20,6 +23,40 @@ export function environmentVariablesPage(initialVariables = []) {
             environments: 'All Environments',
             isSaving: false,
             errors: {},
+        },
+
+        get filteredItems() {
+            let list = [...this.items];
+
+            if (this.searchQuery.trim() !== '') {
+                const q = this.searchQuery.toLowerCase().trim();
+                list = list.filter(item => 
+                    (item.key && item.key.toLowerCase().includes(q)) ||
+                    (item.value && String(item.value).toLowerCase().includes(q))
+                );
+            }
+
+            if (this.typeFilter === 'secret') {
+                list = list.filter(item => item.type === 'secret');
+            } else if (this.typeFilter === 'config') {
+                list = list.filter(item => item.type === 'config');
+            }
+
+            if (this.sortBy === 'updated_desc') {
+                list.sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+            } else if (this.sortBy === 'updated_asc') {
+                list.sort((a, b) => new Date(a.updated_at || a.created_at || 0) - new Date(b.updated_at || b.created_at || 0));
+            } else if (this.sortBy === 'created_desc') {
+                list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+            } else if (this.sortBy === 'created_asc') {
+                list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+            } else if (this.sortBy === 'key_asc') {
+                list.sort((a, b) => (a.key || '').localeCompare(b.key || ''));
+            } else if (this.sortBy === 'key_desc') {
+                list.sort((a, b) => (b.key || '').localeCompare(a.key || ''));
+            }
+
+            return list;
         },
 
         formatDate(dateString) {
@@ -148,7 +185,7 @@ export function environmentVariablesPage(initialVariables = []) {
             this.editForm = {
                 id: item.id,
                 key: item.key || '',
-                value: item.value || '',
+                value: item.type === 'secret' ? '' : (item.value || ''),
                 note: item.note || '',
                 type: item.type || 'config',
                 environments: item.environments || 'All Environments',
@@ -181,13 +218,23 @@ export function environmentVariablesPage(initialVariables = []) {
             this.editForm.errors = {};
 
             try {
-                const updated = await updateEnvironmentVariable(this.editForm.id, {
+                const payload = {
                     key: this.editForm.key.trim(),
-                    value: this.editForm.value,
                     type: this.editForm.type,
                     note: this.editForm.note,
                     environments: this.editForm.environments,
-                });
+                };
+
+                // For secret, only send value if user actually typed a new one
+                if (this.editForm.type === 'secret') {
+                    if (this.editForm.value !== '') {
+                        payload.value = this.editForm.value;
+                    }
+                } else {
+                    payload.value = this.editForm.value;
+                }
+
+                const updated = await updateEnvironmentVariable(this.editForm.id, payload);
 
                 // Update in local items list
                 const idx = this.items.findIndex(i => i.id === this.editForm.id);
@@ -195,6 +242,7 @@ export function environmentVariablesPage(initialVariables = []) {
                     this.items[idx] = {
                         ...this.items[idx],
                         ...updated,
+                        value: this.editForm.type === 'secret' ? null : (payload.value ?? this.items[idx].value),
                     };
                 }
 

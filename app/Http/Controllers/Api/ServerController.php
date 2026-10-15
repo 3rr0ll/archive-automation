@@ -16,41 +16,16 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 class ServerController extends Controller
 {
     public function __construct(
-        protected ServerService $serverService
+        protected ServerService $serverService,
         private ApplicationCache $cache,
         private AuditLogger $auditLogger,
     ) {}
 
     public function index(): AnonymousResourceCollection
     {
-        $servers = collect($this->cache->rememberLocalServers(
-            fn (): array => Server::query()
-                ->orderBy('name')
-                ->get()
-                ->map(fn (Server $server): array => $server->getAttributes())
-                ->all(),
-        ))->map(fn (array $attributes): Server => (new Server)->newFromBuilder($attributes));
-
         return ServerResource::collection(
             $this->serverService->getAll()
         );
-    }
-
-            $servers,
-        );
-    }
-
-    public function store(StoreServerRequest $request): JsonResponse
-    {
-        $server = Server::create($request->validated());
-        $this->auditLogger->record('server.created', $server, [
-            'runcloud_server_id' => $server->server_id,
-        ]);
-
-        return response()->json([
-            'message' => 'Server created successfully.',
-            'data' => new ServerResource($server),
-        ], 201);
     }
 
     public function show(Server $server): ServerResource
@@ -65,10 +40,6 @@ class ServerController extends Controller
     {
         try {
             $servers = $this->serverService->syncFromRunCloud();
-        $server->update($request->validated());
-        $this->auditLogger->record('server.updated', $server, [
-            'changed_fields' => array_keys($server->getChanges()),
-        ]);
 
             return response()->json([
                 'message' => 'Servers synced successfully from RunCloud.',
@@ -94,10 +65,6 @@ class ServerController extends Controller
         $isActive = array_key_exists('is_active', $validated) ? (bool) $validated['is_active'] : null;
 
         $updated = $this->serverService->toggleActive($server, $isActive);
-        $server->delete();
-        $this->auditLogger->record('server.deleted', $server, [
-            'runcloud_server_id' => $server->server_id,
-        ]);
 
         return response()->json([
             'message' => $updated->is_active ? 'Server activated.' : 'Server deactivated.',
