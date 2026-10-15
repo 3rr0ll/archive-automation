@@ -51,6 +51,9 @@ class EnvironmentVariableService
             'key' => $data['key'],
             'value' => $data['value'],
             'type' => $data['type'],
+            'environments' => $data['environments'] ?? $environmentVariable->environments,
+            'note' => $data['note'] ?? null,
+        ]);
         ];
 
         if (array_key_exists('environments', $data)) {

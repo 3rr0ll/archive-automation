@@ -1,0 +1,218 @@
+{
+    "info": {
+        "_postman_id": "8bdf9dd8-b04d-4ae7-89a9-d30bdd743f87",
+        "name": "Archive Automation - Upload ZIP Deployment",
+        "description": "Uploads a ZIP to Laravel, queues creation of an empty RunCloud web app, transfers the ZIP to the new app by SFTP, removes the placeholder index, extracts the archive into public_html, and deletes the remote ZIP.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000"
+        },
+        {
+            "key": "admin_email",
+            "value": "admin@example.com"
+        },
+        {
+            "key": "admin_password",
+            "value": "password"
+        },
+        {
+            "key": "access_token",
+            "value": ""
+        },
+        {
+            "key": "runcloud_server_id",
+            "value": "344845",
+            "description": "The servers.server_id value, not the local servers.id primary key."
+        },
+        {
+            "key": "domain",
+            "value": "unique-test-domain.com"
+        },
+        {
+            "key": "domain_version",
+            "value": "non-www"
+        },
+        {
+            "key": "deployment_id",
+            "value": ""
+        },
+        {
+            "key": "poll_count",
+            "value": "0"
+        }
+    ],
+    "item": [
+        {
+            "name": "1. Admin Login",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('Login succeeded', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "const response = pm.response.json();",
+                            "pm.expect(response.access_token).to.be.a('string').and.not.empty;",
+                            "pm.collectionVariables.set('access_token', response.access_token);"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"email\": \"{{admin_email}}\",\n    \"password\": \"{{admin_password}}\",\n    \"device_name\": \"postman-upload-deployment\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": "{{base_url}}/api/login"
+            }
+        },
+        {
+            "name": "2. Submit ZIP Deployment",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('ZIP deployment was accepted', function () {",
+                            "    pm.response.to.have.status(202);",
+                            "});",
+                            "const response = pm.response.json();",
+                            "pm.expect(response.data.archive_source).to.eql('upload');",
+                            "pm.expect(response.data.archive_status).to.eql('ready');",
+                            "pm.collectionVariables.set('deployment_id', String(response.data.id));",
+                            "pm.collectionVariables.set('poll_count', '0');"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{access_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "server_id",
+                            "value": "{{runcloud_server_id}}",
+                            "type": "text"
+                        },
+                        {
+                            "key": "domain",
+                            "value": "{{domain}}",
+                            "type": "text"
+                        },
+                        {
+                            "key": "version",
+                            "value": "{{domain_version}}",
+                            "type": "text"
+                        },
+                        {
+                            "key": "archive",
+                            "type": "file",
+                            "src": []
+                        }
+                    ]
+                },
+                "url": "{{base_url}}/api/deployments",
+                "description": "Before sending, select your ZIP file in the archive form-data row. Do not manually set Content-Type; Postman supplies the multipart boundary."
+            }
+        },
+        {
+            "name": "3. Poll Deployment Until Finished",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('Deployment status was retrieved', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "const response = pm.response.json();",
+                            "const deployment = response.data;",
+                            "const count = Number(pm.collectionVariables.get('poll_count') || 0) + 1;",
+                            "pm.collectionVariables.set('poll_count', String(count));",
+                            "console.log(`Deployment status: ${deployment.status}; step: ${deployment.current_step}`);",
+                            "",
+                            "if (deployment.status === 'failed') {",
+                            "    pm.expect.fail('Deployment failed. Inspect data.logs and Laravel logs.');",
+                            "} else if (deployment.status === 'completed') {",
+                            "    pm.test('SFTP upload and extraction completed', function () {",
+                            "        pm.expect(deployment.current_step).to.eql('completed');",
+                            "        const completedUpload = (deployment.logs || []).some(log =>",
+                            "            log.step_name === 'uploading_and_extracting_archive' && log.status === 'success'",
+                            "        );",
+                            "        pm.expect(completedUpload).to.eql(true);",
+                            "    });",
+                            "    pm.execution.setNextRequest(null);",
+                            "} else if (count < 60) {",
+                            "    pm.execution.setNextRequest(pm.info.requestName);",
+                            "} else {",
+                            "    pm.expect.fail('Deployment did not finish within 60 polling attempts.');",
+                            "}"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{access_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": "{{base_url}}/api/deployments/{{deployment_id}}",
+                "description": "Run the collection with a 3000-5000 ms delay. The request repeats until the queued deployment completes, fails, or reaches 60 attempts."
+            }
+        }
+    ]
+}
