@@ -47,13 +47,24 @@ class EnvironmentVariableService
      */
     public function update(EnvironmentVariable $environmentVariable, array $data): EnvironmentVariable
     {
-        $environmentVariable->update([
+        $updateData = [
             'key' => $data['key'],
             'value' => $data['value'],
             'type' => $data['type'],
             'environments' => $data['environments'] ?? $environmentVariable->environments,
             'note' => $data['note'] ?? null,
         ]);
+        ];
+
+        if (array_key_exists('environments', $data)) {
+            $updateData['environments'] = $data['environments'] ?? 'Production';
+        }
+
+        if (array_key_exists('note', $data)) {
+            $updateData['note'] = $data['note'];
+        }
+
+        $environmentVariable->update($updateData);
 
         $this->auditLogger->record('environment-variable.updated', $environmentVariable, [
             'key' => $environmentVariable->key,

@@ -45,12 +45,13 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::post('/admin/settings/internet-archive/test', [InternetArchiveSettingsController::class, 'test']);
 
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
-    Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::post('/servers/sync', [ServerController::class, 'sync'])->name('servers.sync');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
     Route::post('/servers/{server}/archives/unzip', [ArchiveController::class, 'unzip'])
         ->name('servers.archives.unzip');
+    Route::patch('/servers/{server}/toggle-active', [ServerController::class, 'toggleActive'])->name('servers.toggle-active');
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
