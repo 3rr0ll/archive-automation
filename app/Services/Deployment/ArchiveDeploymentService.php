@@ -8,6 +8,7 @@ use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\RunCloud\RunCloudService;
+use App\Services\Sftp\SftpArchiveService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -20,6 +21,7 @@ class ArchiveDeploymentService
         private RunCloudService $runCloudService,
         private CloudflareWorkerService $cloudflareWorkerService,
         private GoogleSearchConsoleService $searchConsoleService,
+        private SftpArchiveService $sftpArchiveService,
     ) {}
 
     public function deploy(Deployment $deployment): Deployment
@@ -71,12 +73,35 @@ class ArchiveDeploymentService
                 );
 
             if (! empty($result['already_exists'])) {
-                throw new RuntimeException('A RunCloud web application already exists for this domain.');
+                $canResumeUploadedDeployment = $deployment->archive_source === 'upload'
+                    && $deployment->logs()
+                        ->where('step_name', 'uploading_and_extracting_archive')
+                        ->exists();
+
+                if (! $canResumeUploadedDeployment) {
+                    throw new RuntimeException('A RunCloud web application already exists for this domain.');
+                }
+
+                $result['web_app_name'] = $this->runCloudService->generateWebAppName($deployment->domain);
+                $deployment->logs()->create([
+                    'step_name' => 'provisioning_web_app',
+                    'status' => 'success',
+                    'message' => 'Reusing the RunCloud web application created by an earlier deployment attempt.',
+                ]);
             }
 
             $deployment->refresh();
             if ($deployment->status === DeploymentStatus::Cancelled) {
                 return $deployment;
+            }
+
+            if ($deployment->archive_source === 'upload') {
+                $this->deployUploadedArchive($deployment, $result, $serverIp);
+
+                $deployment->refresh();
+                if ($deployment->status === DeploymentStatus::Cancelled) {
+                    return $deployment;
+                }
             }
 
             $this->transition(
@@ -181,6 +206,55 @@ class ArchiveDeploymentService
             'step_name' => $step,
             'status' => 'in_progress',
             'message' => $message,
+        ]);
+    }
+
+    /** @param array<string, mixed> $webApp */
+    private function deployUploadedArchive(
+        Deployment $deployment,
+        array $webApp,
+        ?string $serverIp,
+    ): void {
+        if (blank($serverIp)) {
+            throw new RuntimeException('The deployment server IP address is not configured.');
+        }
+
+        $webAppName = $webApp['web_app_name'] ?? null;
+
+        if (! is_string($webAppName)
+            || preg_match('/^[a-zA-Z0-9_-]+$/', $webAppName) !== 1) {
+            throw new RuntimeException('RunCloud did not return a valid web application name.');
+        }
+
+        if (blank($deployment->archive_path)) {
+            throw new RuntimeException('The uploaded ZIP path is not available.');
+        }
+
+        $this->transition(
+            $deployment,
+            'uploading_and_extracting_archive',
+            'Uploading the ZIP by SFTP and extracting it into the web application.',
+        );
+
+        $webAppsRoot = rtrim((string) config('services.sftp.webapps_root', '/home/runcloud/webapps'), '/');
+        $remoteAppRoot = $webAppsRoot.'/'.$webAppName;
+
+        $result = $this->sftpArchiveService->uploadAndExtract(
+            $serverIp,
+            Storage::disk('local')->path($deployment->archive_path),
+            $remoteAppRoot.'/archive-'.$deployment->id.'.zip',
+            $remoteAppRoot.'/public_html',
+            true,
+            true,
+        );
+
+        $deployment->logs()->create([
+            'step_name' => 'uploading_and_extracting_archive',
+            'status' => 'success',
+            'message' => sprintf(
+                'Uploaded and extracted %d archive entries; the remote ZIP was deleted.',
+                $result['entries_extracted'],
+            ),
         ]);
     }
 }

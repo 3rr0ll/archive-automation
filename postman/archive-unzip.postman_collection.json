@@ -1,0 +1,257 @@
+{
+    "info": {
+        "_postman_id": "61958924-c0cb-4ba0-927d-b2617ee8d62c",
+        "name": "Archive Automation - SFTP Unzip",
+        "description": "Authenticates as an administrator and extracts a ZIP that already exists on a configured server. Configure the SFTP_* variables in Laravel before running this collection.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000"
+        },
+        {
+            "key": "admin_email",
+            "value": "admin@example.com"
+        },
+        {
+            "key": "admin_password",
+            "value": "password"
+        },
+        {
+            "key": "access_token",
+            "value": ""
+        },
+        {
+            "key": "local_server_id",
+            "value": "1",
+            "description": "Local servers table ID, not the RunCloud server_id value."
+        },
+        {
+            "key": "runcloud_server_id",
+            "value": "344845",
+            "description": "The server ID used by the RunCloud API."
+        },
+        {
+            "key": "domain",
+            "value": "example.com"
+        },
+        {
+            "key": "sftp_webapps_root",
+            "value": "/home/runcloud/webapps"
+        },
+        {
+            "key": "web_app_name",
+            "value": ""
+        },
+        {
+            "key": "remote_archive_path",
+            "value": "/home/runcloud/archive.zip"
+        },
+        {
+            "key": "destination_path",
+            "value": ""
+        }
+    ],
+    "item": [
+        {
+            "name": "1. Admin Login",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Login succeeded', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "const response = pm.response.json();",
+                            "pm.expect(response.access_token).to.be.a('string').and.not.empty;",
+                            "pm.collectionVariables.set('access_token', response.access_token);"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"email\": \"{{admin_email}}\",\n    \"password\": \"{{admin_password}}\",\n    \"device_name\": \"postman-sftp-test\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/login",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "login"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "2. Create RunCloud Empty WebApp",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Empty web app was created', function () {",
+                            "    pm.response.to.have.status(201);",
+                            "});",
+                            "",
+                            "const response = pm.response.json();",
+                            "pm.expect(response.data.web_app_name).to.be.a('string').and.not.empty;",
+                            "pm.collectionVariables.set('web_app_name', response.data.web_app_name);",
+                            "",
+                            "const root = pm.collectionVariables.get('sftp_webapps_root').replace(/\\\/$/, '');",
+                            "const destination = `${root}/${response.data.web_app_name}/public_html`;",
+                            "pm.collectionVariables.set('destination_path', destination);",
+                            "",
+                            "pm.test('Destination path was generated', function () {",
+                            "    pm.expect(destination).to.include(response.data.web_app_name);",
+                            "    pm.expect(destination).to.match(/\\/public_html$/);",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{access_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"domain\": \"{{domain}}\",\n    \"server_id\": {{runcloud_server_id}}\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/runcloud/webapp",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "runcloud",
+                        "webapp"
+                    ]
+                },
+                "description": "Creates an empty RunCloud web app and stores its generated SFTP public_html path for the extraction request."
+            }
+        },
+        {
+            "name": "3. Delete Default Index, Extract ZIP, and Delete ZIP",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Archive was extracted', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "pm.test('Response contains extraction details', function () {",
+                            "    const response = pm.response.json();",
+                            "    pm.expect(response.message).to.eql('Remote ZIP archive extracted successfully.');",
+                            "    pm.expect(response.data.archive_path).to.eql(pm.collectionVariables.get('remote_archive_path'));",
+                            "    pm.expect(response.data.destination_path).to.eql(pm.collectionVariables.get('destination_path'));",
+                            "    pm.expect(response.data.entries_extracted).to.be.a('number').and.above(0);",
+                            "    pm.expect(response.data.deleted_index_files).to.be.an('array');",
+                            "    pm.expect(response.data.deleted_index_files.length).to.be.above(0);",
+                            "    pm.expect(response.data.archive_deleted).to.eql(true);",
+                            "    pm.expect(response.data.deleted_index_files.some(path => /\\/index\\.html?$/.test(path))).to.eql(true);",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "auth": {
+                    "type": "bearer",
+                    "bearer": [
+                        {
+                            "key": "token",
+                            "value": "{{access_token}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"archive_path\": \"{{remote_archive_path}}\",\n    \"destination_path\": \"{{destination_path}}\",\n    \"delete_archive\": true,\n    \"delete_existing_index\": true\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/servers/{{local_server_id}}/archives/unzip",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "servers",
+                        "{{local_server_id}}",
+                        "archives",
+                        "unzip"
+                    ]
+                },
+                "description": "Deletes the RunCloud placeholder index.html/index.htm, extracts the remote ZIP into the new public_html directory, and deletes the ZIP after extraction."
+            }
+        }
+    ]
+}
