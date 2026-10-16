@@ -64,6 +64,7 @@ return [
             explode(',', (string) env('INTERNET_ARCHIVE_ALLOWED_HOSTS', 'archive.org,archive-it.org,waybackmachinedownloader.com'))
         )),
         'timeout' => (int) env('INTERNET_ARCHIVE_TIMEOUT', 20),
+        'download_timeout' => (int) env('INTERNET_ARCHIVE_DOWNLOAD_TIMEOUT', 1800),
         'poll_delay' => (int) env('INTERNET_ARCHIVE_POLL_DELAY', 60),
         'max_attempts' => (int) env('INTERNET_ARCHIVE_MAX_ATTEMPTS', 1440),
     ],

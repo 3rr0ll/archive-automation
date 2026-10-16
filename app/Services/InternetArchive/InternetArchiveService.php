@@ -6,6 +6,7 @@ use App\Services\Http\ExternalHttpClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Throwable;
 
 class InternetArchiveService
@@ -51,7 +52,7 @@ class InternetArchiveService
 
         try {
             $response = $this->httpClient
-                ->configure(Http::timeout($this->settings->all()['timeout']))
+                ->configure(Http::timeout($this->settings->all()['timeout']), 'internet_archive', 'check_archive_ready')
                 ->accept('application/zip')
                 ->head($archiveUrl);
         } catch (ConnectionException $exception) {
@@ -90,7 +91,7 @@ class InternetArchiveService
 
         try {
             $response = $this->httpClient
-                ->configure(Http::timeout($this->settings->all()['timeout']))
+                ->configure(Http::timeout($this->settings->all()['timeout']), 'internet_archive', 'test_connection')
                 ->head($url);
         } catch (ConnectionException $exception) {
             Log::warning('Internet Archive connection test could not connect.', [
@@ -119,12 +120,12 @@ class InternetArchiveService
      */
     public function downloadSnapshot(string $domain, string $version, string $destinationPath): bool
     {
-        $directory = dirname($destinationPath);
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
+        Log::warning('Snapshot download is not implemented.', [
+            'domain' => $domain,
+            'version' => $version,
+        ]);
 
-        return true;
+        return false;
     }
 
     /**
@@ -134,6 +135,7 @@ class InternetArchiveService
     {
         if (! $this->isAllowedArchiveUrl($archiveUrl)) {
             Log::warning('Attempted to download from unallowed archive URL.', ['url' => $archiveUrl]);
+
             return false;
         }
 
@@ -142,23 +144,41 @@ class InternetArchiveService
             mkdir($directory, 0755, true);
         }
 
+        $partialPath = $destinationZipPath.'.part';
+        if (file_exists($partialPath)) {
+            @unlink($partialPath);
+        }
+
         try {
             $response = $this->httpClient
-                ->configure(Http::timeout($this->settings->all()['timeout']))
-                ->sink($destinationZipPath)
+                ->configure(
+                    Http::connectTimeout($this->settings->all()['timeout'])
+                        ->timeout((int) config('services.internet_archive.download_timeout', 1800)),
+                    'internet_archive',
+                    'download_archive',
+                )
+                ->sink($partialPath)
                 ->get($archiveUrl);
 
-            if (! $response->successful() || ! file_exists($destinationZipPath) || filesize($destinationZipPath) === 0) {
+            if (! $response->successful() || ! is_file($partialPath) || filesize($partialPath) === 0) {
                 Log::warning('Failed to download archive from URL.', [
                     'url' => $archiveUrl,
                     'status' => $response->status(),
                 ]);
 
-                if (file_exists($destinationZipPath)) {
-                    @unlink($destinationZipPath);
-                }
+                @unlink($partialPath);
 
                 return false;
+            }
+
+            if (file_exists($destinationZipPath)) {
+                @unlink($destinationZipPath);
+            }
+
+            if (! rename($partialPath, $destinationZipPath)) {
+                @unlink($partialPath);
+
+                throw new RuntimeException('The downloaded archive could not be finalized.');
             }
 
             return true;
@@ -168,9 +188,7 @@ class InternetArchiveService
                 'error' => $e->getMessage(),
             ]);
 
-            if (file_exists($destinationZipPath)) {
-                @unlink($destinationZipPath);
-            }
+            @unlink($partialPath);
 
             return false;
         }

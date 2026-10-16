@@ -554,6 +554,7 @@ class RunCloudService
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                 ]),
+            'runcloud',
         );
 
         // Bearer Token Authentication (Workspaces / v3 / Single API Key)
