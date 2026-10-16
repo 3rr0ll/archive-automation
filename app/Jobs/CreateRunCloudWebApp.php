@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Deployment;
+use App\Services\ApiUsage\ApiUsageContext;
 use App\Services\RunCloud\RunCloudService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,7 +25,7 @@ class CreateRunCloudWebApp implements ShouldQueue
         public Deployment $deployment
     ) {}
 
-    public function handle(RunCloudService $runCloudService): void
+    public function handle(RunCloudService $runCloudService, ?ApiUsageContext $apiUsageContext = null): void
     {
         $context = [
             'deployment_id' => $this->deployment->id,
@@ -36,9 +37,12 @@ class CreateRunCloudWebApp implements ShouldQueue
 
         try {
             Log::info('RunCloud web application job started.');
-            $runCloudService->createEmptyWebApplication(
-                $this->deployment->domain,
-                (int) $this->deployment->server_id,
+            ($apiUsageContext ?? app(ApiUsageContext::class))->forDeployment(
+                (int) $this->deployment->getKey(),
+                fn () => $runCloudService->createEmptyWebApplication(
+                    $this->deployment->domain,
+                    (int) $this->deployment->server_id,
+                ),
             );
             Log::info('RunCloud web application job finished.');
         } finally {

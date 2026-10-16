@@ -83,6 +83,7 @@ class CloudflareClient
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                 ]),
+            'cloudflare',
         );
 
         if (! empty($token)) {

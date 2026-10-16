@@ -15,7 +15,7 @@ class DeployArchivedWebsite implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 1800;
+    public int $timeout = 3600;
 
     /** @var list<int> */
     public array $backoff = [60, 300];

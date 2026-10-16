@@ -3,6 +3,8 @@
 namespace App\Services\GoogleSearchConsole;
 
 use App\Jobs\RequestGoogleIndexing;
+use App\Services\ApiUsage\ApiUsageContext;
+use App\Services\ApiUsage\ApiUsageRecorder;
 use App\Services\Cloudflare\CloudflareDnsService;
 use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
@@ -14,9 +16,11 @@ use Google\Service\SiteVerification\SiteVerificationWebResourceGettokenRequest;
 use Google\Service\SiteVerification\SiteVerificationWebResourceGettokenRequestSite;
 use Google\Service\SiteVerification\SiteVerificationWebResourceResource;
 use Google\Service\SiteVerification\SiteVerificationWebResourceResourceSite;
+use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class GoogleSearchConsoleService
 {
@@ -28,6 +32,8 @@ class GoogleSearchConsoleService
 
     public function __construct(
         private CloudflareDnsService $dnsService,
+        private ApiUsageRecorder $usageRecorder,
+        private ApiUsageContext $usageContext,
     ) {}
 
     /**
@@ -41,11 +47,11 @@ class GoogleSearchConsoleService
         $domain = $this->normalizeDomain($domain);
         $verification = new SiteVerification($this->client());
 
-        $tokenSite = new SiteVerificationWebResourceGettokenRequestSite();
+        $tokenSite = new SiteVerificationWebResourceGettokenRequestSite;
         $tokenSite->setType('INET_DOMAIN');
         $tokenSite->setIdentifier($domain);
 
-        $tokenRequest = new SiteVerificationWebResourceGettokenRequest();
+        $tokenRequest = new SiteVerificationWebResourceGettokenRequest;
         $tokenRequest->setSite($tokenSite);
         $tokenRequest->setVerificationMethod('DNS_TXT');
 
@@ -60,23 +66,30 @@ class GoogleSearchConsoleService
             $this->dnsService->addDnsRecord($domain, 'TXT', $domain, $token, false, 300);
         }
 
-        $resourceSite = new SiteVerificationWebResourceResourceSite();
+        $resourceSite = new SiteVerificationWebResourceResourceSite;
         $resourceSite->setType('INET_DOMAIN');
         $resourceSite->setIdentifier($domain);
 
-        $resource = new SiteVerificationWebResourceResource();
+        $resource = new SiteVerificationWebResourceResource;
         $resource->setSite($resourceSite);
 
         // DNS propagation can lag behind the Cloudflare write, so retry verification.
         for ($attempt = 1; ; $attempt++) {
+            $startedAt = microtime(true);
             try {
                 $verification->webResource->insert('DNS_TXT', $resource);
+                $this->recordUsage('verify domain ownership', 200, true, $startedAt);
                 break;
             } catch (GoogleServiceException $exception) {
+                $this->recordUsage('verify domain ownership', (int) $exception->getCode(), false, $startedAt);
                 if ($attempt >= self::VERIFY_ATTEMPTS) {
                     $this->fail('verify domain ownership', $domain, $exception);
                 }
                 sleep(self::VERIFY_DELAY_SECONDS);
+            } catch (Throwable $exception) {
+                $this->recordUsage('verify domain ownership', 0, false, $startedAt);
+
+                throw $exception;
             }
         }
 
@@ -132,15 +145,18 @@ class GoogleSearchConsoleService
      */
     public function publishUrl(string $url): int
     {
-        $notification = new UrlNotification();
+        $notification = new UrlNotification;
         $notification->setUrl($url);
         $notification->setType('URL_UPDATED');
+        $startedAt = microtime(true);
 
         try {
             (new Indexing($this->client()))->urlNotifications->publish($notification);
+            $this->recordUsage('publish URL for indexing', 200, true, $startedAt);
 
             return 200;
         } catch (GoogleServiceException $exception) {
+            $this->recordUsage('publish URL for indexing', (int) $exception->getCode(), false, $startedAt);
             Log::warning('Google indexing request failed.', [
                 'url' => $url,
                 'status' => $exception->getCode(),
@@ -148,6 +164,10 @@ class GoogleSearchConsoleService
             ]);
 
             return (int) $exception->getCode();
+        } catch (Throwable $exception) {
+            $this->recordUsage('publish URL for indexing', 0, false, $startedAt);
+
+            throw $exception;
         }
     }
 
@@ -162,7 +182,12 @@ class GoogleSearchConsoleService
             return [];
         }
 
-        $response = Http::timeout(30)->get($sitemapUrl);
+        $response = Http::timeout(30)
+            ->withAttributes([
+                'api_usage_provider' => 'sitemap',
+                'api_usage_operation' => 'fetch_sitemap',
+            ])
+            ->get($sitemapUrl);
         if (! $response->successful()) {
             Log::warning('Unable to fetch sitemap.', ['sitemap' => $sitemapUrl, 'status' => $response->status()]);
 
@@ -208,7 +233,12 @@ class GoogleSearchConsoleService
         $verified = $this->verifyProperty($domain);
         $sitemap = $this->submitSitemap($domain, $sitemapUrl);
 
-        RequestGoogleIndexing::dispatch($domain, $sitemapUrl);
+        RequestGoogleIndexing::dispatch(
+            $domain,
+            $sitemapUrl,
+            0,
+            $this->usageContext->deploymentId(),
+        );
 
         return ['verified' => $verified, 'sitemap' => $sitemap, 'indexing_queued' => true];
     }
@@ -225,7 +255,7 @@ class GoogleSearchConsoleService
             throw new RuntimeException('Google service account credentials file is not configured.');
         }
 
-        $client = new GoogleClient();
+        $client = new GoogleClient;
         $client->setApplicationName((string) config('app.name'));
         $client->setAuthConfig($path);
         $client->setScopes([
@@ -233,7 +263,7 @@ class GoogleSearchConsoleService
             SearchConsole::WEBMASTERS,
             Indexing::INDEXING,
         ]);
-        $client->setHttpClient(new \GuzzleHttp\Client([
+        $client->setHttpClient(new Client([
             'timeout' => (int) config('services.google_search_console.timeout', 30),
         ]));
 
@@ -248,11 +278,34 @@ class GoogleSearchConsoleService
      */
     private function call(string $operation, string $domain, callable $callback): mixed
     {
+        $startedAt = microtime(true);
+
         try {
-            return $callback();
+            $result = $callback();
+            $this->recordUsage($operation, 200, true, $startedAt);
+
+            return $result;
         } catch (GoogleServiceException $exception) {
+            $this->recordUsage($operation, (int) $exception->getCode(), false, $startedAt);
             $this->fail($operation, $domain, $exception);
+        } catch (Throwable $exception) {
+            $this->recordUsage($operation, 0, false, $startedAt);
+
+            throw $exception;
         }
+    }
+
+    private function recordUsage(string $operation, int $statusCode, bool $successful, float $startedAt): void
+    {
+        $this->usageRecorder->record(
+            provider: 'google_search_console',
+            operation: $operation,
+            method: 'POST',
+            endpoint: 'https://googleapis.com/'.str_replace(' ', '-', $operation),
+            statusCode: $statusCode > 0 ? $statusCode : null,
+            successful: $successful,
+            durationMs: (int) round((microtime(true) - $startedAt) * 1000),
+        );
     }
 
     private function fail(string $operation, string $domain, GoogleServiceException $exception): never

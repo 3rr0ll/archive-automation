@@ -56,4 +56,9 @@ class Deployment extends Model
     {
         return $this->hasMany(DeploymentLog::class);
     }
+
+    public function apiUsageRecords(): HasMany
+    {
+        return $this->hasMany(ApiUsageRecord::class);
+    }
 }

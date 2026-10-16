@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
+use App\Services\ApiUsage\ApiUsageContext;
 use App\Services\InternetArchive\InternetArchiveService;
 use App\Services\InternetArchive\InternetArchiveSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,7 +23,7 @@ class WaitForWaybackArchive implements ShouldQueue
         public Deployment $deployment
     ) {}
 
-    public function handle(InternetArchiveService $archiveService): void
+    public function handle(InternetArchiveService $archiveService, ?ApiUsageContext $apiUsageContext = null): void
     {
         $context = [
             'deployment_id' => $this->deployment->id,
@@ -33,7 +34,10 @@ class WaitForWaybackArchive implements ShouldQueue
         Log::shareContext($context);
 
         try {
-            $this->handlePolling($archiveService);
+            ($apiUsageContext ?? app(ApiUsageContext::class))->forDeployment(
+                (int) $this->deployment->getKey(),
+                fn () => $this->handlePolling($archiveService),
+            );
         } finally {
             Log::withoutContext(array_keys($context));
         }

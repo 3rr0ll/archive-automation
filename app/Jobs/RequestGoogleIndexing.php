@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\ApiUsage\ApiUsageContext;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -31,9 +32,24 @@ class RequestGoogleIndexing implements ShouldQueue
         public string $domain,
         public string $sitemapUrl,
         public int $rounds = 0,
+        public ?int $deploymentId = null,
     ) {}
 
-    public function handle(GoogleSearchConsoleService $searchConsole): void
+    public function handle(GoogleSearchConsoleService $searchConsole, ?ApiUsageContext $apiUsageContext = null): void
+    {
+        if ($this->deploymentId === null) {
+            $this->process($searchConsole);
+
+            return;
+        }
+
+        ($apiUsageContext ?? app(ApiUsageContext::class))->forDeployment(
+            $this->deploymentId,
+            fn () => $this->process($searchConsole),
+        );
+    }
+
+    private function process(GoogleSearchConsoleService $searchConsole): void
     {
         $dailyQuota = (int) config('services.google_search_console.indexing_daily_quota', 200);
         $maxRounds = (int) config('services.google_search_console.indexing_max_rounds', 60);
@@ -83,7 +99,7 @@ class RequestGoogleIndexing implements ShouldQueue
 
         if ($remaining > 0 && $this->rounds < $maxRounds) {
             $delay = $quotaExhausted ? now()->addDay() : now()->addHour();
-            self::dispatch($this->domain, $this->sitemapUrl, $this->rounds + 1)->delay($delay);
+            self::dispatch($this->domain, $this->sitemapUrl, $this->rounds + 1, $this->deploymentId)->delay($delay);
         }
     }
 }

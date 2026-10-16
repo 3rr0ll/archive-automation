@@ -6,8 +6,15 @@ use Illuminate\Http\Client\PendingRequest;
 
 class ExternalHttpClient
 {
-    public function configure(PendingRequest $request): PendingRequest
+    public function configure(PendingRequest $request, ?string $provider = null, ?string $operation = null): PendingRequest
     {
+        if ($provider !== null) {
+            $request->withAttributes(array_filter([
+                'api_usage_provider' => $provider,
+                'api_usage_operation' => $operation,
+            ]));
+        }
+
         if ($this->shouldVerifySsl()) {
             return $request;
         }
