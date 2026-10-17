@@ -18,7 +18,8 @@
                 </div>
                 <ul class="space-y-2.5 max-h-48 overflow-y-auto divide-y divide-zinc-100">
                     <template x-for="item in failedDeployments" :key="item.id">
-                        <li class="pt-2 first:pt-0 flex items-center justify-between">
+                        <li class="pt-2 first:pt-0 flex items-center justify-between hover:bg-zinc-50 -mx-1 px-1 rounded transition cursor-pointer"
+                            @click="window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'">
                             <div class="min-w-0 pr-2">
                                 <p class="text-xs font-semibold text-zinc-900 truncate" x-text="item.domain"></p>
                                 <p class="text-[10px] text-zinc-400" x-text="formatDate(item.created_at)"></p>

@@ -16,6 +16,7 @@ class DeploymentResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'hash' => $this->hash,
             'user_id' => $this->user_id,
             'user' => $this->whenLoaded('user', fn (): array => [
                 'id' => $this->user->id,

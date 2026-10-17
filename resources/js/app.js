@@ -10,6 +10,7 @@ import { domainListData } from './components/domain-list.js';
 import { environmentVariablesPage } from './components/environment-variables.js';
 import { serversPage } from './components/servers.js';
 import { usersPage } from './components/users.js';
+import { deploymentLogsPage } from './components/deployment-logs.js';
 
 window.Alpine = Alpine;
 
@@ -22,6 +23,7 @@ Alpine.data('domainListData', domainListData);
 Alpine.data('environmentVariablesPage', environmentVariablesPage);
 Alpine.data('serversPage', serversPage);
 Alpine.data('usersPage', usersPage);
+Alpine.data('deploymentLogsPage', deploymentLogsPage);
 
 Alpine.store('domainView', {
     mode: localStorage.getItem('domain_view_mode') || 'list',

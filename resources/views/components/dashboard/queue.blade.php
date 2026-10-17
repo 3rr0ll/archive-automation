@@ -16,7 +16,8 @@
 
         <ul class="space-y-3.5" x-show="queueItems.length > 0">
             <template x-for="item in queueItems" :key="item.id || item.domain">
-                <li class="flex items-center justify-between gap-3">
+                <li class="flex items-center justify-between gap-3 hover:bg-zinc-50 -mx-1 px-1 py-0.5 rounded transition cursor-pointer"
+                    @click="if (item.id) window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'">
                     <div class="flex items-center gap-3 text-zinc-700 min-w-0">
                         <!-- Circular Progress Bar -->
                         <div class="relative size-4 flex items-center justify-center shrink-0">

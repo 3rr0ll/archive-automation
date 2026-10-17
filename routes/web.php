@@ -40,4 +40,8 @@ Route::middleware('auth')->group(function (): void {
         $users = \App\Models\User::orderBy('created_at', 'desc')->get();
         return view('pages.users', compact('users'));
     })->name('users');
+    Route::get('/deployments/{deployment}/logs', function (\App\Models\Deployment $deployment) {
+        $deployment->load(['server', 'user']);
+        return view('pages.deployment-logs', compact('deployment'));
+    })->name('deployments.logs.page');
 });
