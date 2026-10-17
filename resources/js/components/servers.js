@@ -73,7 +73,7 @@ export function serversPage(initialServers = []) {
                 }
             } catch (error) {
                 console.error('Failed to sync servers:', error);
-                alert(error.message || 'Failed to sync servers from RunCloud.');
+                window.toast?.error(error.message || 'Failed to sync servers from RunCloud.');
             } finally {
                 this.isSyncing = false;
             }
@@ -92,9 +92,10 @@ export function serversPage(initialServers = []) {
                 if (idx !== -1) {
                     this.items[idx].is_active = updated.is_active !== undefined ? updated.is_active : targetStatus;
                 }
+                window.toast?.success(`Server marked as ${targetStatus ? 'Active' : 'Inactive'}.`);
             } catch (error) {
                 console.error('Failed to update server status:', error);
-                alert(error.message || 'Failed to update server status.');
+                window.toast?.error(error.message || 'Failed to update server status.');
             } finally {
                 this.togglingId = null;
             }
@@ -103,7 +104,7 @@ export function serversPage(initialServers = []) {
         copyText(text, label = 'Copied') {
             if (navigator?.clipboard) {
                 navigator.clipboard.writeText(text);
-                alert(`${label} copied to clipboard!`);
+                window.toast?.success(`${label} copied to clipboard!`);
             }
         }
     };

@@ -35,14 +35,14 @@
                     <x-lucide-ellipsis-vertical class="h-4 w-4" />
                 </button>
                 <div x-show="open" x-transition.opacity style="display: none;" class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none" role="menu" aria-orientation="vertical" tabindex="-1">
-                    <button type="button" @click="navigator.clipboard.writeText('{{ $name }}'); open = false; alert('Copied to clipboard!')" class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100" role="menuitem">Copy Name</button>
+                    <button type="button" @click="navigator.clipboard.writeText('{{ $name }}'); open = false; window.toast ? window.toast.success('Copied to clipboard!') : null" class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100" role="menuitem">Copy Name</button>
                     <button
                         type="button"
                         @click="$dispatch('edit-environment-variable', { id: {{ (int) $id }}, key: @js($name), type: @js($type), environments: @js($environments), note: @js($note) }); open = false"
                         class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
                         role="menuitem"
                     >Edit</button>
-                    <button type="button" @click="if(confirm('Are you sure you want to delete this?')) { fetch('/api/environment-variables/{{ $id }}', { method: 'DELETE', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' } }).then(res => { if(res.ok) window.location.reload(); else alert('Failed to delete'); }) }" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
+                    <button type="button" @click="if(confirm('Are you sure you want to delete this?')) { fetch('/api/environment-variables/{{ $id }}', { method: 'DELETE', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' } }).then(res => { if(res.ok) window.location.reload(); else if(window.toast) window.toast.error('Failed to delete'); }) }" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50" role="menuitem">Delete</button>
                 </div>
             </div>
         </div>

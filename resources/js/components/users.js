@@ -124,6 +124,7 @@ export function usersPage(initialUsers = [], currentUserId = null) {
                     if (response?.data) {
                         this.items.unshift(response.data);
                     }
+                    window.toast?.success('User created successfully.');
                 } else {
                     const payload = {
                         name: this.userForm.name,
@@ -137,13 +138,14 @@ export function usersPage(initialUsers = [], currentUserId = null) {
                             this.items[idx] = { ...this.items[idx], ...response.data };
                         }
                     }
+                    window.toast?.success('User profile updated.');
                 }
                 this.closeModal();
             } catch (error) {
                 if (error.errors) {
                     this.formErrors = error.errors;
                 } else {
-                    alert(error.message || 'Operation failed.');
+                    window.toast?.error(error.message || 'Operation failed.');
                 }
             } finally {
                 this.isSubmitting = false;
@@ -176,13 +178,13 @@ export function usersPage(initialUsers = [], currentUserId = null) {
                     password: this.passwordForm.password,
                     password_confirmation: this.passwordForm.password_confirmation,
                 });
-                alert('Password reset successfully.');
+                window.toast?.success('Password reset successfully.');
                 this.closePasswordModal();
             } catch (error) {
                 if (error.errors) {
                     this.passwordErrors = error.errors;
                 } else {
-                    alert(error.message || 'Failed to reset password.');
+                    window.toast?.error(error.message || 'Failed to reset password.');
                 }
             } finally {
                 this.isResettingPassword = false;
@@ -191,11 +193,11 @@ export function usersPage(initialUsers = [], currentUserId = null) {
 
         deleteUserPrompt(user) {
             if (user.id === this.currentUserId) {
-                alert('You cannot delete your own account.');
+                window.toast?.warning('You cannot delete your own account.');
                 return;
             }
             if (user.role === 'admin') {
-                alert('Admin accounts cannot be deleted.');
+                window.toast?.warning('Admin accounts cannot be deleted.');
                 return;
             }
 
@@ -210,13 +212,15 @@ export function usersPage(initialUsers = [], currentUserId = null) {
                     onConfirm: async () => {
                         await deleteUser(user.id);
                         this.items = this.items.filter(u => u.id !== user.id);
+                        window.toast?.success('User deleted successfully.');
                     }
                 });
             } else if (confirm(`Are you sure you want to delete user "${user.name}"?`)) {
                 deleteUser(user.id).then(() => {
                     this.items = this.items.filter(u => u.id !== user.id);
+                    window.toast?.success('User deleted successfully.');
                 }).catch(err => {
-                    alert(err.message || 'Failed to delete user.');
+                    window.toast?.error(err.message || 'Failed to delete user.');
                 });
             }
         }

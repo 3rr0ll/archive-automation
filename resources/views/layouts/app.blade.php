@@ -34,6 +34,7 @@
     <x-toast />
     <x-dialog />
     <x-global.confirmation-modal />
+    <x-global.toast />
 
     <!-- Application Sidebar -->
     <x-global.sidebar />

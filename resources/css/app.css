@@ -16,6 +16,10 @@
     --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
+html, body, input, button, select, textarea {
+    font-family: 'Geist', var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
 [x-cloak] {
     display: none !important;
 }
