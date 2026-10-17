@@ -2,10 +2,18 @@
 
 @section('content')
 <div class="mx-auto py-6" x-data="serversPage(@js($servers))">
-    <x-servers.header />
+    <!-- Skeleton Loading State -->
+    <div x-show="isLoading">
+        <x-skeleton.servers-skeleton />
+    </div>
 
-    <x-servers.filters />
+    <!-- Main Content -->
+    <div x-show="!isLoading" x-cloak>
+        <x-servers.header />
 
-    <x-servers.list />
+        <x-servers.filters />
+
+        <x-servers.list />
+    </div>
 </div>
 @endsection

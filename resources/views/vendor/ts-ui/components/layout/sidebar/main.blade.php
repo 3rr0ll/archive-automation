@@ -90,7 +90,7 @@
         ]) @if ($collapsible) x-bind:class="{
             '{{ $customization['desktop.sizes.expanded'] }}' : ! railed,
             '{{ $customization['desktop.sizes.collapsed'] }}' : railed,
-        }" @endif x-cloak>
+        }" x-cloak @endif>
         @if ($brand)
             @if ($brandCollapsed && $collapsible)
                 <div x-show="! railed" x-cloak>

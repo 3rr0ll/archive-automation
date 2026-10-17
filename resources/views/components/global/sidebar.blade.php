@@ -76,42 +76,40 @@
         {{ $slot }}
     @else
         <!-- Platform Navigation -->
-        <li class="px-2 mt-4 mb-1" x-show="!railed">
+        <li class="px-2 mt-4 mb-1">
             <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Platform</span>
         </li>
-        <li x-show="railed" class="mt-4 mb-2 mx-auto w-4 border-t border-zinc-200"></li>
 
         <li class="mt-1">
             <a href="/dashboard" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                 <x-lucide-layout-dashboard class="size-4.5 shrink-0" />
-                <span class="text-sm font-medium truncate" x-show="!railed">Dashboard</span>
+                <span class="text-sm font-medium truncate">Dashboard</span>
             </a>
         </li>
 
-        <!-- Administration -->
-        <li class="px-2 mt-6 mb-1" x-show="!railed">
+        <!-- Settings -->
+        <li class="px-2 mt-6 mb-1">
             <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
         </li>
-        <li x-show="railed" class="mt-6 mb-2 mx-auto w-4 border-t border-zinc-200"></li>
 
         <li class="mt-1">
             <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                 <x-lucide-terminal class="size-4.5 shrink-0" />
-                <span class="text-sm font-medium truncate" x-show="!railed">Environment Variables</span>
+                <span class="text-sm font-medium truncate">Environment Variables</span>
             </a>
         </li>
 
         <li class="mt-1">
             <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                 <x-lucide-server class="size-4.5 shrink-0" />
-                <span class="text-sm font-medium truncate" x-show="!railed">Servers</span>
+                <span class="text-sm font-medium truncate">Servers</span>
             </a>
         </li>
 
         <li class="mt-1">
             <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                 <x-lucide-users class="size-4.5 shrink-0" />
-                <span class="text-sm font-medium truncate" x-show="!railed">Users</span>
+                <span class="text-sm font-medium truncate">Users</span>
             </a>
         </li>
     @endif
