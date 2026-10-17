@@ -1,39 +1,66 @@
-<div class="lg:col-span-8 xl:col-span-9" x-data="domainListData()">
-    <div class="mb-4">
-        <h2 class="text-sm font-semibold text-zinc-900">Domains</h2>
+<div class="lg:col-span-8 xl:col-span-9">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-zinc-900">
+            Deployed Domains
+            <span class="text-xs font-normal text-zinc-500 ml-1.5" x-text="`(${displayedDeployments.length})`"></span>
+        </h2>
     </div>
     
+    <!-- Empty State -->
+    <template x-if="displayedDeployments.length === 0">
+        <div class="bg-white border border-zinc-200 rounded-lg p-12 text-center">
+            <div class="size-12 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3 text-zinc-400">
+                <x-lucide-globe class="size-6" />
+            </div>
+            <h3 class="text-sm font-semibold text-zinc-900">No domains deployed yet</h3>
+            <p class="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">Get started by launching a new deployment from an archived website snapshot.</p>
+            <button type="button" 
+                    @click="openModal()" 
+                    class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 transition">
+                <x-lucide-plus class="size-3.5" />
+                <span>New Deployment</span>
+            </button>
+        </div>
+    </template>
+
     <!-- Grid View -->
-    <template x-if="$store.domainView.mode === 'grid'">
+    <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'grid'">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <template x-for="domain in domains" :key="'grid-'+domain.name">
-                <div class="bg-white border border-zinc-200 rounded-lg transition group cursor-pointer p-4 flex flex-col justify-between min-h-[140px]">
+            <template x-for="item in displayedDeployments" :key="'grid-'+item.id">
+                <div class="bg-white border border-zinc-200 rounded-lg transition hover:border-zinc-300 group p-4 flex flex-col justify-between min-h-[140px]">
                     <div class="flex items-start justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200/60" :class="domain.avatar_bg" x-html="domain.avatar_content">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200 bg-zinc-900 text-white font-bold text-xs">
+                                <span x-text="(item.domain ? item.domain.charAt(0).toUpperCase() : 'D')"></span>
                             </div>
-                            <div class="flex flex-col">
-                                <h3 class="text-[13px] font-semibold text-zinc-900 group-hover:text-black" x-text="domain.name"></h3>
-                                <a href="#" class="text-[13px] text-zinc-500 hover:text-zinc-800 transition" x-text="domain.url"></a>
+                            <div class="flex flex-col min-w-0">
+                                <h3 class="text-[13px] font-semibold text-zinc-900 group-hover:text-black truncate" x-text="formatDomainName(item.domain)"></h3>
+                                <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="text-[12px] text-zinc-500 hover:text-zinc-800 transition truncate" x-text="item.domain"></a>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <div class="size-6 rounded-full border border-zinc-200 flex items-center justify-center relative bg-zinc-50">
-                                <span class="absolute -right-0.5 -top-0.5 size-[7px] bg-[#0070F3] rounded-full ring-2 ring-white"></span>
-                                <span x-html="domain.status_icon"></span>
-                            </div>
-                            <x-lucide-chevrons-up-down class="size-4 text-zinc-400" />
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <!-- In Progress Badge for active first in line -->
+                            <template x-if="isItemActive(item)">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-800 border border-zinc-200">
+                                    <span class="size-1.5 rounded-full bg-zinc-900 animate-pulse"></span>
+                                    In Progress
+                                </span>
+                            </template>
+                            <!-- Active Badge for completed deployments -->
+                            <template x-if="!isItemActive(item)">
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-50 text-zinc-700 border border-zinc-200">
+                                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                    Active
+                                </span>
+                            </template>
                         </div>
                     </div>
-                    
-                    <div class="flex flex-col gap-1.5 mt-4">
-                        <div class="flex items-center gap-1.5 text-[13px] text-zinc-800 font-medium">
-                            <x-lucide-git-branch class="size-3.5 shrink-0 text-zinc-600" />
-                            <span class="truncate" x-text="domain.commit_msg"></span>
-                        </div>
-                        <div class="flex items-center gap-1.5 text-[13px] text-zinc-500">
-                            <x-lucide-github class="size-3.5 shrink-0" />
-                            <span x-text="`${domain.repo} &middot; ${domain.date}`"></span>
+
+                    <div class="mt-4 pt-3 border-t border-zinc-100">
+                        <div class="flex items-center gap-1.5 text-xs text-zinc-800 font-medium">
+                            <x-lucide-server class="size-3.5 shrink-0 text-zinc-500" />
+                            <span class="truncate" x-text="item.server ? item.server.name : 'Unknown server'"></span>
+                            <span class="text-[10px] text-zinc-400 font-mono" x-show="item.version" x-text="`(${item.version})`"></span>
                         </div>
                     </div>
                 </div>
@@ -42,36 +69,49 @@
     </template>
     
     <!-- List View -->
-    <template x-if="$store.domainView.mode === 'list'">
+    <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'list'">
         <div class="bg-white border border-zinc-200 rounded-lg overflow-hidden divide-y divide-zinc-200">
-            <template x-for="domain in domains" :key="'list-'+domain.name">
-                <div class="flex items-center justify-between p-4 hover:bg-zinc-50 transition group cursor-pointer">
+            <template x-for="item in displayedDeployments" :key="'list-'+item.id">
+                <div class="flex items-center justify-between p-4 hover:bg-zinc-50 transition group">
                     <!-- Left Section -->
-                    <div class="flex items-center gap-4">
-                        <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200/60" :class="domain.avatar_bg" x-html="domain.avatar_content"></div>
-                        <div>
-                            <h3 class="text-sm font-semibold text-zinc-900 group-hover:text-black" x-text="domain.name"></h3>
-                            <a href="#" class="text-xs text-zinc-500 hover:underline" x-text="domain.url"></a>
+                    <div class="flex items-center gap-4 min-w-0">
+                        <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200 bg-zinc-900 text-white font-bold text-xs">
+                            <span x-text="(item.domain ? item.domain.charAt(0).toUpperCase() : 'D')"></span>
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-semibold text-zinc-900 group-hover:text-black truncate" x-text="formatDomainName(item.domain)"></h3>
+                            <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="text-xs text-zinc-500 hover:underline truncate" x-text="item.domain"></a>
                         </div>
                     </div>
                     <!-- Right Section -->
-                    <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-6 shrink-0">
                         <div class="hidden sm:block text-right">
                             <div class="flex items-center justify-end gap-1.5 text-xs text-zinc-800 font-medium">
-                                <span class="truncate max-w-[200px]" x-text="domain.commit_msg"></span>
-                                <x-lucide-git-branch class="size-3.5 shrink-0 text-zinc-600" />
+                                <span class="truncate max-w-[200px]" x-text="item.server ? item.server.name : 'Server'"></span>
+                                <x-lucide-server class="size-3.5 shrink-0 text-zinc-500" />
                             </div>
-                            <div class="flex items-center justify-end gap-1.5 text-xs text-zinc-500 mt-1">
-                                <span x-text="`${domain.repo} &middot; ${domain.date}`"></span>
+                            <div class="flex items-center justify-end gap-1.5 text-[11px] text-zinc-400 mt-0.5">
+                                <span class="font-mono text-[10px]" x-show="item.version" x-text="item.version"></span>
+                                <span x-show="item.version">&middot;</span>
+                                <span x-text="formatDate(item.created_at)"></span>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <div class="size-6 rounded-full border border-zinc-200 flex items-center justify-center relative bg-zinc-50 mr-2">
-                                <span class="absolute -right-0.5 -top-0.5 size-[7px] bg-[#0070F3] rounded-full ring-2 ring-white"></span>
-                                <span x-html="domain.status_icon"></span>
-                            </div>
-                            <button class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50"><x-lucide-bar-chart-2 class="size-4" /></button>
-                            <button class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50"><x-lucide-chevrons-up-down class="size-4" /></button>
+                            <template x-if="isItemActive(item)">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 border border-zinc-200">
+                                    <span class="size-1.5 rounded-full bg-zinc-900 animate-pulse"></span>
+                                    In Progress
+                                </span>
+                            </template>
+                            <template x-if="!isItemActive(item)">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-zinc-50 text-zinc-700 border border-zinc-200">
+                                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                    Active
+                                </span>
+                            </template>
+                            <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50" title="Visit website">
+                                <x-lucide-external-link class="size-3.5" />
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -79,4 +119,5 @@
         </div>
     </template>
 </div>
+
 

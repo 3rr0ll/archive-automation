@@ -49,11 +49,10 @@ class EnvironmentVariableService
     {
         $updateData = [
             'key' => $data['key'],
-            'value' => $data['value'],
+            'value' => $data['value'] ?? $environmentVariable->value,
             'type' => $data['type'],
             'environments' => $data['environments'] ?? $environmentVariable->environments,
             'note' => $data['note'] ?? null,
-        ]);
         ];
 
         if (array_key_exists('environments', $data)) {

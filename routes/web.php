@@ -25,6 +25,8 @@ Route::middleware('auth')->group(function (): void {
             ->map(function ($env) {
                 if ($env->type === 'secret') {
                     $env->value = null;
+                } else {
+                    $env->makeVisible('value');
                 }
                 return $env;
             });
@@ -34,4 +36,8 @@ Route::middleware('auth')->group(function (): void {
         $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
         return view('pages.servers', compact('servers'));
     })->name('servers');
+    Route::get('/users', function () {
+        $users = \App\Models\User::orderBy('created_at', 'desc')->get();
+        return view('pages.users', compact('users'));
+    })->name('users');
 });

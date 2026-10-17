@@ -164,9 +164,10 @@
                         <button type="button" 
                                 @click="saveEdit()" 
                                 :disabled="editForm.isSaving" 
-                                class="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-md transition focus:outline-none">
+                                class="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-md transition focus:outline-none gap-2">
+                            <span x-show="editForm.isSaving" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
                             <span x-show="!editForm.isSaving">Save</span>
-                            <span x-show="editForm.isSaving">Saving...</span>
+                            <span x-show="editForm.isSaving">Saving</span>
                         </button>
                     </div>
                 </div>

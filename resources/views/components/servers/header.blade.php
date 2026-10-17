@@ -10,8 +10,9 @@
                 @click="syncFromRunCloud()" 
                 :disabled="isSyncing"
                 class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors cursor-pointer">
-            <x-lucide-refresh-cw class="w-4 h-4 mr-2" ::class="isSyncing ? 'animate-spin' : ''" />
-            <span x-text="isSyncing ? 'Syncing...' : 'Sync from RunCloud'"></span>
+            <span x-show="isSyncing" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+            <x-lucide-refresh-cw x-show="!isSyncing" class="w-4 h-4 mr-2" />
+            <span x-text="isSyncing ? 'Syncing' : 'Sync from RunCloud'"></span>
         </button>
     </div>
 </div>

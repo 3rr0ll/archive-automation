@@ -151,9 +151,10 @@
                             <button type="submit" 
                                     form="env-var-form" 
                                     :disabled="isSubmitting" 
-                                    class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition">
+                                    class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition gap-2">
+                                <span x-show="isSubmitting" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
                                 <span x-show="!isSubmitting">Save</span>
-                                <span x-show="isSubmitting">Saving...</span>
+                                <span x-show="isSubmitting">Saving</span>
                             </button>
                         </div>
                     </div>

@@ -67,7 +67,7 @@
               x-bind:disabled="isLoading || !email?.trim() || !password">
         <span x-show="isLoading"
               x-cloak
-              class="animate-spin inline-block size-3.5 border-2 border-zinc-500 border-t-white rounded-full"></span>
-        <span x-text="isLoading ? 'Signing In...' : 'Sign In'">Sign In</span>
+              class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+        <span x-text="isLoading ? 'Signing In' : 'Sign In'">Sign In</span>
     </x-button>
 </form>
