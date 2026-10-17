@@ -1,11 +1,6 @@
 @import 'tailwindcss';
-@import '../../vendor/tallstackui/tallstackui/css/v4.css';
-
 @plugin '@tailwindcss/forms';
 
-@source '../../vendor/tallstackui/tallstackui/src/Components/{Alert,Badge,Button,Card,Dialog,Floating,Form,Icon,Layout,Loading,Modal,Toast,Wrapper}/**/*.php';
-@source '../../vendor/tallstackui/tallstackui/src/resources/views/components/{alert,badge,button,card,dialog,floating,form,icon,layout,loading,modal,toast,wrapper}/**/*.blade.php';
-@source '../../vendor/tallstackui/tallstackui/src/Support/Colors/**/*.php';
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
