@@ -10,7 +10,6 @@
     @fonts
 
     <!-- Scripts and Styles -->
-    <tallstackui:script />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     
     @php
@@ -29,10 +28,7 @@
         });
     </script>
 </head>
-<body class="bg-[#fafafa] text-zinc-900 min-h-screen antialiased flex flex-col font-sans selection:bg-zinc-950 selection:text-white"
-      x-data="{ tallStackUiMenuMobile: false }">
-    <x-toast />
-    <x-dialog />
+<body class="bg-[#fafafa] text-zinc-900 min-h-screen antialiased flex flex-col font-sans selection:bg-zinc-950 selection:text-white">
     <x-global.confirmation-modal />
     <x-global.toast />
 

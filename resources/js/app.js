@@ -30,36 +30,6 @@ Alpine.store('domainView', {
         try { localStorage.setItem('domain_view_mode', val); } catch (e) {}
     }
 });
-// Register tsui.side-bar store for TallStackUI sidebar collapse support
-if (!Alpine.store('tsui.side-bar')) {
-    Alpine.store('tsui.side-bar', {
-        open: true,
-        mobile: false,
-        collapsible: true,
-        get collapsed() {
-            return this.collapsible && !this.open && !this.mobile;
-        },
-        init() {
-            if (typeof window === 'undefined') return;
-            const media = window.matchMedia('(max-width: 768px)');
-            this.mobile = media.matches;
-            media.addEventListener('change', (e) => {
-                this.mobile = e.matches;
-                if (!e.matches) {
-                    window.dispatchEvent(
-                        new CustomEvent('tallstackui-menu-mobile', { detail: { status: false } })
-                    );
-                }
-            });
-            const stored = localStorage.getItem('side-bar');
-            this.open = stored !== null ? JSON.parse(stored) : true;
-        },
-        toggle(value = null) {
-            this.open = value ?? !this.open;
-            localStorage.setItem('side-bar', JSON.stringify(this.open));
-        },
-    });
-}
 
 Alpine.start();
 
