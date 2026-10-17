@@ -118,9 +118,10 @@
                             <button type="submit" 
                                     form="server-form" 
                                     :disabled="isSubmitting" 
-                                    class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer">
+                                    class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer gap-2">
+                                <span x-show="isSubmitting" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
                                 <span x-show="!isSubmitting">Save Server</span>
-                                <span x-show="isSubmitting">Saving...</span>
+                                <span x-show="isSubmitting">Saving</span>
                             </button>
                         </div>
                     </div>

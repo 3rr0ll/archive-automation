@@ -9,20 +9,26 @@ import { queueData } from './components/queue.js';
 import { domainListData } from './components/domain-list.js';
 import { environmentVariablesPage } from './components/environment-variables.js';
 import { serversPage } from './components/servers.js';
+import { usersPage } from './components/users.js';
 
 window.Alpine = Alpine;
 
 Alpine.data('loginForm', loginForm);
 Alpine.data('deploymentTable', deploymentTable);
 Alpine.data('userNav', userNav);
+Alpine.data('dashboardOverview', dashboardOverview);
 Alpine.data('queueData', queueData);
 Alpine.data('domainListData', domainListData);
 Alpine.data('environmentVariablesPage', environmentVariablesPage);
 Alpine.data('serversPage', serversPage);
+Alpine.data('usersPage', usersPage);
 
 Alpine.store('domainView', {
-    mode: 'grid',
-    set(val) { this.mode = val; }
+    mode: localStorage.getItem('domain_view_mode') || 'list',
+    set(val) { 
+        this.mode = val; 
+        try { localStorage.setItem('domain_view_mode', val); } catch (e) {}
+    }
 });
 // Register tsui.side-bar store for TallStackUI sidebar collapse support
 if (!Alpine.store('tsui.side-bar')) {

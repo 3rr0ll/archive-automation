@@ -1,10 +1,13 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-8" x-data="dashboardOverview">
+<div x-data="dashboardOverview">
+    <!-- Slide-over Drawer for New Deployment (fixed overlay, outside flow) -->
+    <x-dashboard.drawer />
 
-    <!-- Top Search Bar -->
-    <x-dashboard.search-bar />
+    <div class="space-y-8">
+        <!-- Top Search & Actions Bar -->
+        <x-dashboard.search-bar />
 
     <!-- Main Grid Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -18,6 +21,7 @@
         <!-- Right Column: Domains (Successful) -->
         <x-dashboard.domain-list />
 
+    </div>
     </div>
 </div>
 @endsection

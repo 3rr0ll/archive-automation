@@ -21,6 +21,8 @@ class EnvironmentVariableController extends Controller
         $variables = $this->service->getAll()->map(function ($env) {
             if ($env->type === 'secret') {
                 $env->value = null;
+            } else {
+                $env->makeVisible('value');
             }
             return $env;
         });
@@ -42,6 +44,8 @@ class EnvironmentVariableController extends Controller
 
         if ($env->type === 'secret') {
             $env->value = null;
+        } else {
+            $env->makeVisible('value');
         }
 
         return response()->json($env);
@@ -51,6 +55,8 @@ class EnvironmentVariableController extends Controller
     {
         if ($environmentVariable->type === 'secret') {
             $environmentVariable->value = null;
+        } else {
+            $environmentVariable->makeVisible('value');
         }
         return response()->json($environmentVariable);
     }
@@ -77,6 +83,8 @@ class EnvironmentVariableController extends Controller
 
         if ($env->type === 'secret') {
             $env->value = null;
+        } else {
+            $env->makeVisible('value');
         }
 
         return response()->json($env);

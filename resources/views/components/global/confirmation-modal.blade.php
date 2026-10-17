@@ -127,7 +127,8 @@ aria-modal="true"
                             :class="type === 'danger' ? 'bg-[#DC2626] hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'">
                         <span x-show="!isProcessing" x-text="confirmText">Delete</span>
                         <span x-show="isProcessing" class="inline-flex items-center gap-2">
-                            <span>Processing...</span>
+                            <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                            <span>Processing</span>
                         </span>
                     </button>
                 </div>
