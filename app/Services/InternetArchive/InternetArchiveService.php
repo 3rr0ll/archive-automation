@@ -52,7 +52,20 @@ class InternetArchiveService
 
         try {
             $response = $this->httpClient
-                ->configure(Http::timeout($this->settings->all()['timeout']), 'internet_archive', 'check_archive_ready')
+                ->configure(
+                    Http::timeout($this->settings->all()['timeout'])
+                        ->withUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+                        ->withOptions([
+                            'allow_redirects' => [
+                                'max' => 10,
+                                'strict' => true,
+                                'referer' => true,
+                                'protocols' => ['http', 'https'],
+                            ],
+                        ]),
+                    'internet_archive',
+                    'check_archive_ready'
+                )
                 ->accept('application/zip')
                 ->head($archiveUrl);
         } catch (ConnectionException $exception) {
@@ -199,7 +212,16 @@ class InternetArchiveService
             $response = $this->httpClient
                 ->configure(
                     Http::connectTimeout($this->settings->all()['timeout'])
-                        ->timeout((int) config('services.internet_archive.download_timeout', 1800)),
+                        ->timeout((int) config('services.internet_archive.download_timeout', 1800))
+                        ->withUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+                        ->withOptions([
+                            'allow_redirects' => [
+                                'max' => 10,
+                                'strict' => true,
+                                'referer' => true,
+                                'protocols' => ['http', 'https'],
+                            ],
+                        ]),
                     'internet_archive',
                     'download_archive',
                 )
