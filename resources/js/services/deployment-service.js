@@ -4,6 +4,23 @@ export async function fetchDeployments() {
     return api.get('/deployments');
 }
 
+export async function fetchDeployment(id) {
+    return api.get(`/deployments/${id}`);
+}
+
+export async function fetchDeploymentLogs(id, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return api.get(`/deployments/${id}/logs${query ? `?${query}` : ''}`);
+}
+
+export async function cancelDeployment(id) {
+    return api.post(`/deployments/${id}/cancel`);
+}
+
+export async function retryDeployment(id) {
+    return api.post(`/deployments/${id}/retry`);
+}
+
 export async function createDeployment(payload) {
     if (typeof FormData !== 'undefined' && payload instanceof FormData) {
         return api.post('/deployments', payload);

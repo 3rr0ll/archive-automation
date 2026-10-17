@@ -27,7 +27,8 @@
     <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'grid'">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <template x-for="item in displayedDeployments" :key="'grid-'+item.id">
-                <div class="bg-white border border-zinc-200 rounded-lg transition hover:border-zinc-300 group p-4 flex flex-col justify-between min-h-[140px]">
+                <a :href="'/deployments/' + (item.hash || item.id) + '/logs'" 
+                   class="bg-white border border-zinc-200 rounded-lg transition hover:border-zinc-300 group p-4 flex flex-col justify-between min-h-[140px] cursor-pointer">
                     <div class="flex items-start justify-between">
                         <div class="flex items-center gap-3 min-w-0">
                             <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200 bg-zinc-900 text-white font-bold text-xs">
@@ -35,7 +36,7 @@
                             </div>
                             <div class="flex flex-col min-w-0">
                                 <h3 class="text-[13px] font-semibold text-zinc-900 group-hover:text-black truncate" x-text="formatDomainName(item.domain)"></h3>
-                                <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="text-[12px] text-zinc-500 hover:text-zinc-800 transition truncate" x-text="item.domain"></a>
+                                <span class="text-[12px] text-zinc-500 truncate" x-text="item.domain"></span>
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
@@ -56,14 +57,18 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 pt-3 border-t border-zinc-100">
-                        <div class="flex items-center gap-1.5 text-xs text-zinc-800 font-medium">
+                    <div class="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5 text-xs text-zinc-800 font-medium min-w-0">
                             <x-lucide-server class="size-3.5 shrink-0 text-zinc-500" />
                             <span class="truncate" x-text="item.server ? item.server.name : 'Unknown server'"></span>
                             <span class="text-[10px] text-zinc-400 font-mono" x-show="item.version" x-text="`(${item.version})`"></span>
                         </div>
+                        <span class="text-xs text-zinc-400 group-hover:text-zinc-600 transition flex items-center gap-1">
+                            <span>Logs</span>
+                            <x-lucide-arrow-right class="size-3" />
+                        </span>
                     </div>
-                </div>
+                </a>
             </template>
         </div>
     </template>
@@ -72,7 +77,8 @@
     <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'list'">
         <div class="bg-white border border-zinc-200 rounded-lg overflow-hidden divide-y divide-zinc-200">
             <template x-for="item in displayedDeployments" :key="'list-'+item.id">
-                <div class="flex items-center justify-between p-4 hover:bg-zinc-50 transition group">
+                <div class="flex items-center justify-between p-4 hover:bg-zinc-50 transition group cursor-pointer"
+                     @click="window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'">
                     <!-- Left Section -->
                     <div class="flex items-center gap-4 min-w-0">
                         <div class="size-8 rounded-full flex items-center justify-center shrink-0 border border-zinc-200 bg-zinc-900 text-white font-bold text-xs">
@@ -80,11 +86,11 @@
                         </div>
                         <div class="min-w-0">
                             <h3 class="text-sm font-semibold text-zinc-900 group-hover:text-black truncate" x-text="formatDomainName(item.domain)"></h3>
-                            <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="text-xs text-zinc-500 hover:underline truncate" x-text="item.domain"></a>
+                            <span class="text-xs text-zinc-500 truncate" x-text="item.domain"></span>
                         </div>
                     </div>
                     <!-- Right Section -->
-                    <div class="flex items-center gap-6 shrink-0">
+                    <div class="flex items-center gap-6 shrink-0" @click.stop>
                         <div class="hidden sm:block text-right">
                             <div class="flex items-center justify-end gap-1.5 text-xs text-zinc-800 font-medium">
                                 <span class="truncate max-w-[200px]" x-text="item.server ? item.server.name : 'Server'"></span>
@@ -109,7 +115,7 @@
                                     Active
                                 </span>
                             </template>
-                            <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50" title="Visit website">
+                            <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50" title="Visit website" @click.stop>
                                 <x-lucide-external-link class="size-3.5" />
                             </a>
                         </div>

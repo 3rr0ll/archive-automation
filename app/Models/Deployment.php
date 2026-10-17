@@ -42,6 +42,29 @@ class Deployment extends Model
         ];
     }
 
+    protected $appends = ['hash'];
+
+    public function getHashAttribute(): string
+    {
+        return \App\Support\UrlSigner::encode($this->id);
+    }
+
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        // Try decoding as token first
+        $decodedId = \App\Support\UrlSigner::decode((string) $value);
+        if ($decodedId !== null) {
+            return $this->where('id', $decodedId)->first();
+        }
+
+        // Fallback to numeric id if needed
+        if (is_numeric($value)) {
+            return $this->where('id', (int) $value)->first();
+        }
+
+        return null;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
