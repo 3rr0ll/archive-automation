@@ -138,7 +138,11 @@ export function environmentVariablesPage(initialVariables = []) {
                 if (error.status === 422) {
                     this.errors = error.errors || {};
                 } else {
-                    alert(error.message || 'Something went wrong while saving environment variables.');
+                    if (window.toast) {
+                        window.toast.error(error.message || 'Something went wrong while saving environment variables.');
+                    } else {
+                        console.error(error);
+                    }
                 }
             } finally {
                 this.isSubmitting = false;
@@ -161,8 +165,9 @@ export function environmentVariablesPage(initialVariables = []) {
                         try {
                             await deleteEnvironmentVariable(id);
                             this.items = this.items.filter(item => item.id !== id);
+                            window.toast?.success('Environment variable deleted successfully.');
                         } catch (error) {
-                            alert(error.message || 'Failed to delete');
+                            window.toast?.error(error.message || 'Failed to delete');
                         }
                     }
                 });
@@ -174,8 +179,9 @@ export function environmentVariablesPage(initialVariables = []) {
                 try {
                     await deleteEnvironmentVariable(id);
                     this.items = this.items.filter(item => item.id !== id);
+                    window.toast?.success('Environment variable deleted successfully.');
                 } catch (error) {
-                    alert(error.message || 'Failed to delete');
+                    window.toast?.error(error.message || 'Failed to delete');
                 }
             }
         },
@@ -246,12 +252,13 @@ export function environmentVariablesPage(initialVariables = []) {
                     };
                 }
 
+                window.toast?.success('Environment variable updated successfully.');
                 this.cancelEdit();
             } catch (error) {
                 if (error.status === 422) {
                     this.editForm.errors = error.errors || {};
                 } else {
-                    alert(error.message || 'Failed to update environment variable');
+                    window.toast?.error(error.message || 'Failed to update environment variable');
                 }
             } finally {
                 this.editForm.isSaving = false;
@@ -261,7 +268,7 @@ export function environmentVariablesPage(initialVariables = []) {
         copyKey(name) {
             if (navigator?.clipboard) {
                 navigator.clipboard.writeText(name);
-                alert('Copied to clipboard!');
+                window.toast?.success('Copied to clipboard!');
             }
         }
     };
