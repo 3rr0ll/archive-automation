@@ -2,6 +2,7 @@ import { syncServers, toggleServerActive } from '../services/server-service.js';
 
 export function serversPage(initialServers = []) {
     return {
+        isLoading: false,
         items: Array.isArray(initialServers) ? initialServers : [],
         isSyncing: false,
         searchQuery: '',

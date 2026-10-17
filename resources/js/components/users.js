@@ -4,6 +4,7 @@ import { createUser, updateUser, deleteUser, resetUserPassword } from '../servic
 
 export function usersPage(initialUsers = [], currentUserId = null) {
     return {
+        isLoading: false,
         items: Array.isArray(initialUsers) ? initialUsers : [],
         currentUserId: currentUserId,
         searchQuery: '',

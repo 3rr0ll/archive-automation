@@ -2,12 +2,20 @@
 
 @section('content')
 <div class="mx-auto py-6" x-data="usersPage(@js($users), {{ auth()->id() ?? 'null' }})">
-    <x-users.header />
+    <!-- Skeleton Loading State -->
+    <div x-show="isLoading">
+        <x-skeleton.users-skeleton />
+    </div>
 
-    <x-users.filters />
+    <!-- Main Content -->
+    <div x-show="!isLoading" x-cloak>
+        <x-users.header />
 
-    <x-users.list />
+        <x-users.filters />
 
-    <x-users.drawer />
+        <x-users.list />
+
+        <x-users.drawer />
+    </div>
 </div>
 @endsection

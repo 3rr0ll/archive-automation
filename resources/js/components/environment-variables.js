@@ -2,6 +2,7 @@ import { createEnvironmentVariable, updateEnvironmentVariable, deleteEnvironment
 
 export function environmentVariablesPage(initialVariables = []) {
     return {
+        isLoading: false,
         items: Array.isArray(initialVariables) ? initialVariables : [],
         showModal: false,
         isSubmitting: false,
