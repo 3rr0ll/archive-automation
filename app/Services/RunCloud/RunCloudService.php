@@ -169,10 +169,11 @@ class RunCloudService
         // We do NOT call POST /domains here to prevent a redundant API call and 422 errors.
 
         // 5. Direct Cloudflare DNS Configuration: delete all existing records, then add @ and www A records for the RunCloud server
+        // Note: Set proxied=false so Let's Encrypt http-01 challenge can reach the server directly without being blocked
         $dnsSetup = null;
         try {
             $resolvedIp = $serverIp ?: $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, false);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
@@ -182,7 +183,7 @@ class RunCloudService
         }
 
         // 6. Configure Advanced SSL / AutoSSL
-        $sslConfig = $this->configureAutoSsl($server, $appId);
+        $sslConfig = $this->configureAdvancedSsl($server, $appId, $domain);
 
         Log::info('Successfully created RunCloud Empty Web Application', [
             'server_id' => $server,
@@ -204,7 +205,8 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (HTTP-01)",
+            'ssl' => "Let's Encrypt (Advanced SSL / HTTP-01)",
+            'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
     }
@@ -511,7 +513,111 @@ class RunCloudService
     }
 
     /**
-     * Configure standard Let's Encrypt SSL via HTTP-01 challenge (No 402 Payment Required).
+     * Configure RunCloud Advanced SSL (Domain SSL) for the web application and its domain.
+     */
+    public function configureAdvancedSsl(int $serverId, int $appId, string $domain): array
+    {
+        // 1. Enable Advanced SSL & AutoSSL mode on the web application
+        $this->enableAdvancedSslMode($serverId, $appId);
+
+        // 2. Fetch the domain ID registered under this web app
+        $domainId = $this->getDomainId($serverId, $appId, $domain);
+
+        if (! $domainId) {
+            Log::warning('RunCloud Advanced SSL could not find domain ID, falling back to Basic SSL', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain' => $domain,
+            ]);
+
+            return $this->configureAutoSsl($serverId, $appId);
+        }
+
+        // 3. Deploy Let's Encrypt to the domain under Advanced SSL
+        $payload = [
+            'provider' => 'letsencrypt',
+            'authorizationMethod' => 'http-01',
+            'environment' => 'live',
+            'enableHttp' => false, // Redirect plain HTTP to HTTPS
+            'enableHsts' => false,
+        ];
+
+        $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
+
+        if (! $response->successful()) {
+            Log::warning('RunCloud Advanced Domain SSL installation returned non-200, attempting fallback', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain_id' => $domainId,
+                'status' => $response->status(),
+                'body' => $response->json() ?? $response->body(),
+            ]);
+
+            return $this->configureAutoSsl($serverId, $appId);
+        }
+
+        Log::info('RunCloud Advanced Domain SSL successfully queued', [
+            'server_id' => $serverId,
+            'app_id' => $appId,
+            'domain_id' => $domainId,
+            'response' => $response->json(),
+        ]);
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Enable Advanced SSL and AutoSSL mode on a web application.
+     */
+    public function enableAdvancedSslMode(int $serverId, int $appId): bool
+    {
+        try {
+            $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl/advanced", [
+                'advancedSSL' => true,
+                'autoSSL' => true,
+            ]);
+
+            return $response->successful();
+        } catch (Exception $e) {
+            Log::warning('Failed to enable Advanced SSL mode on webapp: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Find the domain ID for a web application domain.
+     */
+    public function getDomainId(int $serverId, int $appId, string $domain): ?int
+    {
+        try {
+            $response = $this->client()->get("/servers/{$serverId}/webapps/{$appId}/domains");
+
+            if ($response->successful()) {
+                $domains = $response->json('data') ?? $response->json() ?? [];
+                $normalized = strtolower(trim($domain));
+
+                foreach ($domains as $item) {
+                    $itemDomain = strtolower(trim($item['name'] ?? ''));
+                    if ($itemDomain === $normalized || str_contains($itemDomain, $normalized)) {
+                        return (int) $item['id'];
+                    }
+                }
+
+                // If not matched by name, return the first/primary domain ID if available
+                if (! empty($domains[0]['id'])) {
+                    return (int) $domains[0]['id'];
+                }
+            }
+        } catch (Exception $e) {
+            Log::warning('Failed to retrieve domains list for webapp: '.$e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Configure standard Let's Encrypt SSL via HTTP-01 challenge (fallback).
      */
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
@@ -519,8 +625,9 @@ class RunCloudService
             'provider' => 'letsencrypt',
             'authorizationMethod' => 'http-01',
             'environment' => 'live',
-            'enableHttp' => true,
+            'enableHttp' => false, // Redirect plain HTTP to HTTPS
             'enableHsts' => false,
+            'ssl_protocol_id' => 1,
         ];
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
