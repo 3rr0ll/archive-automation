@@ -494,6 +494,12 @@ class RunCloudService
             'clickjackingProtection' => true,
             'xssProtection' => true,
             'mimeSniffingProtection' => true,
+            'processManager' => 'dynamic',
+            'processManagerStartServers' => 1,
+            'processManagerMinSpareServers' => 1,
+            'processManagerMaxSpareServers' => 1,
+            'processManagerMaxChildren' => 5,
+            'processManagerMaxRequests' => 500,
             'openBasedir' => "/home/runcloud/webapps/{$webAppName}:/var/lib/php/session:/tmp",
             'timezone' => 'UTC',
             'disableFunctions' => self::DEFAULT_DISABLED_FUNCTIONS,
@@ -555,7 +561,10 @@ class RunCloudService
         }
 
         $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
-        $dnsCredential = (string) $this->getEnvValue('RUNCLOUD_DNS_CREDENTIAL_ID', Config::get('services.runcloud.dns_credential_id', 'CF API key'));
+        $externalApiId = $this->getEnvValue(
+            'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
+            Config::get('services.runcloud.cloudflare_external_api_id'),
+        );
 
         // 3. Deploy Let's Encrypt to the domain under Advanced SSL
         $payload = [
@@ -568,10 +577,11 @@ class RunCloudService
         ];
 
         if ($authMethod === 'dns-01') {
-            $payload['dns_provider'] = 'cloudflare';
-            $payload['dns_credential'] = $dnsCredential;
-            $payload['dnsCredential'] = $dnsCredential;
-            $payload['dns_credential_id'] = $dnsCredential;
+            if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
+                throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
+            }
+
+            $payload['externalApi'] = (int) $externalApiId;
         }
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
@@ -664,7 +674,10 @@ class RunCloudService
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
         $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
-        $dnsCredential = (string) $this->getEnvValue('RUNCLOUD_DNS_CREDENTIAL_ID', Config::get('services.runcloud.dns_credential_id', 'CF API key'));
+        $externalApiId = $this->getEnvValue(
+            'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
+            Config::get('services.runcloud.cloudflare_external_api_id'),
+        );
 
         $payload = [
             'provider' => 'letsencrypt',
@@ -677,10 +690,11 @@ class RunCloudService
         ];
 
         if ($authMethod === 'dns-01') {
-            $payload['dns_provider'] = 'cloudflare';
-            $payload['dns_credential'] = $dnsCredential;
-            $payload['dnsCredential'] = $dnsCredential;
-            $payload['dns_credential_id'] = $dnsCredential;
+            if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
+                throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
+            }
+
+            $payload['externalApi'] = (int) $externalApiId;
         }
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);

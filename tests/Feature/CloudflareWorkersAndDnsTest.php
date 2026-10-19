@@ -442,10 +442,12 @@ class CloudflareWorkersAndDnsTest extends TestCase
         });
     }
 
-    public function test_runcloud_service_creates_advanced_http_01_ssl_with_direct_cloudflare_dns(): void
+    public function test_runcloud_service_creates_advanced_dns_01_ssl_with_direct_cloudflare_dns(): void
     {
         Config::set('services.runcloud.server_id', 99);
         Config::set('services.runcloud.server_ip', '198.51.100.55');
+        Config::set('services.runcloud.ssl_authorization_method', 'dns-01');
+        Config::set('services.runcloud.cloudflare_external_api_id', 42310);
 
         Http::fake([
             // RunCloud Server
@@ -535,6 +537,12 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 && $request['clickjackingProtection'] === true
                 && $request['xssProtection'] === true
                 && $request['mimeSniffingProtection'] === true
+                && $request['processManager'] === 'dynamic'
+                && $request['processManagerStartServers'] === 1
+                && $request['processManagerMinSpareServers'] === 1
+                && $request['processManagerMaxSpareServers'] === 1
+                && $request['processManagerMaxChildren'] === 5
+                && $request['processManagerMaxRequests'] === 500
                 && $request['openBasedir'] === '/home/runcloud/webapps/mysite:/var/lib/php/session:/tmp'
                 && $request['timezone'] === 'UTC'
                 && str_contains($request['disableFunctions'], 'shell_exec')
@@ -565,8 +573,8 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/501/domains/777/ssl'
                 && $request->method() === 'POST'
                 && $request['provider'] === 'letsencrypt'
-                && $request['authorizationMethod'] === 'http-01'
-                && ! isset($request['externalApi'])
+                && $request['authorizationMethod'] === 'dns-01'
+                && $request['externalApi'] === 42310
                 && $request['environment'] === 'live'
                 && $request['enableHttp'] === false
                 && $request['enableHsts'] === false;
