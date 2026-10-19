@@ -36,6 +36,10 @@ export function usersPage(initialUsers = [], currentUserId = null) {
             password_confirmation: '',
         },
 
+        // Pagination state
+        currentPage: 1,
+        perPage: 10,
+
         get filteredItems() {
             let list = [...this.items];
 
@@ -66,6 +70,43 @@ export function usersPage(initialUsers = [], currentUserId = null) {
             }
 
             return list;
+        },
+
+        get totalPages() {
+            return Math.ceil(this.filteredItems.length / this.perPage) || 1;
+        },
+
+        get paginatedItems() {
+            const page = Math.min(Math.max(1, this.currentPage), this.totalPages);
+            const start = (page - 1) * this.perPage;
+            return this.filteredItems.slice(start, start + this.perPage);
+        },
+
+        get paginationFrom() {
+            if (this.filteredItems.length === 0) return 0;
+            return (Math.min(this.currentPage, this.totalPages) - 1) * this.perPage + 1;
+        },
+
+        get paginationTo() {
+            return Math.min(Math.min(this.currentPage, this.totalPages) * this.perPage, this.filteredItems.length);
+        },
+
+        goToPage(page) {
+            if (page >= 1 && page <= this.totalPages) {
+                this.currentPage = page;
+            }
+        },
+
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+            }
+        },
+
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+            }
         },
 
         getInitial(name) {

@@ -1,11 +1,27 @@
 import api from './api-client.js';
+import clientCache from '../utils/cache.js';
 
-export async function fetchDeployments() {
-    return api.get('/deployments');
+const DEPLOYMENTS_LIST_CACHE_KEY = 'deployments:list';
+const DEPLOYMENTS_TTL = 10000; // 10 seconds
+
+export async function fetchDeployments(forceRefresh = false) {
+    return clientCache.remember(
+        DEPLOYMENTS_LIST_CACHE_KEY,
+        () => api.get('/deployments'),
+        DEPLOYMENTS_TTL,
+        'memory',
+        forceRefresh
+    );
 }
 
-export async function fetchDeployment(id) {
-    return api.get(`/deployments/${id}`);
+export async function fetchDeployment(id, forceRefresh = false) {
+    return clientCache.remember(
+        `deployments:${id}`,
+        () => api.get(`/deployments/${id}`),
+        DEPLOYMENTS_TTL,
+        'memory',
+        forceRefresh
+    );
 }
 
 export async function fetchDeploymentLogs(id, params = {}) {
@@ -14,19 +30,22 @@ export async function fetchDeploymentLogs(id, params = {}) {
 }
 
 export async function cancelDeployment(id) {
-    return api.post(`/deployments/${id}/cancel`);
+    const res = await api.post(`/deployments/${id}/cancel`);
+    clientCache.invalidate('deployments*');
+    return res;
 }
 
 export async function retryDeployment(id) {
-    return api.post(`/deployments/${id}/retry`);
+    const res = await api.post(`/deployments/${id}/retry`);
+    clientCache.invalidate('deployments*');
+    return res;
 }
 
 export async function createDeployment(payload) {
+    let result;
     if (typeof FormData !== 'undefined' && payload instanceof FormData) {
-        return api.post('/deployments', payload);
-    }
-
-    if (typeof Blob !== 'undefined' && payload?.archive instanceof Blob) {
+        result = await api.post('/deployments', payload);
+    } else if (typeof Blob !== 'undefined' && payload?.archive instanceof Blob) {
         const formData = new FormData();
 
         Object.entries(payload).forEach(([key, value]) => {
@@ -35,8 +54,12 @@ export async function createDeployment(payload) {
             }
         });
 
-        return api.post('/deployments', formData);
+        result = await api.post('/deployments', formData);
+    } else {
+        result = await api.post('/deployments', payload);
     }
 
-    return api.post('/deployments', payload);
+    // Invalidate deployments cache on newly created deployment
+    clientCache.invalidate('deployments*');
+    return result;
 }
