@@ -6,22 +6,112 @@
             </div>
             <input type="text" 
                    x-model="searchQuery" 
+                   @input="currentPage = 1"
                    class="block w-full pl-10 pr-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 bg-white" 
                    placeholder="Search user by name, email, or role...">
         </div>
     </div>
     
     <div class="flex flex-wrap items-center gap-3">
-        <select x-model="roleFilter" class="block w-full sm:w-auto pl-3 pr-10 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 bg-white text-zinc-700 cursor-pointer">
-            <option value="all">All Roles</option>
-            <option value="admin">Admin Only</option>
-            <option value="user">User Only</option>
-        </select>
-        <select x-model="sortBy" class="block w-full sm:w-auto pl-3 pr-10 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 bg-white text-zinc-700 cursor-pointer">
-            <option value="newest">Sort by Newest</option>
-            <option value="name">Sort by Name</option>
-            <option value="email">Sort by Email</option>
-            <option value="oldest">Sort by Oldest</option>
-        </select>
+        <!-- Role Filter Dropdown -->
+        <div class="relative" x-data="{ open: false }">
+            <button type="button" 
+                    @click="open = !open" 
+                    @click.away="open = false" 
+                    class="inline-flex items-center justify-between gap-2.5 px-3 py-2 text-sm font-medium border border-zinc-200 rounded-lg bg-white text-zinc-700 hover:bg-zinc-50 outline-none focus:outline-none transition cursor-pointer min-w-[130px]">
+                <span class="font-medium text-zinc-900 capitalize truncate" x-text="roleFilter === 'all' ? 'All Roles' : (roleFilter === 'admin' ? 'Admin Only' : 'User Only')"></span>
+                <x-lucide-chevron-down class="size-4 text-zinc-400 transition-transform duration-200" ::class="open ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="open" 
+                 x-transition.opacity
+                 style="display: none;" 
+                 class="absolute left-0 sm:right-0 sm:left-auto z-50 mt-1 w-44 rounded-md bg-white py-1 border border-zinc-200 shadow-lg text-sm focus:outline-none"
+                 role="menu">
+                <button type="button" 
+                        @click="roleFilter = 'all'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="roleFilter === 'all' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>All Roles</span>
+                    <x-lucide-check x-show="roleFilter === 'all'" class="size-3.5 text-zinc-900" />
+                </button>
+                <button type="button" 
+                        @click="roleFilter = 'admin'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="roleFilter === 'admin' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>Admin Only</span>
+                    <x-lucide-check x-show="roleFilter === 'admin'" class="size-3.5 text-zinc-900" />
+                </button>
+                <button type="button" 
+                        @click="roleFilter = 'user'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="roleFilter === 'user' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>User Only</span>
+                    <x-lucide-check x-show="roleFilter === 'user'" class="size-3.5 text-zinc-900" />
+                </button>
+            </div>
+        </div>
+
+        <!-- Sort By Dropdown -->
+        <div class="relative" x-data="{ 
+            open: false,
+            get currentLabel() {
+                const labels = {
+                    'newest': 'Sort by Newest',
+                    'name': 'Sort by Name',
+                    'email': 'Sort by Email',
+                    'oldest': 'Sort by Oldest'
+                };
+                return labels[sortBy] || 'Sort by Newest';
+            }
+        }">
+            <button type="button" 
+                    @click="open = !open" 
+                    @click.away="open = false" 
+                    class="inline-flex items-center justify-between gap-2.5 px-3 py-2 text-sm font-medium border border-zinc-200 rounded-lg bg-white text-zinc-700 hover:bg-zinc-50 outline-none focus:outline-none transition cursor-pointer min-w-[160px]">
+                <span class="font-medium text-zinc-900 truncate" x-text="currentLabel"></span>
+                <x-lucide-chevron-down class="size-4 text-zinc-400 transition-transform duration-200" ::class="open ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="open" 
+                 x-transition.opacity
+                 style="display: none;" 
+                 class="absolute right-0 z-50 mt-1 w-48 rounded-md bg-white py-1 border border-zinc-200 shadow-lg text-sm focus:outline-none"
+                 role="menu">
+                <button type="button" 
+                        @click="sortBy = 'newest'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="sortBy === 'newest' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>Sort by Newest</span>
+                    <x-lucide-check x-show="sortBy === 'newest'" class="size-3.5 text-zinc-900" />
+                </button>
+                <button type="button" 
+                        @click="sortBy = 'name'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="sortBy === 'name' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>Sort by Name</span>
+                    <x-lucide-check x-show="sortBy === 'name'" class="size-3.5 text-zinc-900" />
+                </button>
+                <button type="button" 
+                        @click="sortBy = 'email'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="sortBy === 'email' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>Sort by Email</span>
+                    <x-lucide-check x-show="sortBy === 'email'" class="size-3.5 text-zinc-900" />
+                </button>
+                <button type="button" 
+                        @click="sortBy = 'oldest'; currentPage = 1; open = false;" 
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                        :class="sortBy === 'oldest' ? 'bg-zinc-50 font-semibold text-zinc-900' : ''"
+                        role="menuitem">
+                    <span>Sort by Oldest</span>
+                    <x-lucide-check x-show="sortBy === 'oldest'" class="size-3.5 text-zinc-900" />
+                </button>
+            </div>
+        </div>
     </div>
 </div>

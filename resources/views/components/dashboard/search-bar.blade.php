@@ -5,6 +5,7 @@
         </div>
         <input type="text" 
                x-model="searchQuery" 
+               @input="currentPage = 1"
                class="block w-full h-9 pl-10 pr-3 text-sm text-zinc-900 border border-zinc-200 rounded-md bg-white focus:ring-zinc-900 focus:border-zinc-900 transition placeholder:text-zinc-400" 
                placeholder="Search Domains...">
     </div>

@@ -4,22 +4,25 @@ import { fetchCurrentUser } from '../services/auth-service.js';
 import { fetchDeployments, createDeployment } from '../services/deployment-service.js';
 import { getServers } from '../services/server-service.js';
 
-export function dashboardOverview() {
+export function dashboardOverview(initialDeployments = [], initialServers = []) {
+    const hasInitialData = (Array.isArray(initialDeployments) && initialDeployments.length > 0) || 
+                           (Array.isArray(initialServers) && initialServers.length > 0);
+
     return {
         userName: '',
-        isLoading: true,
+        isLoading: !hasInitialData,
         isSubmitting: false,
         showModal: false,
         searchQuery: '',
 
-        // Data arrays from /api
-        deployments: [],
-        servers: [],
+        // Data arrays initialized with server-provided cached data
+        deployments: Array.isArray(initialDeployments) ? initialDeployments : [],
+        servers: Array.isArray(initialServers) ? initialServers.filter(s => Boolean(s.is_active)) : [],
 
         // Drawer Form state
         form: {
             domain: '',
-            server_id: '',
+            server_id: (Array.isArray(initialServers) && initialServers.length > 0) ? initialServers[0].server_id : '',
             version: 'non-www',
             source_type: 'url',
             archive_url: '',
@@ -44,10 +47,15 @@ export function dashboardOverview() {
                     })
                     .catch(() => { });
 
-                await Promise.allSettled([
-                    this.loadServers(),
-                    this.loadDeployments(),
-                ]);
+                // If no initial data was passed, load asynchronously and show loader
+                if (!hasInitialData) {
+                    await Promise.allSettled([
+                        this.loadServers(),
+                        this.loadDeployments(),
+                    ]);
+                } else if (!this.form.server_id && this.servers.length > 0) {
+                    this.form.server_id = this.servers[0].server_id;
+                }
             } catch (error) {
                 console.error('Failed to initialize dashboard:', error);
             } finally {
@@ -57,7 +65,7 @@ export function dashboardOverview() {
             // Periodically refresh deployments from /api every 5 seconds if active deployments exist
             this.pollInterval = setInterval(() => {
                 if (this.queueItems.length > 0) {
-                    this.loadDeployments(false).catch(() => { });
+                    this.loadDeployments(false, true).catch(() => { });
                 }
             }, 5000);
         },
@@ -84,10 +92,10 @@ export function dashboardOverview() {
             }
         },
 
-        async loadDeployments(showSpinner = false) {
+        async loadDeployments(showSpinner = false, forceRefresh = false) {
             if (showSpinner) this.isLoading = true;
             try {
-                const res = await fetchDeployments();
+                const res = await fetchDeployments(forceRefresh);
                 this.deployments = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
             } catch (err) {
                 console.warn('Could not load deployments from /api:', err);
@@ -96,6 +104,10 @@ export function dashboardOverview() {
                 if (showSpinner) this.isLoading = false;
             }
         },
+
+        // Pagination state
+        currentPage: 1,
+        perPage: 9,
 
         // Filtered domains based on search
         get filteredDeployments() {
@@ -139,6 +151,44 @@ export function dashboardOverview() {
                 }
             }
             return list;
+        },
+
+        // Pagination computed properties
+        get totalPages() {
+            return Math.ceil(this.displayedDeployments.length / this.perPage) || 1;
+        },
+
+        get paginatedDeployments() {
+            const page = Math.min(Math.max(1, this.currentPage), this.totalPages);
+            const start = (page - 1) * this.perPage;
+            return this.displayedDeployments.slice(start, start + this.perPage);
+        },
+
+        get paginationFrom() {
+            if (this.displayedDeployments.length === 0) return 0;
+            return (Math.min(this.currentPage, this.totalPages) - 1) * this.perPage + 1;
+        },
+
+        get paginationTo() {
+            return Math.min(Math.min(this.currentPage, this.totalPages) * this.perPage, this.displayedDeployments.length);
+        },
+
+        goToPage(page) {
+            if (page >= 1 && page <= this.totalPages) {
+                this.currentPage = page;
+            }
+        },
+
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+            }
+        },
+
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+            }
         },
 
         isItemActive(item) {

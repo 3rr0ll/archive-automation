@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div x-data="dashboardOverview">
+<div x-data="dashboardOverview(@js($deployments ?? []), @js($servers ?? []))">
     <!-- Slide-over Drawer for New Deployment (fixed overlay, outside flow) -->
     <x-dashboard.drawer />
 
