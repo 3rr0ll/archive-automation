@@ -207,7 +207,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / HTTP-01)",
+            'ssl' => "Let's Encrypt (Advanced SSL / DNS-01 - CF API key)",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
@@ -554,14 +554,25 @@ class RunCloudService
             throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
         }
 
+        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        $dnsCredential = (string) $this->getEnvValue('RUNCLOUD_DNS_CREDENTIAL_ID', Config::get('services.runcloud.dns_credential_id', 'CF API key'));
+
         // 3. Deploy Let's Encrypt to the domain under Advanced SSL
         $payload = [
             'provider' => 'letsencrypt',
-            'authorizationMethod' => 'http-01',
+            'authorizationMethod' => $authMethod,
             'environment' => 'live',
-            'enableHttp' => false, // Redirect plain HTTP to HTTPS
+            'enableHttp' => false, // Server Side HTTPS Redirection (plain HTTP redirected to HTTPS)
             'enableHsts' => false,
+            'rsa_key_size' => 2048,
         ];
+
+        if ($authMethod === 'dns-01') {
+            $payload['dns_provider'] = 'cloudflare';
+            $payload['dns_credential'] = $dnsCredential;
+            $payload['dnsCredential'] = $dnsCredential;
+            $payload['dns_credential_id'] = $dnsCredential;
+        }
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
 
@@ -652,14 +663,25 @@ class RunCloudService
      */
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
+        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        $dnsCredential = (string) $this->getEnvValue('RUNCLOUD_DNS_CREDENTIAL_ID', Config::get('services.runcloud.dns_credential_id', 'CF API key'));
+
         $payload = [
             'provider' => 'letsencrypt',
-            'authorizationMethod' => 'http-01',
+            'authorizationMethod' => $authMethod,
             'environment' => 'live',
-            'enableHttp' => false, // Redirect plain HTTP to HTTPS
+            'enableHttp' => false, // Server Side HTTPS Redirection
             'enableHsts' => false,
             'ssl_protocol_id' => 1,
+            'rsa_key_size' => 2048,
         ];
+
+        if ($authMethod === 'dns-01') {
+            $payload['dns_provider'] = 'cloudflare';
+            $payload['dns_credential'] = $dnsCredential;
+            $payload['dnsCredential'] = $dnsCredential;
+            $payload['dns_credential_id'] = $dnsCredential;
+        }
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
 

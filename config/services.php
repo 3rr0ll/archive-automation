@@ -47,6 +47,8 @@ return [
         'server_id' => env('RUNCLOUD_DEFAULT_SERVER_ID'),
         'server_ip' => env('RUNCLOUD_DEFAULT_SERVER_IP'),
         'timeout' => (int) env('RUNCLOUD_TIMEOUT', 30),
+        'dns_credential_id' => env('RUNCLOUD_DNS_CREDENTIAL_ID', 'CF API key'),
+        'ssl_authorization_method' => env('RUNCLOUD_SSL_AUTH_METHOD', 'dns-01'),
     ],
 
     'cloudflare' => [
