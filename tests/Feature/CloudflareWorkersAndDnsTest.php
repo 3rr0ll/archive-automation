@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\EnvironmentVariable;
 use App\Models\User;
 use App\Services\Cloudflare\CloudflareService;
 use App\Services\RunCloud\RunCloudService;
@@ -62,15 +63,17 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes*' => function ($request) {
                 if ($request->method() === 'POST') {
                     $data = $request->data();
+
                     return Http::response([
                         'success' => true,
                         'result' => [
-                            'id' => 'route-' . md5($data['pattern']),
+                            'id' => 'route-'.md5($data['pattern']),
                             'pattern' => $data['pattern'],
                             'script' => $data['script'],
                         ],
                     ], 200);
                 }
+
                 return Http::response(['success' => false], 404);
             },
 
@@ -136,15 +139,17 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes*' => function ($request) {
                 if ($request->method() === 'POST') {
                     $data = $request->data();
+
                     return Http::response([
                         'success' => true,
                         'result' => [
-                            'id' => 'route-' . md5($data['pattern']),
+                            'id' => 'route-'.md5($data['pattern']),
                             'pattern' => $data['pattern'],
                             'script' => $data['script'],
                         ],
                     ], 200);
                 }
+
                 return Http::response(['success' => false], 404);
             },
 
@@ -219,6 +224,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes/*' => function ($request) {
                 if ($request->method() === 'PUT') {
                     $data = $request->data();
+
                     return Http::response([
                         'success' => true,
                         'result' => [
@@ -228,6 +234,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
                         ],
                     ], 200);
                 }
+
                 return Http::response(['success' => false], 404);
             },
 
@@ -268,7 +275,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
 
     public function test_change_workers_uses_environment_variable_model(): void
     {
-        \App\Models\EnvironmentVariable::create([
+        EnvironmentVariable::create([
             'key' => 'CLOUDFLARE_WORKER_WWW_MAIN',
             'value' => 'custom-worker-www-main',
             'type' => 'config',
@@ -276,7 +283,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'user_id' => $this->user->id,
         ]);
 
-        \App\Models\EnvironmentVariable::create([
+        EnvironmentVariable::create([
             'key' => 'CLOUDFLARE_WORKER_WWW_REDIRECT',
             'value' => 'custom-worker-www-redirect',
             'type' => 'config',
@@ -300,15 +307,17 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'https://api.cloudflare.com/client/v4/zones/zone-abc-123/workers/routes*' => function ($request) {
                 if ($request->method() === 'POST') {
                     $data = $request->data();
+
                     return Http::response([
                         'success' => true,
                         'result' => [
-                            'id' => 'route-' . md5($data['pattern']),
+                            'id' => 'route-'.md5($data['pattern']),
                             'pattern' => $data['pattern'],
                             'script' => $data['script'],
                         ],
                     ], 200);
                 }
+
                 return Http::response(['success' => false], 404);
             },
 
@@ -373,10 +382,11 @@ class CloudflareWorkersAndDnsTest extends TestCase
             'https://api.cloudflare.com/client/v4/zones/zone-abc-123/dns_records' => function ($request) {
                 if ($request->method() === 'POST') {
                     $data = $request->data();
+
                     return Http::response([
                         'success' => true,
                         'result' => [
-                            'id' => 'rec-new-' . $data['name'],
+                            'id' => 'rec-new-'.$data['name'],
                             'type' => $data['type'],
                             'name' => $data['name'],
                             'content' => $data['content'],
@@ -384,6 +394,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
                         ],
                     ], 200);
                 }
+
                 return Http::response(['success' => false], 404);
             },
         ]);
@@ -431,7 +442,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
         });
     }
 
-    public function test_runcloud_service_removes_dns_integration_and_triggers_direct_cloudflare_dns(): void
+    public function test_runcloud_service_creates_advanced_http_01_ssl_with_direct_cloudflare_dns(): void
     {
         Config::set('services.runcloud.server_id', 99);
         Config::set('services.runcloud.server_ip', '198.51.100.55');
@@ -466,18 +477,15 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 ],
             ], 200),
 
-            // RunCloud attach domain
+            // RunCloud domain lookup after the primary domain is created with the web app
             'https://manage.runcloud.io/api/v3/servers/99/webapps/501/domains' => function ($request) {
-                // Ensure RunCloud payload does NOT contain dnsIntegration, allowDnsIntegration, or proxied
-                if (isset($request['dnsIntegration']) || isset($request['allowDnsIntegration']) || isset($request['proxied'])) {
-                    return Http::response(['message' => 'RunCloud DNS integration should be removed.'], 400);
-                }
-
                 return Http::response([
                     'data' => [
-                        'id' => 777,
-                        'name' => 'mysite.com',
-                        'www' => true,
+                        [
+                            'id' => 777,
+                            'name' => 'mysite.com',
+                            'www' => true,
+                        ],
                     ],
                 ], 200);
             },
@@ -487,7 +495,12 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 'data' => ['success' => true],
             ], 200),
 
-            // Cloudflare API mock for direct DNS setup
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/501/ssl/advanced' => Http::response([], 200),
+
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/501/domains/777/ssl' => Http::response([
+                'data' => ['status' => 'queued'],
+            ], 200),
+
             'https://api.cloudflare.com/client/v4/zones?name=mysite.com' => Http::response([
                 'success' => true,
                 'result' => [
@@ -503,7 +516,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
 
             'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records' => Http::response([
                 'success' => true,
-                'result' => ['id' => 'new-rec'],
+                'result' => ['id' => 'new-record'],
             ], 200),
         ]);
 
@@ -517,33 +530,60 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/custom'
                 && $request['user'] === 1645
                 && $request['phpVersion'] === 'php81rc'
-                && $request['stack'] === 'hybrid';
+                && $request['stack'] === 'hybrid'
+                && $request['stackMode'] === 'production'
+                && $request['clickjackingProtection'] === true
+                && $request['xssProtection'] === true
+                && $request['mimeSniffingProtection'] === true
+                && $request['openBasedir'] === '/home/runcloud/webapps/mysite:/var/lib/php/session:/tmp'
+                && $request['timezone'] === 'UTC'
+                && str_contains($request['disableFunctions'], 'shell_exec')
+                && str_contains($request['disableFunctions'], 'stream_socket_server')
+                && $request['maxExecutionTime'] === 30
+                && $request['maxInputTime'] === 60
+                && $request['maxInputVars'] === 1000
+                && $request['memoryLimit'] === 256
+                && $request['postMaxSize'] === 256
+                && $request['uploadMaxFilesize'] === 256
+                && $request['sessionGcMaxlifetime'] === 1440
+                && $request['allowUrlFopen'] === true
+                && ! isset($request['dnsIntegration'])
+                && ! isset($request['externalApi'])
+                && ! isset($request['allowDnsIntegration'])
+                && ! isset($request['proxied'])
+                && ! isset($request['proxyProtocol']);
         });
 
-        // Assert domain payload sent to RunCloud does NOT contain dnsIntegration
         Http::assertSent(function ($request) {
-            if ($request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/501/domains') {
-                return ! isset($request['dnsIntegration'])
-                    && ! isset($request['allowDnsIntegration'])
-                    && ! isset($request['proxied'])
-                    && $request['name'] === 'mysite.com'
-                    && $request['www'] === true
-                    && $request['redirection'] === 'none';
-            }
-            return false;
+            return $request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/501/ssl/advanced'
+                && $request->method() === 'POST'
+                && $request['advancedSSL'] === true
+                && $request['autoSSL'] === true;
         });
 
-        // Assert Cloudflare DNS was called directly for @ and www with server IP
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://manage.runcloud.io/api/v3/servers/99/webapps/501/domains/777/ssl'
+                && $request->method() === 'POST'
+                && $request['provider'] === 'letsencrypt'
+                && $request['authorizationMethod'] === 'http-01'
+                && ! isset($request['externalApi'])
+                && $request['environment'] === 'live'
+                && $request['enableHttp'] === false
+                && $request['enableHsts'] === false;
+        });
+
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === '@'
-                && $request['content'] === '198.51.100.55';
+                && $request['content'] === '198.51.100.55'
+                && $request['proxied'] === false;
         });
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === 'www'
-                && $request['content'] === '198.51.100.55';
+                && $request['content'] === '198.51.100.55'
+                && $request['proxied'] === false;
         });
     }
 

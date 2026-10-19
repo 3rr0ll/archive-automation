@@ -21,6 +21,8 @@ class RunCloudService
     // Strictly PHP 8.1 for deployment
     public const DEFAULT_PHP_VERSION = 'php81rc';
 
+    private const DEFAULT_DISABLED_FUNCTIONS = 'getmyuid,passthru,leak,listen,diskfreespace,tmpfile,link,ignore_user_abort,shell_exec,dl,set_time_limit,exec,system,highlight_file,source,show_source,fpassthru,virtual,posix_ctermid,posix_getcwd,posix_getegid,posix_geteuid,posix_getgid,posix_getgrgid,posix_getgrnam,posix_getgroups,posix_getlogin,posix_getpgid,posix_getpgrp,posix_getpid,posix,_getppid,posix_getpwuid,posix_getrlimit,posix_getsid,posix_getuid,posix_isatty,posix_kill,posix_mkfifo,posix_setegid,posix_seteuid,posix_setgid,posix_setpgid,posix_setsid,posix_setuid,posix_times,posix_ttyname,posix_uname,proc_open,proc_close,proc_nice,proc_terminate,escapeshellcmd,ini_alter,popen,pcntl_exec,socket_accept,socket_bind,socket_clear_error,socket_close,socket_connect,symlink,posix_geteuid,ini_alter,socket_listen,socket_create_listen,socket_read,socket_create_pair,stream_socket_server';
+
     protected CloudflareDnsService $cloudflareDnsService;
 
     protected string $baseUrl;
@@ -168,8 +170,8 @@ class RunCloudService
         // Note: RunCloud automatically registers the primary domain upon creating custom webapp.
         // We do NOT call POST /domains here to prevent a redundant API call and 422 errors.
 
-        // 5. Direct Cloudflare DNS Configuration: delete all existing records, then add @ and www A records for the RunCloud server
-        // Note: Set proxied=false so Let's Encrypt http-01 challenge can reach the server directly without being blocked
+        // 5. Configure Cloudflare DNS directly. Keep records unproxied so the
+        // Let's Encrypt HTTP-01 challenge can reach RunCloud.
         $dnsSetup = null;
         try {
             $resolvedIp = $serverIp ?: $this->getServerIp($server);
@@ -216,15 +218,7 @@ class RunCloudService
      */
     protected function attemptCreateCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array
     {
-        $payload = [
-            'name' => $webAppName,
-            'domainName' => $domain,
-            'user' => $systemUserId,
-            'publicPath' => '/public_html',
-            'phpVersion' => self::DEFAULT_PHP_VERSION, // Strictly PHP 8.1
-            'stack' => 'hybrid',
-            'timezone' => 'UTC',
-        ];
+        $payload = $this->customWebAppPayload($webAppName, $domain, $systemUserId);
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/custom", $payload);
 
@@ -470,15 +464,7 @@ class RunCloudService
      */
     protected function createCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array
     {
-        $payload = [
-            'name' => $webAppName,
-            'domainName' => $domain,
-            'user' => $systemUserId,
-            'publicPath' => '/public_html',
-            'phpVersion' => self::DEFAULT_PHP_VERSION, // Strictly PHP 8.1
-            'stack' => 'hybrid',
-            'timezone' => 'UTC',
-        ];
+        $payload = $this->customWebAppPayload($webAppName, $domain, $systemUserId);
 
         $response = $this->client()->post("/servers/{$serverId}/webapps/custom", $payload);
 
@@ -490,7 +476,40 @@ class RunCloudService
     }
 
     /**
-     * Rule 3, 4, 5: Configure Domain, enable WWW, unset preferred redirection (no RunCloud DNS integration).
+     * Build the RunCloud custom web application payload with secure NGINX and PHP defaults.
+     * PROXY Protocol is deliberately omitted so it remains disabled.
+     *
+     * @return array<string, bool|int|string>
+     */
+    protected function customWebAppPayload(string $webAppName, string $domain, int $systemUserId): array
+    {
+        return [
+            'name' => $webAppName,
+            'domainName' => $domain,
+            'user' => $systemUserId,
+            'publicPath' => '/public_html',
+            'phpVersion' => self::DEFAULT_PHP_VERSION, 
+            'stack' => 'hybrid',
+            'stackMode' => 'production',
+            'clickjackingProtection' => true,
+            'xssProtection' => true,
+            'mimeSniffingProtection' => true,
+            'openBasedir' => "/home/runcloud/webapps/{$webAppName}:/var/lib/php/session:/tmp",
+            'timezone' => 'UTC',
+            'disableFunctions' => self::DEFAULT_DISABLED_FUNCTIONS,
+            'maxExecutionTime' => 30,
+            'maxInputTime' => 60,
+            'maxInputVars' => 1000,
+            'memoryLimit' => 256,
+            'postMaxSize' => 256,
+            'uploadMaxFilesize' => 256,
+            'sessionGcMaxlifetime' => 1440,
+            'allowUrlFopen' => true,
+        ];
+    }
+
+    /**
+     * Configure Domain, enable WWW, and leave the preferred domain version unset.
      */
     protected function configureDomain(int $serverId, int $appId, string $domain): array
     {
@@ -517,20 +536,22 @@ class RunCloudService
      */
     public function configureAdvancedSsl(int $serverId, int $appId, string $domain): array
     {
-        // 1. Enable Advanced SSL & AutoSSL mode on the web application
-        $this->enableAdvancedSslMode($serverId, $appId);
+        // 1. Enable Advanced SSL and AutoSSL on the web application.
+        if (! $this->enableAdvancedSslMode($serverId, $appId)) {
+            throw new Exception('RunCloud did not enable Advanced SSL with AutoSSL for the web application.');
+        }
 
         // 2. Fetch the domain ID registered under this web app
         $domainId = $this->getDomainId($serverId, $appId, $domain);
 
         if (! $domainId) {
-            Log::warning('RunCloud Advanced SSL could not find domain ID, falling back to Basic SSL', [
+            Log::error('RunCloud Advanced SSL could not find the web application domain', [
                 'server_id' => $serverId,
                 'app_id' => $appId,
                 'domain' => $domain,
             ]);
 
-            return $this->configureAutoSsl($serverId, $appId);
+            throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
         }
 
         // 3. Deploy Let's Encrypt to the domain under Advanced SSL
@@ -545,7 +566,7 @@ class RunCloudService
         $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
 
         if (! $response->successful()) {
-            Log::warning('RunCloud Advanced Domain SSL installation returned non-200, attempting fallback', [
+            Log::error('RunCloud rejected the Advanced SSL certificate deployment', [
                 'server_id' => $serverId,
                 'app_id' => $appId,
                 'domain_id' => $domainId,
@@ -553,7 +574,7 @@ class RunCloudService
                 'body' => $response->json() ?? $response->body(),
             ]);
 
-            return $this->configureAutoSsl($serverId, $appId);
+            $this->handleApiError('RunCloud Advanced SSL certificate deployment failed', $response);
         }
 
         Log::info('RunCloud Advanced Domain SSL successfully queued', [
@@ -576,6 +597,16 @@ class RunCloudService
                 'advancedSSL' => true,
                 'autoSSL' => true,
             ]);
+
+            if (! $response->successful()) {
+                Log::error('RunCloud rejected Advanced SSL with AutoSSL', [
+                    'server_id' => $serverId,
+                    'app_id' => $appId,
+                    'auto_ssl' => true,
+                    'status' => $response->status(),
+                    'body' => $response->json() ?? $response->body(),
+                ]);
+            }
 
             return $response->successful();
         } catch (Exception $e) {
