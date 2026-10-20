@@ -283,6 +283,66 @@ class CloudflareDnsService
     }
 
     /**
+     * Update the Cloudflare proxy status (proxied boolean) for A records (@ and www) of a domain.
+     *
+     * @param  string  $domain  Domain name
+     * @param  bool  $proxied  Whether to proxy through Cloudflare
+     * @return array<string, mixed>
+     *
+     * @throws Exception
+     */
+    public function setProxyStatus(string $domain, bool $proxied = true): array
+    {
+        $rootDomain = $this->client->getRootDomain($domain);
+        $zoneId = $this->client->getZoneId($rootDomain);
+
+        $response = $this->client->client()->get("/zones/{$zoneId}/dns_records", [
+            'type' => 'A',
+            'per_page' => 100,
+        ]);
+
+        $records = $response->successful() ? ($response->json('result', [])) : [];
+        $targetNames = [
+            strtolower($rootDomain),
+            'www.'.strtolower($rootDomain),
+            '@',
+            'www',
+        ];
+
+        $updated = [];
+        foreach ($records as $record) {
+            $recordName = strtolower(trim((string) ($record['name'] ?? '')));
+            if (in_array($recordName, $targetNames, true)) {
+                $recordId = (string) $record['id'];
+                $putResponse = $this->client->client()->put("/zones/{$zoneId}/dns_records/{$recordId}", [
+                    'type' => 'A',
+                    'name' => $record['name'],
+                    'content' => $record['content'],
+                    'proxied' => $proxied,
+                    'ttl' => 1,
+                ]);
+
+                if ($putResponse->successful()) {
+                    $updated[] = $putResponse->json('result', []);
+                } else {
+                    Log::warning("Failed to update proxy status for [{$recordName}] on zone {$zoneId}", [
+                        'error' => $putResponse->body(),
+                    ]);
+                }
+            }
+        }
+
+        $this->cache->forgetCloudflareDnsRecords($zoneId);
+
+        return [
+            'domain' => $rootDomain,
+            'zone_id' => $zoneId,
+            'proxied' => $proxied,
+            'updated_records' => $updated,
+        ];
+    }
+
+    /**
      * Delete a single DNS record by zone ID and record ID.
      *
      * @throws Exception

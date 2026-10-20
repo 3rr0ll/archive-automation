@@ -170,11 +170,16 @@ class RunCloudService
         // Note: RunCloud automatically registers the primary domain upon creating custom webapp.
         // We do NOT call POST /domains here to prevent a redundant API call and 422 errors.
 
-        // 5. Configure Cloudflare DNS directly with proxied status enabled.
+        // 5. Configure Cloudflare DNS.
+        // For HTTP-01 challenges, create A records unproxied (grey cloud) so Let's Encrypt can
+        // immediately reach the origin server without Cloudflare proxy delay or verification failures.
+        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
+        $initialProxyStatus = ($authMethod === 'dns-01');
+
         $dnsSetup = null;
         try {
             $resolvedIp = $serverIp ?: $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, true);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, $initialProxyStatus);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
@@ -185,6 +190,21 @@ class RunCloudService
 
         // 6. Configure Advanced SSL / AutoSSL
         $sslConfig = $this->configureAdvancedSsl($server, $appId, $domain);
+
+        // 7. If DNS was initialized unproxied for HTTP-01 validation, switch proxy back ON
+        if (! $initialProxyStatus) {
+            try {
+                $this->cloudflareDnsService->setProxyStatus($domain, true);
+                if (is_array($dnsSetup)) {
+                    $dnsSetup['proxied'] = true;
+                }
+            } catch (Exception $e) {
+                Log::warning('Failed to re-enable Cloudflare proxy status after SSL initiation', [
+                    'domain' => $domain,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         Log::info('Successfully created RunCloud Empty Web Application', [
             'server_id' => $server,
