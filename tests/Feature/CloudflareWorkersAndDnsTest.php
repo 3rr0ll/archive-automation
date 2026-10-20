@@ -584,14 +584,14 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === '@'
                 && $request['content'] === '198.51.100.55'
-                && $request['proxied'] === false;
+                && $request['proxied'] === true;
         });
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === 'www'
                 && $request['content'] === '198.51.100.55'
-                && $request['proxied'] === false;
+                && $request['proxied'] === true;
         });
     }
 
