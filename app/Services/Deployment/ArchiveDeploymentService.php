@@ -201,12 +201,23 @@ class ArchiveDeploymentService
                 $deployment->logs()->create([
                     'step_name' => 'deployment_failed',
                     'status' => 'error',
-                    'message' => 'Archived website deployment failed. Review the server logs for details.',
+                    'message' => $this->failureMessage($exception),
                 ]);
             }
 
             throw $exception;
         }
+    }
+
+    private function failureMessage(Throwable $exception): string
+    {
+        $message = trim($exception->getMessage());
+
+        if ($message === '') {
+            return 'Archived website deployment failed due to an unexpected error.';
+        }
+
+        return 'Archived website deployment failed: '.$message;
     }
 
     private function registerWithSearchConsole(Deployment $deployment): void

@@ -102,7 +102,7 @@ class ArchiveDeploymentServiceTest extends TestCase
         ]);
     }
 
-    public function test_it_records_a_safe_failure_when_a_provider_fails(): void
+    public function test_it_records_the_provider_failure_message_for_the_frontend(): void
     {
         Storage::fake('local');
         $deployment = $this->deployment();
@@ -142,11 +142,7 @@ class ArchiveDeploymentServiceTest extends TestCase
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
             'step_name' => 'deployment_failed',
-            'message' => 'Archived website deployment failed. Review the server logs for details.',
-        ]);
-        $this->assertDatabaseMissing('deployment_logs', [
-            'deployment_id' => $deployment->id,
-            'message' => 'Sensitive provider response.',
+            'message' => 'Archived website deployment failed: Sensitive provider response.',
         ]);
     }
 
@@ -280,9 +276,11 @@ class ArchiveDeploymentServiceTest extends TestCase
             'deployment_id' => $deployment->id,
             'step_name' => 'completed',
         ]);
-        $this->assertDatabaseMissing('deployment_logs', [
+        $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
-            'message' => 'Sensitive Cloudflare response.',
+            'step_name' => 'deployment_failed',
+            'status' => 'error',
+            'message' => 'Archived website deployment failed: Sensitive Cloudflare response.',
         ]);
     }
 
