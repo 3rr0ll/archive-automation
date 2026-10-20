@@ -170,12 +170,11 @@ class RunCloudService
         // Note: RunCloud automatically registers the primary domain upon creating custom webapp.
         // We do NOT call POST /domains here to prevent a redundant API call and 422 errors.
 
-        // 5. Configure Cloudflare DNS directly. Keep records unproxied so the
-        // Let's Encrypt HTTP-01 challenge can reach RunCloud.
+        // 5. Configure Cloudflare DNS directly with proxied status enabled.
         $dnsSetup = null;
         try {
             $resolvedIp = $serverIp ?: $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, false);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, true);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
@@ -207,7 +206,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / DNS-01 - CF API key)",
+            'ssl' => "Let's Encrypt (Advanced SSL / HTTP-01)",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
@@ -560,7 +559,7 @@ class RunCloudService
             throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
         }
 
-        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
         $externalApiId = $this->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
             Config::get('services.runcloud.cloudflare_external_api_id'),
@@ -673,7 +672,7 @@ class RunCloudService
      */
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
-        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
         $externalApiId = $this->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
             Config::get('services.runcloud.cloudflare_external_api_id'),
