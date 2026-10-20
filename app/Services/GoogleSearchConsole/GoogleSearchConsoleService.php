@@ -2,22 +2,16 @@
 
 namespace App\Services\GoogleSearchConsole;
 
-use App\Jobs\RequestGoogleIndexing;
-use App\Services\ApiUsage\ApiUsageContext;
 use App\Services\ApiUsage\ApiUsageRecorder;
 use App\Services\Cloudflare\CloudflareDnsService;
 use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
-use Google\Service\Indexing;
-use Google\Service\Indexing\UrlNotification;
 use Google\Service\SearchConsole;
 use Google\Service\SiteVerification;
 use Google\Service\SiteVerification\SiteVerificationWebResourceGettokenRequest;
 use Google\Service\SiteVerification\SiteVerificationWebResourceGettokenRequestSite;
 use Google\Service\SiteVerification\SiteVerificationWebResourceResource;
 use Google\Service\SiteVerification\SiteVerificationWebResourceResourceSite;
-use GuzzleHttp\Client;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -33,7 +27,8 @@ class GoogleSearchConsoleService
     public function __construct(
         private CloudflareDnsService $dnsService,
         private ApiUsageRecorder $usageRecorder,
-        private ApiUsageContext $usageContext,
+        private GoogleSearchConsoleSettings $settings,
+        private GoogleSearchConsoleOAuthService $oauth,
     ) {}
 
     /**
@@ -44,6 +39,7 @@ class GoogleSearchConsoleService
      */
     public function verifyProperty(string $domain): bool
     {
+        $this->ensureEnabled();
         $domain = $this->normalizeDomain($domain);
         $verification = new SiteVerification($this->client());
 
@@ -107,6 +103,7 @@ class GoogleSearchConsoleService
      */
     public function submitSitemap(string $domain, string $sitemapUrl = ''): bool
     {
+        $this->ensureEnabled();
         $domain = $this->normalizeDomain($domain);
         $sitemapUrl = $sitemapUrl !== '' ? $sitemapUrl : "https://{$domain}/sitemap.xml";
 
@@ -123,105 +120,11 @@ class GoogleSearchConsoleService
     }
 
     /**
-     * Request indexing for the given URLs via the Indexing API.
+     * Full workflow: register the domain and submit its sitemap for discovery.
      *
-     * @param  list<string>  $urls
-     * @return array<string, bool> URL => success
-     */
-    public function requestIndexing(array $urls): array
-    {
-        $results = [];
-
-        foreach ($urls as $url) {
-            $status = $this->publishUrl($url);
-            $results[$url] = $status >= 200 && $status < 300;
-        }
-
-        return $results;
-    }
-
-    /**
-     * Publish a single URL_UPDATED notification. Returns the HTTP status code.
-     */
-    public function publishUrl(string $url): int
-    {
-        $notification = new UrlNotification;
-        $notification->setUrl($url);
-        $notification->setType('URL_UPDATED');
-        $startedAt = microtime(true);
-
-        try {
-            (new Indexing($this->client()))->urlNotifications->publish($notification);
-            $this->recordUsage('publish URL for indexing', 200, true, $startedAt);
-
-            return 200;
-        } catch (GoogleServiceException $exception) {
-            $this->recordUsage('publish URL for indexing', (int) $exception->getCode(), false, $startedAt);
-            Log::warning('Google indexing request failed.', [
-                'url' => $url,
-                'status' => $exception->getCode(),
-                'error' => $exception->getErrors()[0]['message'] ?? null,
-            ]);
-
-            return (int) $exception->getCode();
-        } catch (Throwable $exception) {
-            $this->recordUsage('publish URL for indexing', 0, false, $startedAt);
-
-            throw $exception;
-        }
-    }
-
-    /**
-     * Collect all page URLs from a sitemap, following sitemap indexes.
-     *
-     * @return list<string>
-     */
-    public function fetchSitemapUrls(string $sitemapUrl, int $depth = 0): array
-    {
-        if ($depth > 3) {
-            return [];
-        }
-
-        $response = Http::timeout(30)
-            ->withAttributes([
-                'api_usage_provider' => 'sitemap',
-                'api_usage_operation' => 'fetch_sitemap',
-            ])
-            ->get($sitemapUrl);
-        if (! $response->successful()) {
-            Log::warning('Unable to fetch sitemap.', ['sitemap' => $sitemapUrl, 'status' => $response->status()]);
-
-            return [];
-        }
-
-        $previous = libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($response->body(), 'SimpleXMLElement', LIBXML_NONET);
-        libxml_use_internal_errors($previous);
-
-        if ($xml === false) {
-            return [];
-        }
-
-        $urls = [];
-
-        if ($xml->getName() === 'sitemapindex') {
-            foreach ($xml->sitemap as $child) {
-                $urls = [...$urls, ...$this->fetchSitemapUrls(trim((string) $child->loc), $depth + 1)];
-            }
-        } else {
-            foreach ($xml->url as $entry) {
-                $loc = trim((string) $entry->loc);
-                if ($loc !== '') {
-                    $urls[] = $loc;
-                }
-            }
-        }
-
-        return array_values(array_unique($urls));
-    }
-
-    /**
-     * Full workflow: register the domain, submit the sitemap, and queue indexing of every sitemap URL.
+     * Google's Indexing API is intentionally not used here because it only
+     * supports JobPosting and livestream BroadcastEvent pages. Submitting the
+     * sitemap is the supported bulk discovery mechanism for ordinary sites.
      *
      * @return array{verified: bool, sitemap: bool, indexing_queued: bool}
      */
@@ -233,14 +136,43 @@ class GoogleSearchConsoleService
         $verified = $this->verifyProperty($domain);
         $sitemap = $this->submitSitemap($domain, $sitemapUrl);
 
-        RequestGoogleIndexing::dispatch(
-            $domain,
-            $sitemapUrl,
-            0,
-            $this->usageContext->deploymentId(),
-        );
+        return ['verified' => $verified, 'sitemap' => $sitemap, 'indexing_queued' => false];
+    }
 
-        return ['verified' => $verified, 'sitemap' => $sitemap, 'indexing_queued' => true];
+    public function isEnabled(): bool
+    {
+        return $this->settings->clientConfigured()
+            && $this->settings->connected()
+            && $this->settings->active();
+    }
+
+    /**
+     * Validate credentials and confirm that the Search Console API is reachable.
+     *
+     * @return array{accessible_properties: int, account_email: ?string}
+     */
+    public function testConnection(): array
+    {
+        $startedAt = microtime(true);
+
+        try {
+            $response = (new SearchConsole($this->client()))
+                ->sites
+                ->listSites();
+            $this->recordUsage('test account connection', 200, true, $startedAt);
+
+            return [
+                'accessible_properties' => count($response->getSiteEntry() ?? []),
+                'account_email' => $this->settings->accountEmail(),
+            ];
+        } catch (GoogleServiceException $exception) {
+            $this->recordUsage('test account connection', (int) $exception->getCode(), false, $startedAt);
+            $this->fail('test account connection', $this->settings->accountEmail() ?? 'connected account', $exception);
+        } catch (Throwable $exception) {
+            $this->recordUsage('test account connection', 0, false, $startedAt);
+
+            throw $exception;
+        }
     }
 
     private function client(): GoogleClient
@@ -249,25 +181,14 @@ class GoogleSearchConsoleService
             return $this->client;
         }
 
-        $path = (string) config('services.google_search_console.credentials_path');
+        return $this->client = $this->oauth->authorizedClient();
+    }
 
-        if ($path === '' || ! is_file($path)) {
-            throw new RuntimeException('Google service account credentials file is not configured.');
+    private function ensureEnabled(): void
+    {
+        if (! $this->isEnabled()) {
+            throw new RuntimeException('Google Search Console must be configured, connected, and active.');
         }
-
-        $client = new GoogleClient;
-        $client->setApplicationName((string) config('app.name'));
-        $client->setAuthConfig($path);
-        $client->setScopes([
-            SiteVerification::SITEVERIFICATION,
-            SearchConsole::WEBMASTERS,
-            Indexing::INDEXING,
-        ]);
-        $client->setHttpClient(new Client([
-            'timeout' => (int) config('services.google_search_console.timeout', 30),
-        ]));
-
-        return $this->client = $client;
     }
 
     /**

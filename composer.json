@@ -77,8 +77,7 @@
     "extra": {
         "google/apiclient-services": [
             "SearchConsole",
-            "SiteVerification",
-            "Indexing"
+            "SiteVerification"
         ],
         "laravel": {
             "dont-discover": []

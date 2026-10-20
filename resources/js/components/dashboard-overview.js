@@ -232,7 +232,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                 'provisioning_web_app': 'Creating WebApp',
                 'uploading_and_extracting_archive': 'Uploading Files',
                 'configuring_cloudflare_workers': 'Configuring Cloudflare',
-                'submitting_to_google_search_console': 'GSC Indexing',
+                'submitting_to_google_search_console': 'GSC Submission',
                 'completed': 'Done',
                 'failed': 'Failed',
             };

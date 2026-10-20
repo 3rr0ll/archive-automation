@@ -72,11 +72,10 @@ return [
     ],
 
     'google_search_console' => [
-        'enabled' => (bool) env('GOOGLE_SEARCH_CONSOLE_ENABLED', false),
-        'credentials_path' => env('GOOGLE_SEARCH_CONSOLE_CREDENTIALS_PATH'),
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
         'timeout' => (int) env('GOOGLE_SEARCH_CONSOLE_TIMEOUT', 30),
-        'indexing_daily_quota' => (int) env('GOOGLE_INDEXING_DAILY_QUOTA', 200),
-        'indexing_max_rounds' => (int) env('GOOGLE_INDEXING_MAX_ROUNDS', 60),
     ],
 
     'sftp' => [

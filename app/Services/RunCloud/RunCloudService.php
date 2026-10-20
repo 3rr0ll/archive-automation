@@ -175,7 +175,7 @@ class RunCloudService
         $dnsSetup = null;
         try {
             $resolvedIp = $serverIp ?: $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, false);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, true);
         } catch (Exception $e) {
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
@@ -207,7 +207,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / DNS-01 - CF API key)",
+            'ssl' => "Let's Encrypt (Advanced SSL / HTTP-01)",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
@@ -560,7 +560,8 @@ class RunCloudService
             throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
         }
 
-        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        //$authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
+        $authMethod = 'http-01';
         $externalApiId = $this->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
             Config::get('services.runcloud.cloudflare_external_api_id'),
@@ -571,12 +572,12 @@ class RunCloudService
             'provider' => 'letsencrypt',
             'authorizationMethod' => $authMethod,
             'environment' => 'live',
-            'enableHttp' => false, // Server Side HTTPS Redirection (plain HTTP redirected to HTTPS)
+            'enableHttp' => true, // Server Side HTTPS Redirection (plain HTTP redirected to HTTPS)
             'enableHsts' => false,
             'rsa_key_size' => 2048,
         ];
 
-        if ($authMethod === 'dns-01') {
+        if ($authMethod === 'http-01') {
             if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
                 throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
             }
@@ -673,8 +674,9 @@ class RunCloudService
      */
     protected function configureAutoSsl(int $serverId, int $appId): array
     {
-        $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
-        $externalApiId = $this->getEnvValue(
+       // $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
+       $authMethod = 'http-01';
+       $externalApiId = $this->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
             Config::get('services.runcloud.cloudflare_external_api_id'),
         );
@@ -689,7 +691,7 @@ class RunCloudService
             'rsa_key_size' => 2048,
         ];
 
-        if ($authMethod === 'dns-01') {
+        if ($authMethod === 'http-01') {
             if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
                 throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
             }
