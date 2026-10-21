@@ -45,15 +45,11 @@ class RunCloudSslService
             throw new Exception("RunCloud could not find domain [{$domain}] to configure Advanced SSL.");
         }
 
-        // 3. Resolve Cloudflare External API integration ID
+        // 3. Resolve Cloudflare External API integration ID (defaults to 42310 if not set)
         $externalApiId = $this->client->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
-            Config::get('services.runcloud.cloudflare_external_api_id')
-        );
-
-        if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
-            throw new Exception('RunCloud Cloudflare External API ID is not configured. Set RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID in your environment.');
-        }
+            Config::get('services.runcloud.cloudflare_external_api_id', 42310)
+        ) ?: 42310;
 
         // 4. Build payload matching RunCloud DNS-01 configuration:
         // - Authorization: dns-01
