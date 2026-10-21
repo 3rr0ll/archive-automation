@@ -157,21 +157,15 @@ class RunCloudService
 
 
 
-        // 6. Configure Advanced SSL / AutoSSL (passing domainId skips GET /domains if already present)
-        $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
+        // 6. Configure SSL
+        if ($authMethod === 'dns-01') {
+            $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
+        } else {
+            $sslConfig = $this->sslService->requestSsl($server, $appId);
+        }
 
-        // 7. If DNS was initialized unproxied for HTTP-01 validation, only switch Cloudflare proxy back ON
-        // once SSL is confirmed issued by RunCloud.
+        // 7. If DNS was initialized unproxied for HTTP-01 validation, switch Cloudflare proxy back ON
         if (! $initialProxyStatus) {
-            $domainId = $domainId ?? $this->webAppService->getDomainId($server, $appId, $domain);
-            $sslIssued = $this->sslService->waitForSslIssued($server, $appId, $domain, $domainId);
-
-            if (! $sslIssued) {
-                throw new Exception(
-                    "SSL issuance was not confirmed for {$domain}. Cloudflare proxy remains disabled for HTTP-01 validation."
-                );
-            }
-
             try {
                 $this->cloudflareDnsService->setProxyStatus($domain, true);
                 if (is_array($dnsSetup)) {
@@ -207,7 +201,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / {$sslAuthLabel})",
+            'ssl' => "Let's Encrypt ({$sslAuthLabel})",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
