@@ -16,13 +16,13 @@ class GoogleSearchConsoleController extends Controller
     ) {}
 
     /**
-     * Run full registration: verify domain, submit sitemap, queue automatic indexing.
+     * Run full registration: verify domain and submit its sitemap for discovery.
      */
     public function registerDomain(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
-            'sitemap_url' => ['nullable', 'url'],
+            'domain' => ['required', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i'],
+            'sitemap_url' => ['nullable', 'url:http,https'],
         ]);
 
         $domain = $validated['domain'];
@@ -33,7 +33,7 @@ class GoogleSearchConsoleController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Google Search Console registration initiated.',
+                'message' => 'Domain verified and sitemap submitted to Google Search Console.',
                 'data' => $result,
             ]);
         } catch (Exception $e) {
@@ -56,7 +56,7 @@ class GoogleSearchConsoleController extends Controller
     public function verifyProperty(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
+            'domain' => ['required', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i'],
         ]);
 
         $domain = $validated['domain'];
@@ -92,8 +92,8 @@ class GoogleSearchConsoleController extends Controller
     public function submitSitemap(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
-            'sitemap_url' => ['nullable', 'url'],
+            'domain' => ['required', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i'],
+            'sitemap_url' => ['nullable', 'url:http,https'],
         ]);
 
         $domain = $validated['domain'];
@@ -125,70 +125,4 @@ class GoogleSearchConsoleController extends Controller
         }
     }
 
-    /**
-     * Request indexing for specific URLs directly via Indexing API.
-     */
-    public function requestIndexing(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'urls' => ['required', 'array', 'min:1'],
-            'urls.*' => ['required', 'url'],
-        ]);
-
-        $urls = $validated['urls'];
-
-        try {
-            $results = $this->searchConsoleService->requestIndexing($urls);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Indexing request processed.',
-                'data' => [
-                    'results' => $results,
-                ],
-            ]);
-        } catch (Exception $e) {
-            Log::error('GSC request indexing API failed', [
-                'urls' => $urls,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to request indexing.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Test fetching and parsing sitemap URLs.
-     */
-    public function testFetchSitemap(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'sitemap_url' => ['required', 'url'],
-        ]);
-
-        $sitemapUrl = $validated['sitemap_url'];
-
-        try {
-            $urls = $this->searchConsoleService->fetchSitemapUrls($sitemapUrl);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'sitemap_url' => $sitemapUrl,
-                    'total_urls' => count($urls),
-                    'urls' => array_slice($urls, 0, 50), // Return preview of first 50
-                ],
-            ]);
-        } catch (Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch sitemap.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
 }

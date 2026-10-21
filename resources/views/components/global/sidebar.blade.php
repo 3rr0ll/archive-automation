@@ -53,6 +53,14 @@
                         <span class="text-sm font-medium truncate">Environment Variables</span>
                     </a>
                 </li>
+                @if(auth()->user()?->isAdmin())
+                    <li>
+                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-search class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Google Search Console</span>
+                        </a>
+                    </li>
+                @endif
                 <li>
                     <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                         <x-lucide-server class="size-4.5 shrink-0" />
@@ -112,6 +120,14 @@
                         <span class="text-sm font-medium truncate">Environment Variables</span>
                     </a>
                 </li>
+                @if(auth()->user()?->isAdmin())
+                    <li>
+                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-search class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Google Search Console</span>
+                        </a>
+                    </li>
+                @endif
                 <li>
                     <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                         <x-lucide-server class="size-4.5 shrink-0" />

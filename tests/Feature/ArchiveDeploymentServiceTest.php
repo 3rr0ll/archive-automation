@@ -29,6 +29,7 @@ class ArchiveDeploymentServiceTest extends TestCase
         $searchConsoleService = null,
     ): ArchiveDeploymentService {
         $searchConsoleService ??= Mockery::mock(GoogleSearchConsoleService::class);
+        $searchConsoleService->shouldReceive('isEnabled')->andReturnFalse()->byDefault();
 
         return new ArchiveDeploymentService(
             $archiveService,

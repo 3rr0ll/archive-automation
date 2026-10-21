@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\GoogleSearchConsoleOAuthController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
@@ -32,6 +33,15 @@ Route::middleware('auth')->group(function (): void {
             });
         return view('pages.environment-variables', compact('variables'));
     })->name('environment-variables');
+    Route::get('/google-search-console', function () {
+        return view('pages.google-search-console');
+    })->middleware('admin')->name('google-search-console');
+    Route::middleware('admin')->group(function (): void {
+        Route::get('/google-search-console/authorize', [GoogleSearchConsoleOAuthController::class, 'redirect'])
+            ->name('google-search-console.authorize');
+        Route::get('/google-search-console/callback', [GoogleSearchConsoleOAuthController::class, 'callback'])
+            ->name('google-search-console.callback');
+    });
     Route::get('/servers', function () {
         $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
         return view('pages.servers', compact('servers'));

@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
 use App\Http\Controllers\Api\EnvironmentVariableController;
+use App\Http\Controllers\Api\GoogleSearchConsoleController;
+use App\Http\Controllers\Api\GoogleSearchConsoleSettingsController;
 use App\Http\Controllers\Api\InternetArchiveSettingsController;
 use App\Http\Controllers\Api\RunCloudController;
 use App\Http\Controllers\Api\ServerController;
@@ -44,6 +46,14 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::get('/admin/settings/internet-archive', [InternetArchiveSettingsController::class, 'show']);
     Route::put('/admin/settings/internet-archive', [InternetArchiveSettingsController::class, 'update']);
     Route::post('/admin/settings/internet-archive/test', [InternetArchiveSettingsController::class, 'test']);
+
+    Route::get('/admin/google-search-console/settings', [GoogleSearchConsoleSettingsController::class, 'show']);
+    Route::patch('/admin/google-search-console/settings', [GoogleSearchConsoleSettingsController::class, 'update']);
+    Route::post('/admin/google-search-console/test', [GoogleSearchConsoleSettingsController::class, 'test']);
+    Route::delete('/admin/google-search-console/connection', [GoogleSearchConsoleSettingsController::class, 'disconnect']);
+    Route::post('/admin/google-search-console/domains/register', [GoogleSearchConsoleController::class, 'registerDomain']);
+    Route::post('/admin/google-search-console/domains/verify', [GoogleSearchConsoleController::class, 'verifyProperty']);
+    Route::post('/admin/google-search-console/sitemaps', [GoogleSearchConsoleController::class, 'submitSitemap']);
 
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
     Route::post('/servers/sync', [ServerController::class, 'sync'])->name('servers.sync');

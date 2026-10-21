@@ -2,31 +2,20 @@
 
 namespace App\Jobs;
 
-use App\Services\ApiUsage\ApiUsageContext;
-use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Requests Google indexing for every URL in a domain's sitemap.
+ * Compatibility handler for jobs queued by older application versions.
  *
- * Respects the Indexing API daily quota: processes up to the configured
- * batch size, then re-dispatches itself (next day on quota exhaustion)
- * until every URL has been submitted. Submitted URLs are remembered so
- * retries and re-runs do not resubmit them.
+ * General website URLs must not be sent to Google's Indexing API. New
+ * deployments submit a sitemap instead, and any existing queued instances of
+ * this job complete safely without publishing URL notifications.
  */
 class RequestGoogleIndexing implements ShouldQueue
 {
     use Queueable;
-
-    public int $tries = 3;
-
-    public int $timeout = 900;
-
-    /** @var list<int> */
-    public array $backoff = [60, 600];
 
     public function __construct(
         public string $domain,
@@ -35,71 +24,11 @@ class RequestGoogleIndexing implements ShouldQueue
         public ?int $deploymentId = null,
     ) {}
 
-    public function handle(GoogleSearchConsoleService $searchConsole, ?ApiUsageContext $apiUsageContext = null): void
+    public function handle(): void
     {
-        if ($this->deploymentId === null) {
-            $this->process($searchConsole);
-
-            return;
-        }
-
-        ($apiUsageContext ?? app(ApiUsageContext::class))->forDeployment(
-            $this->deploymentId,
-            fn () => $this->process($searchConsole),
-        );
-    }
-
-    private function process(GoogleSearchConsoleService $searchConsole): void
-    {
-        $dailyQuota = (int) config('services.google_search_console.indexing_daily_quota', 200);
-        $maxRounds = (int) config('services.google_search_console.indexing_max_rounds', 60);
-        $cacheKey = 'gsc_indexed_urls:'.$this->domain;
-
-        $urls = $searchConsole->fetchSitemapUrls($this->sitemapUrl);
-        if ($urls === []) {
-            $urls = ["https://{$this->domain}/"];
-        }
-
-        /** @var array<string, true> $submitted */
-        $submitted = Cache::get($cacheKey, []);
-        $pending = array_values(array_filter($urls, fn (string $url): bool => ! isset($submitted[$url])));
-
-        $sentThisRun = 0;
-        $quotaExhausted = false;
-
-        foreach ($pending as $url) {
-            if ($sentThisRun >= $dailyQuota) {
-                $quotaExhausted = true;
-                break;
-            }
-
-            $status = $searchConsole->publishUrl($url);
-
-            if ($status === 429) {
-                $quotaExhausted = true;
-                break;
-            }
-
-            $sentThisRun++;
-
-            if ($status >= 200 && $status < 300) {
-                $submitted[$url] = true;
-                Cache::put($cacheKey, $submitted, now()->addDays(30));
-            }
-        }
-
-        $remaining = count($urls) - count(array_intersect_key(array_flip($urls), $submitted));
-
-        Log::info('Google indexing batch finished.', [
+        Log::notice('Skipped deprecated Google Indexing API job; sitemap submission is used instead.', [
             'domain' => $this->domain,
-            'sent' => $sentThisRun,
-            'remaining' => $remaining,
-            'round' => $this->rounds,
+            'deployment_id' => $this->deploymentId,
         ]);
-
-        if ($remaining > 0 && $this->rounds < $maxRounds) {
-            $delay = $quotaExhausted ? now()->addDay() : now()->addHour();
-            self::dispatch($this->domain, $this->sitemapUrl, $this->rounds + 1, $this->deploymentId)->delay($delay);
-        }
     }
 }
