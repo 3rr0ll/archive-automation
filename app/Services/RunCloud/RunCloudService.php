@@ -306,6 +306,16 @@ class RunCloudService
         return $this->sslService->requestSsl($serverId, $appId, $customPayload);
     }
 
+    public function ensureSsl(int $serverId, int $appId, ?array $customPayload = null): array
+    {
+        return $this->sslService->ensureSsl($serverId, $appId, $customPayload);
+    }
+
+    public function getActiveSsl(int $serverId, int $appId, ?int $domainId = null): ?array
+    {
+        return $this->sslService->getActiveSsl($serverId, $appId, $domainId);
+    }
+
     public function getSsl(int $serverId, int $appId): array
     {
         return $this->sslService->getSsl($serverId, $appId);

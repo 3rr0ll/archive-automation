@@ -44,6 +44,19 @@ class RunCloudSslService
             throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
         }
 
+        // Check if an active certificate is already installed for this domain/app
+        $existingSsl = $this->getActiveSsl($serverId, $appId, $domainId);
+        if ($existingSsl !== null) {
+            Log::info('RunCloud SSL certificate is already active, reusing existing certificate', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain_id' => $domainId,
+                'domain' => $domain,
+            ]);
+
+            return $existingSsl;
+        }
+
         $authMethod = (string) $this->client->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
         $externalApiId = $this->client->getEnvValue(
             'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
@@ -55,7 +68,7 @@ class RunCloudSslService
             'provider' => 'letsencrypt',
             'authorizationMethod' => $authMethod,
             'environment' => 'live',
-            'enableHttp' => false,
+            'enableHttp' => ($authMethod === 'http-01'),
             'enableHsts' => false,
             'rsa_key_size' => 2048,
         ];
@@ -160,6 +173,63 @@ class RunCloudSslService
     }
 
     /**
+     * Get SSL configuration/status for a specific domain under Advanced SSL mode.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDomainSsl(int $serverId, int $appId, int $domainId): array
+    {
+        $response = $this->client->client()->get("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl");
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Check if an active/valid certificate is already deployed for an app or domain.
+     * Returns the certificate data if active, or null if no valid certificate exists.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getActiveSsl(int $serverId, int $appId, ?int $domainId = null): ?array
+    {
+        $data = null;
+
+        // 1. Check domain-level SSL endpoint if domainId provided
+        if ($domainId) {
+            try {
+                $data = $this->getDomainSsl($serverId, $appId, $domainId);
+            } catch (Exception) {
+                $data = null;
+            }
+        }
+
+        // 2. Fall back to app-level SSL endpoint
+        if (empty($data)) {
+            try {
+                $response = $this->client->client()->get("/servers/{$serverId}/webapps/{$appId}/ssl");
+                if ($response->successful()) {
+                    $data = $response->json('data') ?? $response->json() ?? [];
+                }
+            } catch (Exception) {
+                $data = null;
+            }
+        }
+
+        if (! empty($data)) {
+            $status = strtolower((string) ($data['status'] ?? $data['state'] ?? ''));
+            if (in_array($status, ['success', 'deployed', 'active', 'installed', 'valid'])) {
+                return $data;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Get SSL configuration/status for a web application.
      *
      * @return array<string, mixed>
@@ -175,6 +245,22 @@ class RunCloudSslService
         }
 
         return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Check first if an active cert exists; if not, request SSL.
+     *
+     * @return array<string, mixed>
+     */
+    public function ensureSsl(int $serverId, int $appId, ?array $customPayload = null): array
+    {
+        $active = $this->getActiveSsl($serverId, $appId);
+        if ($active !== null) {
+            Log::info("Reusing existing active SSL certificate for app {$appId}");
+            return $active;
+        }
+
+        return $this->requestSsl($serverId, $appId, $customPayload);
     }
 
     /**
