@@ -149,6 +149,8 @@ class RunCloudWebAppService
         return [
             'name' => $webAppName,
             'domainName' => $domain,
+            'www' => true,
+            'redirection' => 'none',
             'user' => $systemUserId,
             'publicPath' => '/public_html',
             'phpVersion' => self::DEFAULT_PHP_VERSION,
@@ -189,7 +191,7 @@ class RunCloudWebAppService
             'type' => 'primary',
         ];
 
-        // 1. If domainId is provided, update existing primary domain configuration directly
+        // 1. If domainId is provided, attempt updating existing primary domain configuration
         if ($domainId) {
             $updateResponse = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
             if ($updateResponse->status() === 405 || $updateResponse->status() === 404) {
@@ -208,16 +210,28 @@ class RunCloudWebAppService
             }
         }
 
-        // 2. Attach domain or update via POST
+        // 2. Attach domain with www flag
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
 
-        if ($response->status() === 422 || ! $response->successful()) {
-            Log::info('Domain attach returned non-200, verifying existing domain configuration', [
-                'status' => $response->status(),
-                'server_id' => $serverId,
-                'app_id' => $appId,
-                'domain' => $domain,
-            ]);
+        // 3. If primary domain was already attached without www, attach "www." as an alias domain
+        if (! str_starts_with($domain, 'www.')) {
+            $wwwDomain = 'www.'.$domain;
+            try {
+                $aliasResponse = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", [
+                    'name' => $wwwDomain,
+                    'type' => 'alias',
+                ]);
+
+                if ($aliasResponse->successful()) {
+                    Log::info('Successfully attached www alias domain', [
+                        'server_id' => $serverId,
+                        'app_id' => $appId,
+                        'alias' => $wwwDomain,
+                    ]);
+                }
+            } catch (Exception $e) {
+                Log::warning('Could not attach www alias domain: '.$e->getMessage());
+            }
         }
 
         return $response->json('data') ?? $response->json() ?? [];
