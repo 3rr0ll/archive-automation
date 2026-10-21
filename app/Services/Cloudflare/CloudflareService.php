@@ -101,6 +101,11 @@ class CloudflareService
         return $this->dnsService->configureDns($domain, $records);
     }
 
+    public function setProxyStatus(string $domain, bool $proxied = true): array
+    {
+        return $this->dnsService->setProxyStatus($domain, $proxied);
+    }
+
     // --- Zone & Client Operations ---
 
     public function getZoneId(string $domain): string
