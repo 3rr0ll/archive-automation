@@ -1,91 +1,155 @@
 import {
-    disconnectGoogle,
-    fetchGoogleSettings,
+    activateGoogleAccount,
+    createGoogleAccount,
+    deleteGoogleAccount,
+    fetchGoogleAccounts,
     registerGoogleDomain,
-    testGoogleConnection,
-    updateGoogleActivation,
+    testGoogleAccount,
+    updateGoogleAccount,
 } from '../services/google-search-console-service.js';
+
+const emptyAccountForm = () => ({
+    name: '',
+    owner_email: '',
+    credentials_json: '',
+    is_active: false,
+});
 
 export function googleSearchConsolePage() {
     return {
-        settings: {
-            client_configured: false,
-            connected: false,
-            active: false,
-            account_email: null,
-            redirect_uri: null,
-        },
+        accounts: [],
+        legacyFallbackConfigured: false,
         isLoading: true,
-        isUpdating: false,
-        isTesting: false,
+        isSaving: false,
+        testingId: null,
+        activatingId: null,
+        showAccountForm: false,
+        editingId: null,
+        accountForm: emptyAccountForm(),
         isRegistering: false,
         registrationResult: null,
-        domainForm: {
-            domain: '',
-            sitemap_url: '',
+        domainForm: { domain: '', sitemap_url: '' },
+
+        get hasActiveAccount() {
+            return this.accounts.some((account) => account.is_active) || this.legacyFallbackConfigured;
         },
 
         async init() {
+            await this.loadAccounts();
+        },
+
+        async loadAccounts() {
+            this.isLoading = true;
             try {
-                const response = await fetchGoogleSettings();
-                this.settings = response.data;
+                const response = await fetchGoogleAccounts();
+                this.accounts = response.data || [];
+                this.legacyFallbackConfigured = Boolean(response.legacy_fallback_configured);
             } catch (error) {
-                window.toast?.error(error.message || 'Unable to load Google settings.');
+                window.toast?.error(error.message || 'Unable to load Google service accounts.');
             } finally {
                 this.isLoading = false;
             }
         },
 
-        async toggleActive() {
-            this.isUpdating = true;
+        openCreateForm() {
+            this.editingId = null;
+            this.accountForm = emptyAccountForm();
+            this.showAccountForm = true;
+        },
+
+        openEditForm(account) {
+            this.editingId = account.id;
+            this.accountForm = {
+                name: account.name,
+                owner_email: account.owner_email || '',
+                credentials_json: '',
+                is_active: account.is_active,
+            };
+            this.showAccountForm = true;
+        },
+
+        closeAccountForm() {
+            this.showAccountForm = false;
+            this.editingId = null;
+            this.accountForm = emptyAccountForm();
+        },
+
+        async saveAccount() {
+            this.isSaving = true;
             try {
-                const response = await updateGoogleActivation(!this.settings.active);
-                this.settings = response.data;
+                const payload = {
+                    name: this.accountForm.name.trim(),
+                    owner_email: this.accountForm.owner_email.trim() || null,
+                    is_active: Boolean(this.accountForm.is_active),
+                };
+                if (this.accountForm.credentials_json.trim()) {
+                    payload.credentials_json = this.accountForm.credentials_json.trim();
+                }
+
+                const response = this.editingId
+                    ? await updateGoogleAccount(this.editingId, payload)
+                    : await createGoogleAccount(payload);
                 window.toast?.success(response.message);
+                this.closeAccountForm();
+                await this.loadAccounts();
             } catch (error) {
-                window.toast?.error(error.message || 'Unable to update Google automation.');
+                const validationMessage = Object.values(error.errors || {})?.[0]?.[0];
+                window.toast?.error(validationMessage || error.message || 'Unable to save Google service account.');
             } finally {
-                this.isUpdating = false;
+                this.isSaving = false;
             }
         },
 
-        async testConnection() {
-            this.isTesting = true;
+        async activateAccount(account) {
+            this.activatingId = account.id;
             try {
-                const response = await testGoogleConnection();
+                const response = await activateGoogleAccount(account.id);
+                window.toast?.success(response.message);
+                await this.loadAccounts();
+            } catch (error) {
+                window.toast?.error(error.message || 'Unable to activate the account.');
+            } finally {
+                this.activatingId = null;
+            }
+        },
+
+        async testAccount(account) {
+            this.testingId = account.id;
+            try {
+                const response = await testGoogleAccount(account.id);
                 window.toast?.success(`${response.message} ${response.data.accessible_properties} properties accessible.`);
             } catch (error) {
                 window.toast?.error(error.message || 'Google Search Console connection failed.');
             } finally {
-                this.isTesting = false;
+                this.testingId = null;
             }
         },
 
-        disconnect() {
+        deleteAccount(account) {
             const remove = async () => {
                 try {
-                    const response = await disconnectGoogle();
-                    this.settings = response.data;
+                    const response = await deleteGoogleAccount(account.id);
                     window.toast?.success(response.message);
+                    await this.loadAccounts();
                 } catch (error) {
-                    window.toast?.error(error.message || 'Unable to disconnect Google.');
+                    window.toast?.error(error.message || 'Unable to delete the account.');
                 }
             };
 
             if (window.confirmModal) {
                 window.confirmModal.show({
-                    title: 'Disconnect Google Search Console',
-                    message: 'This removes the encrypted OAuth refresh token and disables automatic Search Console actions.',
-                    key: this.settings.account_email || 'Google connection',
+                    title: 'Delete Google service account',
+                    message: 'The encrypted JSON key will be permanently removed.',
+                    key: account.client_email,
                     type: 'danger',
-                    confirmText: 'Disconnect',
+                    confirmText: 'Delete',
                     cancelText: 'Cancel',
                     onConfirm: remove,
                 });
                 return;
             }
 
-            if (window.confirm('Disconnect Google Search Console?')) remove();
+            if (window.confirm(`Delete ${account.client_email}?`)) remove();
         },
 
         async registerDomain() {
@@ -93,18 +157,12 @@ export function googleSearchConsolePage() {
             this.registrationResult = null;
             try {
                 const payload = { domain: this.domainForm.domain.trim() };
-                if (this.domainForm.sitemap_url.trim()) {
-                    payload.sitemap_url = this.domainForm.sitemap_url.trim();
-                }
-
+                if (this.domainForm.sitemap_url.trim()) payload.sitemap_url = this.domainForm.sitemap_url.trim();
                 const response = await registerGoogleDomain(payload);
                 this.registrationResult = { success: true, message: response.message };
                 window.toast?.success(response.message);
             } catch (error) {
-                this.registrationResult = {
-                    success: false,
-                    message: error.message || 'Unable to register the domain.',
-                };
+                this.registrationResult = { success: false, message: error.message || 'Unable to register the domain.' };
                 window.toast?.error(this.registrationResult.message);
             } finally {
                 this.isRegistering = false;

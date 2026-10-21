@@ -3,46 +3,85 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Services\GoogleSearchConsole\GoogleSearchConsoleOAuthService;
-use App\Services\GoogleSearchConsole\GoogleSearchConsoleSettings;
-use Illuminate\Http\RedirectResponse;
+use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class GoogleSearchConsoleOAuthController extends Controller
 {
-    public function redirect(Request $request, GoogleSearchConsoleOAuthService $oauth): RedirectResponse
+    public function __construct(
+        private GoogleSearchConsoleService $searchConsoleService,
+    ) {}
+
+    /**
+     * Handle the OAuth redirect callback from Google.
+     */
+    public function handleCallback(Request $request)
     {
-        try {
-            return redirect()->away($oauth->authorizationUrl($request));
-        } catch (Throwable $exception) {
-            report($exception);
+        if ($request->has('error')) {
+            $error = (string) $request->query('error_description', $request->query('error'));
+            Log::error('Google OAuth callback error', ['error' => $error]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Google authorization denied: ' . $error,
+                ], 400);
+            }
 
             return redirect()->route('google-search-console')
-                ->with('google_error', $exception->getMessage());
+                ->with('error', 'Google authorization failed: ' . $error);
         }
-    }
 
-    public function callback(
-        Request $request,
-        GoogleSearchConsoleOAuthService $oauth,
-        GoogleSearchConsoleSettings $settings,
-    ): RedirectResponse {
+        $code = (string) $request->query('code');
+        if (blank($code)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing authorization code in callback query parameter.',
+                ], 400);
+            }
+
+            return redirect()->route('google-search-console')
+                ->with('error', 'Missing authorization code from Google.');
+        }
+
         try {
-            $connection = $oauth->exchangeCode($request);
-            $settings->saveConnection(
-                $connection['refresh_token'],
-                $connection['email'],
+            $account = $this->searchConsoleService->handleOAuthCallback(
+                $code,
                 $request->user()?->id,
             );
 
-            return redirect()->route('google-search-console')
-                ->with('google_success', 'Google Search Console connected successfully.');
-        } catch (Throwable $exception) {
-            report($exception);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Google Search Console account linked and activated successfully.',
+                    'data' => [
+                        'id' => $account->id,
+                        'name' => $account->name,
+                        'client_email' => $account->client_email,
+                        'is_active' => $account->is_active,
+                    ],
+                ]);
+            }
 
             return redirect()->route('google-search-console')
-                ->with('google_error', $exception->getMessage());
+                ->with('success', "Google Search Console account {$account->client_email} connected successfully!");
+        } catch (Throwable $e) {
+            Log::error('Google OAuth callback exchange failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to link Google account: ' . $e->getMessage(),
+                ], 500);
+            }
+
+            return redirect()->route('google-search-console')
+                ->with('error', 'Failed to link Google account: ' . $e->getMessage());
         }
     }
 }

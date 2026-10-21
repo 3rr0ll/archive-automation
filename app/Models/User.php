@@ -57,4 +57,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(EnvironmentVariable::class);
     }
+
+    public function googleSearchConsoleAccounts(): HasMany
+    {
+        return $this->hasMany(GoogleSearchConsoleAccount::class);
+    }
 }

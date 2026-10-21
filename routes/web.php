@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Web\DashboardController;
-use App\Http\Controllers\Web\GoogleSearchConsoleOAuthController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
@@ -36,12 +35,6 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/google-search-console', function () {
         return view('pages.google-search-console');
     })->middleware('admin')->name('google-search-console');
-    Route::middleware('admin')->group(function (): void {
-        Route::get('/google-search-console/authorize', [GoogleSearchConsoleOAuthController::class, 'redirect'])
-            ->name('google-search-console.authorize');
-        Route::get('/google-search-console/callback', [GoogleSearchConsoleOAuthController::class, 'callback'])
-            ->name('google-search-console.callback');
-    });
     Route::get('/servers', function () {
         $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
         return view('pages.servers', compact('servers'));
@@ -54,4 +47,12 @@ Route::middleware('auth')->group(function (): void {
         $deployment->load(['server', 'user']);
         return view('pages.deployment-logs', compact('deployment'));
     })->name('deployments.logs.page');
+    Route::get('/google/redirect', function () {
+        return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)->createOAuthUrl());
+    })->middleware('admin')->name('google.redirect');
 });
+
+// Google OAuth callback (matches GOOGLE_REDIRECT_URI)
+Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAuthController::class, 'handleCallback'])
+    ->name('google.callback');
+
