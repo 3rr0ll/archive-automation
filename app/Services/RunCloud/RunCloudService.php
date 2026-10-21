@@ -155,14 +155,7 @@ class RunCloudService
             ]);
         }
 
-        // Stop if DNS propagation fails for HTTP-01
-        if (! $initialProxyStatus) {
-            $dnsReady = $this->sslService->waitForDnsPropagation($domain, $resolvedIp);
 
-            if (! $dnsReady) {
-                throw new Exception("DNS for {$domain} has not propagated to {$resolvedIp}. SSL was not requested.");
-            }
-        }
 
         // 6. Configure Advanced SSL / AutoSSL (passing domainId skips GET /domains if already present)
         $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
