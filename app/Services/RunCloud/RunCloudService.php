@@ -132,7 +132,22 @@ class RunCloudService
             ?? 0
         ) ?: null;
 
-        // 5. Configure Cloudflare DNS.
+        // 5. Configure Domain: enable WWW for this domain/subdomain & set preferred domain version to "do not set" (redirection: none)
+        try {
+            $configuredDomain = $this->webAppService->configureDomain($server, $appId, $domain, $domainId);
+            if (! $domainId && ! empty($configuredDomain['id'])) {
+                $domainId = (int) $configuredDomain['id'];
+            }
+        } catch (Exception $e) {
+            Log::warning('RunCloud configure domain (enable www / redirection: none) failed', [
+                'server_id' => $server,
+                'web_app_id' => $appId,
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // 6. Configure Cloudflare DNS.
         $dnsSetup = null;
         $resolvedIp = $serverIp ?: $this->serverService->getServerIp($server);
         try {
@@ -145,7 +160,7 @@ class RunCloudService
             ]);
         }
 
-        // 6. Configure Advanced SSL (Let's Encrypt dns-01 via Cloudflare externalApi + AutoSSL)
+        // 7. Configure Advanced SSL (Let's Encrypt dns-01 via Cloudflare externalApi + AutoSSL)
         $sslConfig = null;
         try {
             $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
@@ -238,9 +253,9 @@ class RunCloudService
         return $this->webAppService->customWebAppPayload($webAppName, $domain, $systemUserId);
     }
 
-    public function configureDomain(int $serverId, int $appId, string $domain): array
+    public function configureDomain(int $serverId, int $appId, string $domain, ?int $domainId = null): array
     {
-        return $this->webAppService->configureDomain($serverId, $appId, $domain);
+        return $this->webAppService->configureDomain($serverId, $appId, $domain, $domainId);
     }
 
     public function getDomainId(int $serverId, int $appId, string $domain): ?int
