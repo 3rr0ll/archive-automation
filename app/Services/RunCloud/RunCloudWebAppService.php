@@ -178,9 +178,9 @@ class RunCloudWebAppService
     }
 
     /**
-     * Configure Domain, enable WWW, and leave the preferred domain version unset.
+     * Configure Domain, enable WWW for this domain/subdomain, and leave the preferred domain version unset (redirection: none).
      */
-    public function configureDomain(int $serverId, int $appId, string $domain): array
+    public function configureDomain(int $serverId, int $appId, string $domain, ?int $domainId = null): array
     {
         $payload = [
             'name' => $domain,
@@ -189,11 +189,34 @@ class RunCloudWebAppService
             'type' => 'primary',
         ];
 
+        // 1. If domainId is provided, update existing primary domain configuration directly
+        if ($domainId) {
+            $updateResponse = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
+            if ($updateResponse->status() === 405 || $updateResponse->status() === 404) {
+                $updateResponse = $this->client->client()->patch("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
+            }
+
+            if ($updateResponse->successful()) {
+                Log::info('Successfully updated domain settings (www enabled, preferred version unset)', [
+                    'server_id' => $serverId,
+                    'app_id' => $appId,
+                    'domain_id' => $domainId,
+                    'domain' => $domain,
+                ]);
+
+                return $updateResponse->json('data') ?? $updateResponse->json() ?? [];
+            }
+        }
+
+        // 2. Attach domain or update via POST
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
 
         if ($response->status() === 422 || ! $response->successful()) {
             Log::info('Domain attach returned non-200, verifying existing domain configuration', [
                 'status' => $response->status(),
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain' => $domain,
             ]);
         }
 
