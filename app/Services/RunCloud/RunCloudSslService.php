@@ -70,6 +70,11 @@ class RunCloudSslService
 
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
 
+        // If certificate already exists or endpoint requires update, fall back to PUT /domains/{domainId}/ssl
+        if ($response->status() === 404 || $response->status() === 405) {
+            $response = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
+        }
+
         if (! $response->successful()) {
             Log::error('RunCloud rejected the Advanced SSL certificate deployment', [
                 'server_id' => $serverId,
@@ -122,6 +127,57 @@ class RunCloudSslService
     }
 
     /**
+     * Request SSL for a web application.
+     * POST /ssl = install (new webapp, no cert yet).
+     * If already installed (404/405), falls back to PUT /ssl/basic (update existing).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws Exception
+     */
+    public function requestSsl(int $serverId, int $appId, ?array $customPayload = null): array
+    {
+        $payload = $customPayload ?? [
+            'provider' => 'letsencrypt',
+            'enableHttp' => true,
+            'enableHsts' => false,
+            'authorizationMethod' => 'http-01',
+        ];
+
+        // POST /ssl = install (new webapp, no cert yet)
+        $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
+
+        // If already installed, fall back to PUT /ssl/basic (update existing)
+        if ($response->status() === 404 || $response->status() === 405) {
+            $response = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/ssl/basic", $payload);
+        }
+
+        if (! $response->successful()) {
+            $this->client->handleApiError('RunCloud request SSL failed', $response);
+        }
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Get SSL configuration/status for a web application.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws Exception
+     */
+    public function getSsl(int $serverId, int $appId): array
+    {
+        $response = $this->client->client()->get("/servers/{$serverId}/webapps/{$appId}/ssl");
+
+        if (! $response->successful()) {
+            $this->client->handleApiError('RunCloud get SSL failed', $response);
+        }
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
      * Configure standard Let's Encrypt SSL via HTTP-01 challenge (fallback).
      *
      * @throws Exception
@@ -153,6 +209,11 @@ class RunCloudSslService
         }
 
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
+
+        // If already installed, fall back to PUT /ssl/basic (update existing)
+        if ($response->status() === 404 || $response->status() === 405) {
+            $response = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/ssl/basic", $payload);
+        }
 
         if (! $response->successful()) {
             Log::warning('RunCloud SSL installation returned non-200', [

@@ -301,6 +301,16 @@ class RunCloudService
         return $this->sslService->configureAutoSsl($serverId, $appId);
     }
 
+    public function requestSsl(int $serverId, int $appId, ?array $customPayload = null): array
+    {
+        return $this->sslService->requestSsl($serverId, $appId, $customPayload);
+    }
+
+    public function getSsl(int $serverId, int $appId): array
+    {
+        return $this->sslService->getSsl($serverId, $appId);
+    }
+
     public function waitForDnsPropagation(string $domain, string $expectedIp, int $maxAttempts = 10, int $sleepSeconds = 3): bool
     {
         return $this->sslService->waitForDnsPropagation($domain, $expectedIp, $maxAttempts, $sleepSeconds);
