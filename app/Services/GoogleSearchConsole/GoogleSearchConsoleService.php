@@ -176,6 +176,7 @@ class GoogleSearchConsoleService
                     'Content-Type' => 'application/json',
                 ],
                 'timeout' => (int) config('services.google_search_console.timeout', 30),
+                'verify' => $this->shouldVerifySsl(),
             ]);
 
             $statusCode = $response->getStatusCode();
@@ -236,6 +237,7 @@ class GoogleSearchConsoleService
             $response = $httpClient->get('https://indexing.googleapis.com/v3/urlNotifications/metadata', [
                 'query' => ['url' => $url],
                 'timeout' => (int) config('services.google_search_console.timeout', 30),
+                'verify' => $this->shouldVerifySsl(),
             ]);
 
             $statusCode = $response->getStatusCode();
