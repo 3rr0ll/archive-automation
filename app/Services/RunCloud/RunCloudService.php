@@ -141,8 +141,7 @@ class RunCloudService
         $dnsSetup = null;
         $resolvedIp = $serverIp ?: $this->serverService->getServerIp($server);
         try {
-            $resolvedIp = $serverIp ?: $this->getServerIp($server);
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, true);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, $initialProxyStatus);
         } catch (Exception $e) {
             // For HTTP-01 challenges, DNS must succeed; fail immediately rather than attempting SSL without DNS
             if (! $initialProxyStatus) {
@@ -215,7 +214,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / HTTP-01)",
+            'ssl' => "Let's Encrypt (Advanced SSL / {$sslAuthLabel})",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
@@ -282,181 +281,39 @@ class RunCloudService
 
     public function getDomainId(int $serverId, int $appId, string $domain): ?int
     {
-        // 1. Enable Advanced SSL and AutoSSL on the web application.
-        if (! $this->enableAdvancedSslMode($serverId, $appId)) {
-            throw new Exception('RunCloud did not enable Advanced SSL with AutoSSL for the web application.');
-        }
-
-        // 2. Fetch the domain ID registered under this web app
-        $domainId = $this->getDomainId($serverId, $appId, $domain);
-
-        if (! $domainId) {
-            Log::error('RunCloud Advanced SSL could not find the web application domain', [
-                'server_id' => $serverId,
-                'app_id' => $appId,
-                'domain' => $domain,
-            ]);
-
-            throw new Exception("RunCloud could not find domain {$domain} while configuring Advanced SSL.");
-        }
-
-        //$authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'dns-01'));
-        $authMethod = 'http-01';
-        $externalApiId = $this->getEnvValue(
-            'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
-            Config::get('services.runcloud.cloudflare_external_api_id'),
-        );
-
-        // 3. Deploy Let's Encrypt to the domain under Advanced SSL
-        $payload = [
-            'provider' => 'letsencrypt',
-            'authorizationMethod' => $authMethod,
-            'environment' => 'live',
-            'enableHttp' => true, // Server Side HTTPS Redirection (plain HTTP redirected to HTTPS)
-            'enableHsts' => false,
-            'rsa_key_size' => 2048,
-        ];
-
-        if ($authMethod === 'http-01') {
-            if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
-                throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
-            }
-
-            $payload['externalApi'] = (int) $externalApiId;
-        }
-
-        $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
-
-        if (! $response->successful()) {
-            Log::error('RunCloud rejected the Advanced SSL certificate deployment', [
-                'server_id' => $serverId,
-                'app_id' => $appId,
-                'domain_id' => $domainId,
-                'status' => $response->status(),
-                'body' => $response->json() ?? $response->body(),
-            ]);
-
-            $this->handleApiError('RunCloud Advanced SSL certificate deployment failed', $response);
-        }
-
-        Log::info('RunCloud Advanced Domain SSL successfully queued', [
-            'server_id' => $serverId,
-            'app_id' => $appId,
-            'domain_id' => $domainId,
-            'response' => $response->json(),
-        ]);
-
-        return $response->json('data') ?? $response->json() ?? [];
+        return $this->webAppService->getDomainId($serverId, $appId, $domain);
     }
 
-    /**
-     * Enable Advanced SSL and AutoSSL mode on a web application.
-     */
+    // --- SSL Delegations ---
+
+    public function configureAdvancedSsl(int $serverId, int $appId, string $domain, ?int $domainId = null): array
+    {
+        return $this->sslService->configureAdvancedSsl($serverId, $appId, $domain, $domainId);
+    }
+
     public function enableAdvancedSslMode(int $serverId, int $appId): bool
     {
-        try {
-            $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl/advanced", [
-                'advancedSSL' => true,
-                'autoSSL' => true,
-            ]);
-
-            if (! $response->successful()) {
-                Log::error('RunCloud rejected Advanced SSL with AutoSSL', [
-                    'server_id' => $serverId,
-                    'app_id' => $appId,
-                    'auto_ssl' => true,
-                    'status' => $response->status(),
-                    'body' => $response->json() ?? $response->body(),
-                ]);
-            }
-
-            return $response->successful();
-        } catch (Exception $e) {
-            Log::warning('Failed to enable Advanced SSL mode on webapp: '.$e->getMessage());
-
-            return false;
-        }
+        return $this->sslService->enableAdvancedSslMode($serverId, $appId);
     }
 
-    /**
-     * Find the domain ID for a web application domain.
-     */
-    public function getDomainId(int $serverId, int $appId, string $domain): ?int
+    public function configureAutoSsl(int $serverId, int $appId): array
     {
-        try {
-            $response = $this->client()->get("/servers/{$serverId}/webapps/{$appId}/domains");
-
-            if ($response->successful()) {
-                $domains = $response->json('data') ?? $response->json() ?? [];
-                $normalized = strtolower(trim($domain));
-
-                foreach ($domains as $item) {
-                    $itemDomain = strtolower(trim($item['name'] ?? ''));
-                    if ($itemDomain === $normalized || str_contains($itemDomain, $normalized)) {
-                        return (int) $item['id'];
-                    }
-                }
-
-                // If not matched by name, return the first/primary domain ID if available
-                if (! empty($domains[0]['id'])) {
-                    return (int) $domains[0]['id'];
-                }
-            }
-        } catch (Exception $e) {
-            Log::warning('Failed to retrieve domains list for webapp: '.$e->getMessage());
-        }
-
-        return null;
+        return $this->sslService->configureAutoSsl($serverId, $appId);
     }
 
-    /**
-     * Configure standard Let's Encrypt SSL via HTTP-01 challenge (fallback).
-     */
-    protected function configureAutoSsl(int $serverId, int $appId): array
+    public function waitForDnsPropagation(string $domain, string $expectedIp, int $maxAttempts = 10, int $sleepSeconds = 3): bool
     {
-       // $authMethod = (string) $this->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
-       $authMethod = 'http-01';
-       $externalApiId = $this->getEnvValue(
-            'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
-            Config::get('services.runcloud.cloudflare_external_api_id'),
-        );
-
-        $payload = [
-            'provider' => 'letsencrypt',
-            'authorizationMethod' => $authMethod,
-            'environment' => 'live',
-            'enableHttp' => false, // Server Side HTTPS Redirection
-            'enableHsts' => false,
-            'ssl_protocol_id' => 1,
-            'rsa_key_size' => 2048,
-        ];
-
-        if ($authMethod === 'http-01') {
-            if (! is_numeric($externalApiId) || (int) $externalApiId <= 0) {
-                throw new Exception('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID must contain a valid RunCloud Cloudflare integration ID when DNS-01 SSL is enabled.');
-            }
-
-            $payload['externalApi'] = (int) $externalApiId;
-        }
-
-        $response = $this->client()->post("/servers/{$serverId}/webapps/{$appId}/ssl", $payload);
-
-        if (! $response->successful()) {
-            Log::warning('RunCloud SSL installation returned non-200', [
-                'server_id' => $serverId,
-                'app_id' => $appId,
-                'status' => $response->status(),
-                'body' => $response->json() ?? $response->body(),
-            ]);
-        }
-
-        return $response->json('data') ?? $response->json() ?? [];
+        return $this->sslService->waitForDnsPropagation($domain, $expectedIp, $maxAttempts, $sleepSeconds);
     }
 
-    /**
-     * Prepared HTTP client with authentication and headers.
-     */
-    protected function client(): PendingRequest
+    public function waitForSslIssued(int $serverId, int $appId, string $domain, ?int $domainId = null, int $maxAttempts = 30, int $sleepSeconds = 5): bool
+    {
+        return $this->sslService->waitForSslIssued($serverId, $appId, $domain, $domainId, $maxAttempts, $sleepSeconds);
+    }
+
+    // --- Client / HTTP Delegations ---
+
+    public function client(): PendingRequest
     {
         return $this->client->client();
     }
