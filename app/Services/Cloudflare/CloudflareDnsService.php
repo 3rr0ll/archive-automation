@@ -41,11 +41,11 @@ class CloudflareDnsService
         // 1. Delete all DNS records
         $deleteResult = $this->deleteAllDnsRecords($rootDomain);
 
-        // 2. Add A record for @
-        $rootRecord = $this->addDnsRecord($rootDomain, 'A', '@', $serverIp, $proxied, 1);
+        // 2. Add A record for apex domain
+        $rootRecord = $this->addDnsRecord($rootDomain, 'A', $rootDomain, $serverIp, $proxied, 1);
 
         // 3. Add A record for www
-        $wwwRecord = $this->addDnsRecord($rootDomain, 'A', 'www', $serverIp, $proxied, 1);
+        $wwwRecord = $this->addDnsRecord($rootDomain, 'A', 'www.'.$rootDomain, $serverIp, $proxied, 1);
 
         Log::info('Cloudflare DNS configured for RunCloud server successfully', [
             'domain' => $rootDomain,
@@ -249,7 +249,11 @@ class CloudflareDnsService
             'per_page' => 100,
         ]);
 
-        $records = $existingResponse->successful() ? ($existingResponse->json('result', [])) : [];
+        if (! $existingResponse->successful()) {
+            $this->client->handleApiError("Failed to look up A record [{$name}] for zone {$zoneId}", $existingResponse);
+        }
+
+        $records = $existingResponse->json('result', []);
 
         if (! empty($records)) {
             $first = array_shift($records);
@@ -280,6 +284,88 @@ class CloudflareDnsService
         }
 
         return $this->addARecord($zoneId, $name, $ip, $proxied);
+    }
+
+    /**
+     * Update the Cloudflare proxy status (proxied boolean) for A records (@ and www) of a domain.
+     *
+     * @param  string  $domain  Domain name
+     * @param  bool  $proxied  Whether to proxy through Cloudflare
+     * @return array<string, mixed>
+     *
+     * @throws Exception
+     */
+    public function setProxyStatus(string $domain, bool $proxied = true): array
+    {
+        $rootDomain = $this->client->getRootDomain($domain);
+        $zoneId = $this->client->getZoneId($rootDomain);
+
+        $response = $this->client->client()->get("/zones/{$zoneId}/dns_records", [
+            'type' => 'A',
+            'per_page' => 100,
+        ]);
+
+        if (! $response->successful()) {
+            $this->client->handleApiError("Failed to fetch DNS records for {$rootDomain}", $response);
+        }
+
+        $records = $response->json('result', []);
+
+        $targetNames = [
+            strtolower($rootDomain),
+            'www.'.strtolower($rootDomain),
+        ];
+
+        $matched = [];
+        $updated = [];
+
+        foreach ($records as $record) {
+            $recordName = strtolower(trim((string) ($record['name'] ?? '')));
+
+            if (! in_array($recordName, $targetNames, true)) {
+                continue;
+            }
+
+            $matched[] = $recordName;
+            $recordId = (string) ($record['id'] ?? '');
+
+            if ($recordId === '') {
+                throw new Exception("Missing DNS record ID for {$recordName}");
+            }
+
+            $putResponse = $this->client->client()->put("/zones/{$zoneId}/dns_records/{$recordId}", [
+                'type' => 'A',
+                'name' => $record['name'],
+                'content' => $record['content'],
+                'proxied' => $proxied,
+                'ttl' => 1,
+            ]);
+
+            if (! $putResponse->successful()) {
+                $this->client->handleApiError("Failed to update proxy status for {$recordName}", $putResponse);
+            }
+
+            $updated[] = $putResponse->json('result', []);
+        }
+
+        $this->cache->forgetCloudflareDnsRecords($zoneId);
+
+        $missing = array_diff($targetNames, $matched);
+
+        if (! empty($missing)) {
+            throw new Exception('DNS records not found: '.implode(', ', $missing));
+        }
+
+        if (count($updated) !== 2) {
+            throw new Exception("Expected to update 2 DNS records for {$rootDomain}; updated ".count($updated).'.');
+        }
+
+        return [
+            'domain' => $rootDomain,
+            'zone_id' => $zoneId,
+            'proxied' => $proxied,
+            'updated_records' => $updated,
+        ];
     }
 
     /**

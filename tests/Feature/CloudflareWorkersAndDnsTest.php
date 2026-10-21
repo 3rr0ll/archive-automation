@@ -584,14 +584,14 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === '@'
                 && $request['content'] === '198.51.100.55'
-                && $request['proxied'] === false;
+                && $request['proxied'] === true;
         });
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
                 && $request['name'] === 'www'
                 && $request['content'] === '198.51.100.55'
-                && $request['proxied'] === false;
+                && $request['proxied'] === true;
         });
     }
 
@@ -623,6 +623,107 @@ class CloudflareWorkersAndDnsTest extends TestCase
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/purge_cache'
                 && $request->method() === 'POST'
                 && $request['purge_everything'] === true;
+        });
+    }
+
+    public function test_runcloud_creates_unproxied_dns_for_http01_then_re_enables_proxy(): void
+    {
+        Config::set('services.runcloud.api_key', 'test-api-key');
+        Config::set('services.runcloud.api_secret', 'test-api-secret');
+        Config::set('services.cloudflare.api_token', 'test-token');
+        Config::set('services.runcloud.ssl_authorization_method', 'http-01');
+
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/99' => Http::response([
+                'data' => [
+                    'id' => 99,
+                    'name' => 'Prod Server',
+                    'ipAddress' => '198.51.100.55',
+                ],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/webapps' => Http::response([
+                'data' => [],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/users' => Http::response([
+                'data' => [
+                    ['id' => 1645, 'username' => 'runcloud'],
+                ],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/custom' => Http::response([
+                'data' => [
+                    'id' => 502,
+                    'name' => 'fastssl',
+                ],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/502/domains' => Http::response([
+                'data' => [
+                    [
+                        'id' => 888,
+                        'name' => 'fastssl.com',
+                        'www' => true,
+                    ],
+                ],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/502/ssl/advanced' => Http::response([], 200),
+            'https://manage.runcloud.io/api/v3/servers/99/webapps/502/domains/888/ssl' => Http::response([
+                'data' => ['status' => 'queued'],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones?name=fastssl.com' => Http::response([
+                'success' => true,
+                'result' => [
+                    ['id' => 'zone-fastssl', 'name' => 'fastssl.com'],
+                ],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records?type=A&per_page=100' => Http::response([
+                'success' => true,
+                'result' => [
+                    ['id' => 'rec-root', 'name' => 'fastssl.com', 'content' => '198.51.100.55', 'proxied' => false],
+                    ['id' => 'rec-www', 'name' => 'www.fastssl.com', 'content' => '198.51.100.55', 'proxied' => false],
+                ],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records?page=1&per_page=100' => Http::response([
+                'success' => true,
+                'result' => [],
+                'result_info' => ['total_pages' => 1],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'rec-new'],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records/rec-root' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'rec-root', 'proxied' => true],
+            ], 200),
+            'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records/rec-www' => Http::response([
+                'success' => true,
+                'result' => ['id' => 'rec-www', 'proxied' => true],
+            ], 200),
+        ]);
+
+        $runCloudService = app(RunCloudService::class);
+        $result = $runCloudService->createEmptyWebApplication('fastssl.com', 99);
+
+        $this->assertTrue($result['success']);
+
+        // Assert initial DNS record creation sent proxied => false for HTTP-01 challenge
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records'
+                && $request->method() === 'POST'
+                && $request['name'] === '@'
+                && $request['proxied'] === false;
+        });
+
+        // Assert proxy status was re-enabled (PUT to both rec-root and rec-www)
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records/rec-root'
+                && $request->method() === 'PUT'
+                && $request['proxied'] === true;
+        });
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records/rec-www'
+                && $request->method() === 'PUT'
+                && $request['proxied'] === true;
         });
     }
 }
