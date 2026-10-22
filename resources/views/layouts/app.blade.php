@@ -13,10 +13,13 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     
     @php
+        $user = auth()->user();
         $authData = [
-            'name' => auth()->user()?->name ?? 'Guest',
-            'email' => auth()->user()?->email ?? 'guest@example.com',
-            'initial' => auth()->check() ? strtoupper(substr(auth()->user()->name, 0, 1)) : 'G'
+            'name' => $user?->name ?? 'Guest',
+            'email' => $user?->email ?? 'guest@example.com',
+            'role' => $user?->role ?? 'user',
+            'isAdmin' => $user?->isAdmin() ?? false,
+            'initial' => auth()->check() ? strtoupper(substr($user->name, 0, 1)) : 'G'
         ];
     @endphp
     
@@ -32,11 +35,13 @@
     <x-global.confirmation-modal />
     <x-global.toast />
 
-    <!-- Application Sidebar -->
-    <x-global.sidebar />
+    @if(auth()->user()?->isAdmin())
+        <!-- Application Sidebar (Admin only) -->
+        <x-global.sidebar />
+    @endif
 
     <!-- Main Shell -->
-    <div class="flex-1 flex flex-col md:pl-64">
+    <div class="flex-1 flex flex-col {{ auth()->user()?->isAdmin() ? 'md:pl-64' : '' }}">
         <!-- Top Navigation Header -->
         <x-global.navbar />
 

@@ -44,42 +44,30 @@
                     </a>
                 </li>
 
-                <li class="px-2 mt-6 mb-1">
-                    <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
-                </li>
-                <li>
-                    <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-terminal class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Environment Variables</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-server class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Servers</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-users class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Users</span>
-                    </a>
-                </li>
+                @if(auth()->user()?->isAdmin())
+                    <li class="px-2 mt-6 mb-1">
+                        <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
+                    </li>
+                    <li>
+                        <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-terminal class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Environment Variables</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-server class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Servers</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-users class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Users</span>
+                        </a>
+                    </li>
+                @endif
             </ul>
-        </div>
-
-        <!-- Mobile User Footer -->
-        <div class="px-4 h-14 border-t border-zinc-200 shrink-0 flex items-center justify-between" x-data="userNav">
-            <div class="flex items-center gap-3 overflow-hidden">
-                <div class="size-8 rounded-md bg-zinc-900 text-white flex items-center justify-center font-semibold text-xs shrink-0" x-text="$store.auth.user.initial"></div>
-                <div class="flex flex-col truncate">
-                    <span class="text-sm font-semibold text-zinc-900 truncate" x-text="$store.auth.user.name"></span>
-                </div>
-            </div>
-            <button type="button" @click="handleLogout" :disabled="isLoggingOut" class="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-md transition" title="Logout">
-                <x-lucide-log-out x-show="!isLoggingOut" class="size-4.5" />
-                <span x-show="isLoggingOut" x-cloak class="animate-spin inline-block size-4.5 border-2 border-zinc-300 border-t-zinc-600 rounded-full"></span>
-            </button>
         </div>
     </div>
 
@@ -103,42 +91,30 @@
                     </a>
                 </li>
 
-                <li class="px-2 mt-6 mb-1">
-                    <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
-                </li>
-                <li>
-                    <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-terminal class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Environment Variables</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-server class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Servers</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-users class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Users</span>
-                    </a>
-                </li>
+                @if(auth()->user()?->isAdmin())
+                    <li class="px-2 mt-6 mb-1">
+                        <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
+                    </li>
+                    <li>
+                        <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-terminal class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Environment Variables</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-server class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Servers</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-users class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Users</span>
+                        </a>
+                    </li>
+                @endif
             </ul>
-        </div>
-
-        <!-- Desktop User Footer -->
-        <div class="px-4 h-14 border-t border-zinc-200 shrink-0 flex items-center justify-between" x-data="userNav">
-            <div class="flex items-center gap-3 overflow-hidden">
-                <div class="size-8 rounded-md bg-zinc-900 text-white flex items-center justify-center font-semibold text-xs shrink-0" x-text="$store.auth.user.initial"></div>
-                <div class="flex flex-col truncate">
-                    <span class="text-sm font-semibold text-zinc-900 truncate" x-text="$store.auth.user.name"></span>
-                </div>
-            </div>
-            <button type="button" @click="handleLogout" :disabled="isLoggingOut" class="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-md transition cursor-pointer" title="Logout">
-                <x-lucide-log-out x-show="!isLoggingOut" class="size-4.5" />
-                <span x-show="isLoggingOut" x-cloak class="animate-spin inline-block size-4.5 border-2 border-zinc-300 border-t-zinc-600 rounded-full"></span>
-            </button>
         </div>
     </div>
 </aside>
