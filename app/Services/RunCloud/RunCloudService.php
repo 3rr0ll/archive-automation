@@ -128,23 +128,14 @@ class RunCloudService
         $domainId = (int) (
             $createdApp['primaryDomain']['id']
             ?? $createdApp['domains'][0]['id']
+            ?? $createdApp['primary_domain_id']
             ?? $createdApp['domain_id']
             ?? 0
         ) ?: null;
 
-        // 5. Configure Domain: enable WWW for this domain/subdomain & set preferred domain version to "do not set" (redirection: none)
-        try {
-            $configuredDomain = $this->webAppService->configureDomain($server, $appId, $domain, $domainId);
-            if (! $domainId && ! empty($configuredDomain['id'])) {
-                $domainId = (int) $configuredDomain['id'];
-            }
-        } catch (Exception $e) {
-            Log::warning('RunCloud configure domain (enable www / redirection: none) failed', [
-                'server_id' => $server,
-                'web_app_id' => $appId,
-                'domain' => $domain,
-                'error' => $e->getMessage(),
-            ]);
+        // If not present in the creation payload, resolve domain ID via single GET /domains
+        if (! $domainId) {
+            $domainId = $this->webAppService->getDomainId($server, $appId, $domain);
         }
 
         // 6. Configure Cloudflare DNS.
