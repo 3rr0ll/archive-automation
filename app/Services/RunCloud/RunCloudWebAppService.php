@@ -193,7 +193,11 @@ class RunCloudWebAppService
 
         // 1. If domainId is provided, attempt updating existing primary domain configuration
         if ($domainId) {
-            $updateResponse = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
+            // RunCloud API v3 uses PATCH .../domains/{domainId}/meta for updating domain metadata
+            $updateResponse = $this->client->client()->patch("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/meta", $payload);
+            if (! $updateResponse->successful()) {
+                $updateResponse = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
+            }
             if ($updateResponse->status() === 405 || $updateResponse->status() === 404) {
                 $updateResponse = $this->client->client()->patch("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}", $payload);
             }
@@ -208,10 +212,29 @@ class RunCloudWebAppService
 
                 return $updateResponse->json('data') ?? $updateResponse->json() ?? [];
             }
+
+            Log::warning('RunCloud domain update returned non-successful response', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain_id' => $domainId,
+                'domain' => $domain,
+                'status' => $updateResponse->status(),
+                'body' => $updateResponse->json() ?? $updateResponse->body(),
+            ]);
         }
 
         // 2. Attach domain with www flag
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
+
+        if ($response->status() === 422 || ! $response->successful()) {
+            Log::info('RunCloud POST /domains returned non-successful response', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain' => $domain,
+                'status' => $response->status(),
+                'body' => $response->json() ?? $response->body(),
+            ]);
+        }
 
         // 3. If primary domain was already attached without www, attach "www." as an alias domain
         if (! str_starts_with($domain, 'www.')) {
@@ -227,6 +250,14 @@ class RunCloudWebAppService
                         'server_id' => $serverId,
                         'app_id' => $appId,
                         'alias' => $wwwDomain,
+                    ]);
+                } else {
+                    Log::info('RunCloud attach www alias domain response', [
+                        'server_id' => $serverId,
+                        'app_id' => $appId,
+                        'alias' => $wwwDomain,
+                        'status' => $aliasResponse->status(),
+                        'body' => $aliasResponse->json() ?? $aliasResponse->body(),
                     ]);
                 }
             } catch (Exception $e) {
