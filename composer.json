@@ -13,6 +13,7 @@
         "laravel/tinker": "^3.0",
         "league/flysystem-sftp-v3": "3.0",
         "mallardduck/blade-lucide-icons": "^2.0",
+        "phpseclib/phpseclib": "3.0",
         "tallstackui/tallstackui": "^4.2"
     },
     "require-dev": {

@@ -19,4 +19,46 @@ html, body, input, button, select, textarea {
     display: none !important;
 }
 
+/* IDE Dark Theme Scrollbar Styles */
+.ide-dark,
+.ide-dark * {
+    color-scheme: dark;
+}
+
+.ide-dark ::-webkit-scrollbar,
+.ide-dark .cm-scroller::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background-color: #1e1e1e;
+}
+
+.ide-dark ::-webkit-scrollbar-track,
+.ide-dark .cm-scroller::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.ide-dark ::-webkit-scrollbar-thumb,
+.ide-dark .cm-scroller::-webkit-scrollbar-thumb {
+    background-color: #3e4451;
+    border-radius: 4px;
+    border: 2px solid #1e1e1e;
+}
+
+.ide-dark ::-webkit-scrollbar-thumb:hover,
+.ide-dark .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: #5c6370;
+}
+
+.ide-dark ::-webkit-scrollbar-corner,
+.ide-dark .cm-scroller::-webkit-scrollbar-corner {
+    background-color: #1e1e1e;
+}
+
+/* Firefox scrollbar support */
+.ide-dark,
+.ide-dark .cm-scroller {
+    scrollbar-color: #3e4451 #1e1e1e;
+    scrollbar-width: thin;
+}
+
 

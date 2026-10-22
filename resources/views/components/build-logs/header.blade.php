@@ -18,9 +18,17 @@
         <a :href="'https://' + (deployment ? deployment.domain : '{{ $deployment->domain }}')" 
            target="_blank" 
            rel="noopener"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition">
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition shadow-xs">
             <span>Visit site</span>
             <x-lucide-external-link class="size-3.5 text-zinc-400" />
+        </a>
+
+        <!-- Edit Files via SFTP Button -->
+        <a :href="'/deployments/' + (deployment ? (deployment.hash || deployment.id) : '{{ $deployment->hash }}') + '/files'"
+           x-show="deployment && (deployment.status === 'completed' || deployment.status === 'failed')"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition shadow-xs">
+            <x-lucide-file-code class="size-3.5 text-zinc-500" />
+            <span>Edit files</span>
         </a>
 
         <!-- Retry Button (if failed or completed) -->

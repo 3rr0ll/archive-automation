@@ -47,6 +47,10 @@ Route::middleware('auth')->group(function (): void {
         $deployment->load(['server', 'user']);
         return view('pages.deployment-logs', compact('deployment'));
     })->name('deployments.logs.page');
+    Route::get('/deployments/{deployment}/files', function (\App\Models\Deployment $deployment) {
+        $deployment->load(['server', 'user']);
+        return view('pages.deployment-files', compact('deployment'));
+    })->name('deployments.files.page');
     Route::get('/google/redirect', function (\Illuminate\Http\Request $request) {
         return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
             ->createOAuthUrl((int) $request->user()->getKey()));

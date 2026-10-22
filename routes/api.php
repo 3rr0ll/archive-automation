@@ -42,6 +42,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Deployments API (Authenticated Users)
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
+    Route::get('/deployments/{deployment}/files/tree', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'listDirectory']);
+    Route::get('/deployments/{deployment}/files/read', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'readFile']);
+    Route::post('/deployments/{deployment}/files/write', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'writeFile']);
+    Route::post('/deployments/{deployment}/files/create', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'createFile']);
 });
 
 // Admin API Routes (Requires Admin Role)
