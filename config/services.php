@@ -84,7 +84,7 @@ return [
 
     'sftp' => [
         'port' => (int) env('SFTP_PORT', 22),
-        'username' => env('SFTP_USERNAME'),
+        'username' => env('SFTP_USERNAME', 'runcloud'),
         'password' => env('SFTP_PASSWORD'),
         'private_key' => env('SFTP_PRIVATE_KEY'),
         'private_key_path' => env('SFTP_PRIVATE_KEY_PATH'),
