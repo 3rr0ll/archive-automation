@@ -47,12 +47,12 @@ Route::middleware('auth')->group(function (): void {
         $deployment->load(['server', 'user']);
         return view('pages.deployment-logs', compact('deployment'));
     })->name('deployments.logs.page');
-    Route::get('/google/redirect', function () {
-        return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)->createOAuthUrl());
+    Route::get('/google/redirect', function (\Illuminate\Http\Request $request) {
+        return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
+            ->createOAuthUrl((int) $request->user()->getKey()));
     })->middleware('admin')->name('google.redirect');
 });
 
 // Google OAuth callback (matches GOOGLE_REDIRECT_URI)
 Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAuthController::class, 'handleCallback'])
     ->name('google.callback');
-

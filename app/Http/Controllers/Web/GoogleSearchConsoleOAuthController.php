@@ -48,9 +48,11 @@ class GoogleSearchConsoleOAuthController extends Controller
         }
 
         try {
+            $state = $request->query('state');
             $account = $this->searchConsoleService->handleOAuthCallback(
                 $code,
                 $request->user()?->id,
+                is_string($state) ? $state : null,
             );
 
             if ($request->expectsJson()) {

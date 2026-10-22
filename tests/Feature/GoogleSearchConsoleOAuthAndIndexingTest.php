@@ -6,6 +6,8 @@ use App\Models\GoogleSearchConsoleAccount;
 use App\Models\User;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
+use RuntimeException;
 use Tests\TestCase;
 
 class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
@@ -51,6 +53,11 @@ class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
         $authUrl = (string) $response->json('auth_url');
         $this->assertStringContainsString('accounts.google.com', $authUrl);
         $this->assertStringContainsString('test-client-id', $authUrl);
+
+        parse_str((string) parse_url($authUrl, PHP_URL_QUERY), $query);
+        $state = json_decode(Crypt::decryptString($query['state']), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($this->admin->id, $state['user_id']);
+        $this->assertGreaterThan(now()->getTimestamp(), $state['expires_at']);
     }
 
     public function test_google_oauth_client_honors_disabled_ssl_verification_in_testing(): void
@@ -60,6 +67,14 @@ class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
         $client = app(GoogleSearchConsoleService::class)->createBaseOAuthClient();
 
         $this->assertFalse($client->getHttpClient()->getConfig('verify'));
+    }
+
+    public function test_oauth_callback_rejects_a_missing_user_context_before_saving_an_account(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('The Google OAuth session expired.');
+
+        app(GoogleSearchConsoleService::class)->handleOAuthCallback('unused-code');
     }
 
     public function test_google_service_account_client_honors_disabled_ssl_verification_in_testing(): void

@@ -43,6 +43,7 @@ class GoogleSearchConsoleAccountTest extends TestCase
             'private-key-value',
             GoogleSearchConsoleAccount::firstOrFail()->credentials['private_key'],
         );
+        $this->assertSame($this->admin->id, GoogleSearchConsoleAccount::firstOrFail()->user_id);
     }
 
     public function test_activating_an_account_deactivates_the_previous_account(): void

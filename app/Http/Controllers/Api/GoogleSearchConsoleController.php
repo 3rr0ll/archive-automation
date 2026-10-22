@@ -236,8 +236,7 @@ class GoogleSearchConsoleController extends Controller
     public function getOAuthUrl(Request $request): JsonResponse
     {
         try {
-            $state = $request->query('state');
-            $authUrl = $this->searchConsoleService->createOAuthUrl(is_string($state) ? $state : null);
+            $authUrl = $this->searchConsoleService->createOAuthUrl((int) $request->user()->getKey());
 
             return response()->json([
                 'success' => true,

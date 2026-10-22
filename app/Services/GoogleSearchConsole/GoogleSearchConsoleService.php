@@ -3,6 +3,7 @@
 namespace App\Services\GoogleSearchConsole;
 
 use App\Models\GoogleSearchConsoleAccount;
+use App\Models\User;
 use App\Services\ApiUsage\ApiUsageRecorder;
 use App\Services\Cloudflare\CloudflareDnsService;
 use App\Services\Http\ExternalHttpClient;
@@ -16,6 +17,7 @@ use Google\Service\SiteVerification\SiteVerificationWebResourceResource;
 use Google\Service\SiteVerification\SiteVerificationWebResourceResourceSite;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -332,22 +334,34 @@ class GoogleSearchConsoleService
             && filled(config('services.google_search_console.refresh_token'));
     }
 
-    public function createOAuthUrl(?string $state = null): string
+    public function createOAuthUrl(?int $userId = null): string
     {
         if (! $this->hasOAuthConfiguration()) {
             throw new RuntimeException('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured in .env to use Google OAuth.');
         }
 
         $client = $this->createBaseOAuthClient();
-        if ($state !== null) {
-            $client->setState($state);
+        if ($userId !== null) {
+            $client->setState(Crypt::encryptString(json_encode([
+                'user_id' => $userId,
+                'expires_at' => now()->addMinutes(10)->getTimestamp(),
+            ], JSON_THROW_ON_ERROR)));
         }
 
         return $client->createAuthUrl();
     }
 
-    public function handleOAuthCallback(string $code, ?int $userId = null): GoogleSearchConsoleAccount
+    public function handleOAuthCallback(
+        string $code,
+        ?int $userId = null,
+        ?string $state = null,
+    ): GoogleSearchConsoleAccount
     {
+        $userId ??= $this->userIdFromOAuthState($state);
+        if ($userId === null) {
+            throw new RuntimeException('The Google OAuth session expired. Start the connection again while signed in.');
+        }
+
         $client = $this->createBaseOAuthClient();
         $token = $client->fetchAccessTokenWithAuthCode($code);
 
@@ -381,6 +395,32 @@ class GoogleSearchConsoleService
             userId: $userId,
             name: "Google OAuth ({$email})",
         );
+    }
+
+    private function userIdFromOAuthState(?string $state): ?int
+    {
+        if (blank($state)) {
+            return null;
+        }
+
+        try {
+            $payload = json_decode(Crypt::decryptString($state), true, flags: JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $userId = filter_var($payload['user_id'] ?? null, FILTER_VALIDATE_INT);
+        $expiresAt = filter_var($payload['expires_at'] ?? null, FILTER_VALIDATE_INT);
+
+        if ($userId === false || $expiresAt === false || $expiresAt < now()->getTimestamp()) {
+            return null;
+        }
+
+        return User::query()->whereKey($userId)->exists() ? $userId : null;
     }
 
     public function handleRefreshToken(string $refreshToken, ?string $email = null, ?int $userId = null): GoogleSearchConsoleAccount
