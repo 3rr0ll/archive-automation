@@ -408,10 +408,10 @@ class CloudflareWorkersAndDnsTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('data.server_ip', '198.51.100.42')
             ->assertJsonPath('data.deleted_records_count', 1)
-            ->assertJsonPath('data.records.root.name', '@')
+            ->assertJsonPath('data.records.root.name', 'example.com')
             ->assertJsonPath('data.records.root.content', '198.51.100.42')
             ->assertJsonPath('data.records.root.proxied', true)
-            ->assertJsonPath('data.records.www.name', 'www')
+            ->assertJsonPath('data.records.www.name', 'www.example.com')
             ->assertJsonPath('data.records.www.content', '198.51.100.42')
             ->assertJsonPath('data.records.www.proxied', true);
 
@@ -421,11 +421,11 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 && $request->method() === 'DELETE';
         });
 
-        // Verify @ A record was created with proxied=true
+        // Verify apex A record was created with proxied=true
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/dns_records'
                 && $request->method() === 'POST'
-                && $request['name'] === '@'
+                && $request['name'] === 'example.com'
                 && $request['type'] === 'A'
                 && $request['content'] === '198.51.100.42'
                 && $request['proxied'] === true;
@@ -435,7 +435,7 @@ class CloudflareWorkersAndDnsTest extends TestCase
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-abc-123/dns_records'
                 && $request->method() === 'POST'
-                && $request['name'] === 'www'
+                && $request['name'] === 'www.example.com'
                 && $request['type'] === 'A'
                 && $request['content'] === '198.51.100.42'
                 && $request['proxied'] === true;
@@ -476,6 +476,10 @@ class CloudflareWorkersAndDnsTest extends TestCase
                 'data' => [
                     'id' => 501,
                     'name' => 'mysite',
+                    'primaryDomain' => [
+                        'id' => 777,
+                        'name' => 'mysite.com',
+                    ],
                 ],
             ], 200),
 
@@ -582,14 +586,14 @@ class CloudflareWorkersAndDnsTest extends TestCase
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
-                && $request['name'] === '@'
+                && $request['name'] === 'mysite.com'
                 && $request['content'] === '198.51.100.55'
                 && $request['proxied'] === true;
         });
 
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-mysite/dns_records'
-                && $request['name'] === 'www'
+                && $request['name'] === 'www.mysite.com'
                 && $request['content'] === '198.51.100.55'
                 && $request['proxied'] === true;
         });
@@ -709,8 +713,8 @@ class CloudflareWorkersAndDnsTest extends TestCase
         Http::assertSent(function ($request) {
             return $request->url() === 'https://api.cloudflare.com/client/v4/zones/zone-fastssl/dns_records'
                 && $request->method() === 'POST'
-                && $request['name'] === '@'
-                && $request['proxied'] === false;
+                && $request['name'] === 'fastssl.com'
+                && $request['proxied'] === true;
         });
 
         // Assert proxy status was re-enabled (PUT to both rec-root and rec-www)
