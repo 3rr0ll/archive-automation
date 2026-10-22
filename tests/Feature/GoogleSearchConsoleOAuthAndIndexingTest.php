@@ -53,6 +53,31 @@ class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
         $this->assertStringContainsString('test-client-id', $authUrl);
     }
 
+    public function test_google_oauth_client_honors_disabled_ssl_verification_in_testing(): void
+    {
+        config(['services.http.verify_ssl' => false]);
+
+        $client = app(GoogleSearchConsoleService::class)->createBaseOAuthClient();
+
+        $this->assertFalse($client->getHttpClient()->getConfig('verify'));
+    }
+
+    public function test_google_service_account_client_honors_disabled_ssl_verification_in_testing(): void
+    {
+        config(['services.http.verify_ssl' => false]);
+
+        $account = new GoogleSearchConsoleAccount;
+        $account->credentials = [
+            'type' => 'service_account',
+            'client_email' => 'test@example.iam.gserviceaccount.com',
+            'private_key' => "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+        ];
+
+        $client = app(GoogleSearchConsoleService::class)->buildClientFromAccount($account);
+
+        $this->assertFalse($client->getHttpClient()->getConfig('verify'));
+    }
+
     public function test_regular_user_cannot_access_gsc_endpoints(): void
     {
         $this->actingAs($this->regularUser, 'sanctum')

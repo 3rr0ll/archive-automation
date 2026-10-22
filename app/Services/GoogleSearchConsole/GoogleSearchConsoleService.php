@@ -5,6 +5,7 @@ namespace App\Services\GoogleSearchConsole;
 use App\Models\GoogleSearchConsoleAccount;
 use App\Services\ApiUsage\ApiUsageRecorder;
 use App\Services\Cloudflare\CloudflareDnsService;
+use App\Services\Http\ExternalHttpClient;
 use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\SearchConsole;
@@ -31,6 +32,7 @@ class GoogleSearchConsoleService
         private CloudflareDnsService $dnsService,
         private ApiUsageRecorder $usageRecorder,
         private GoogleSearchConsoleAccountService $accounts,
+        private ExternalHttpClient $externalHttpClient,
     ) {}
 
     /**
@@ -535,6 +537,7 @@ class GoogleSearchConsoleService
         ]);
         $client->setHttpClient(new Client([
             'timeout' => (int) config('services.google_search_console.timeout', 30),
+            'verify' => $this->shouldVerifySsl(),
         ]));
 
         return $client;
@@ -553,9 +556,15 @@ class GoogleSearchConsoleService
         ]);
         $client->setHttpClient(new Client([
             'timeout' => (int) config('services.google_search_console.timeout', 30),
+            'verify' => $this->shouldVerifySsl(),
         ]));
 
         return $client;
+    }
+
+    private function shouldVerifySsl(): bool
+    {
+        return $this->externalHttpClient->shouldVerifySsl();
     }
 
     private function addHumanOwner(

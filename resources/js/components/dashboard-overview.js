@@ -216,6 +216,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                     return 75;
                 case 'configuring_cloudflare_workers':
                     return 90;
+                case 'registering_search_console':
                 case 'submitting_to_google_search_console':
                     return 95;
                 default:
@@ -232,6 +233,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                 'provisioning_web_app': 'Creating WebApp',
                 'uploading_and_extracting_archive': 'Uploading Files',
                 'configuring_cloudflare_workers': 'Configuring Cloudflare',
+                'registering_search_console': 'Registering with Google Search Console',
                 'submitting_to_google_search_console': 'GSC Submission',
                 'completed': 'Done',
                 'failed': 'Failed',

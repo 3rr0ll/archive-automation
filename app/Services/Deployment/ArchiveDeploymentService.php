@@ -237,8 +237,10 @@ class ArchiveDeploymentService
                 : $deployment->domain;
 
             $this->searchConsoleService->registerDomain(
-                $deployment->domain,
-                "https://{$sitemapHost}/sitemap.xml",
+                domain: $deployment->domain,
+                sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
+                verifyOwnership: true,
+                requestIndexing: true,
             );
             $deployment->logs()->create([
                 'step_name' => 'registering_search_console',

@@ -40,7 +40,7 @@ class ArchiveDeploymentServiceTest extends TestCase
         );
     }
 
-    public function test_it_runs_the_archive_deployment_and_records_completion(): void
+    public function test_it_registers_with_search_console_as_the_last_step_before_completion(): void
     {
         Storage::fake('local');
         Server::factory()->create([
@@ -69,6 +69,19 @@ class ArchiveDeploymentServiceTest extends TestCase
             ->once()
             ->with('example.com', 'non-www')
             ->andReturn(['routes' => []]);
+        $searchConsoleService = Mockery::mock(GoogleSearchConsoleService::class);
+        $searchConsoleService->shouldReceive('isEnabled')->once()->andReturnTrue();
+        $searchConsoleService->shouldReceive('registerDomain')
+            ->once()
+            ->with('example.com', 'https://example.com/sitemap.xml', true, true)
+            ->andReturn([
+                'domain' => 'example.com',
+                'verified' => true,
+                'sitemap' => true,
+                'sitemap_url' => 'https://example.com/sitemap.xml',
+                'indexing_requested' => true,
+                'indexing_details' => [],
+            ]);
         $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
         $sftpArchiveService->shouldReceive('uploadAndExtract')->once()->andReturn([
             'entries_extracted' => 3,
@@ -82,6 +95,7 @@ class ArchiveDeploymentServiceTest extends TestCase
             $runCloudService,
             $cloudflareWorkerService,
             $sftpArchiveService,
+            $searchConsoleService,
         )->deploy($deployment);
 
         $this->assertSame('completed', $result->status->value);
@@ -98,9 +112,20 @@ class ArchiveDeploymentServiceTest extends TestCase
         ]);
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
+            'step_name' => 'registering_search_console',
+            'status' => 'success',
+        ]);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
             'step_name' => 'completed',
             'status' => 'success',
         ]);
+
+        $stepNames = $deployment->logs()->orderBy('id')->pluck('step_name');
+        $this->assertLessThan(
+            $stepNames->search('completed'),
+            $stepNames->search('registering_search_console'),
+        );
     }
 
     public function test_it_records_the_provider_failure_message_for_the_frontend(): void
