@@ -36,26 +36,13 @@
              x-show="activeFile">
             <span class="size-1.5 rounded-full"
                   :class="{
-                      'bg-zinc-400 dark:bg-zinc-500': saveStatus === 'Saved',
-                      'bg-zinc-900 dark:bg-zinc-100 animate-pulse': saveStatus === 'Unsaved changes',
-                      'bg-zinc-400': saveStatus === 'Saving'
+                      'bg-emerald-500': saveStatus === 'Saved',
+                      'bg-amber-400': saveStatus === 'Unsaved changes',
+                      'bg-zinc-400 animate-spin': saveStatus === 'Saving'
                   }"></span>
             <span x-text="saveStatus || 'Ready'"></span>
         </div>
 
-        <!-- Theme Toggle Button -->
-        <button type="button" 
-                @click="toggleTheme()" 
-                class="p-1.5 rounded transition cursor-pointer"
-                :class="theme === 'dark' ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/60'"
-                title="Toggle Editor Theme">
-            <template x-if="theme === 'dark'">
-                <x-lucide-sun class="size-3.5" />
-            </template>
-            <template x-if="theme === 'light'">
-                <x-lucide-moon class="size-3.5" />
-            </template>
-        </button>
 
         <!-- Save File Button -->
         <button type="button" 
