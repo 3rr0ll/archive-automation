@@ -210,7 +210,7 @@ class ArchiveDeploymentService
                 return $deployment;
             }
 
-            if (config('services.google_search_console.enabled')) {
+            if ($this->searchConsoleService->isEnabled()) {
                 $this->registerWithSearchConsole($deployment);
             }
 
@@ -269,11 +269,23 @@ class ArchiveDeploymentService
         $this->transition(
             $deployment,
             'registering_search_console',
-            'Registering the domain, sitemap, and indexing request with Google Search Console.',
+            'Verifying the domain and submitting its sitemap to Google Search Console.',
         );
 
         try {
-            $this->searchConsoleService->registerDomain($deployment->domain);
+            $version = $deployment->version instanceof \BackedEnum
+                ? $deployment->version->value
+                : (string) $deployment->version;
+            $sitemapHost = $version === 'www'
+                ? 'www.'.$deployment->domain
+                : $deployment->domain;
+
+            $this->searchConsoleService->registerDomain(
+                domain: $deployment->domain,
+                sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
+                verifyOwnership: true,
+                requestIndexing: true,
+            );
             $deployment->logs()->create([
                 'step_name' => 'registering_search_console',
                 'status' => 'success',

@@ -16,24 +16,33 @@ class GoogleSearchConsoleController extends Controller
     ) {}
 
     /**
-     * Run full registration: verify domain, submit sitemap, queue automatic indexing.
+     * Run full registration: verify/add domain, submit sitemap, and optionally request indexing.
      */
     public function registerDomain(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
-            'sitemap_url' => ['nullable', 'url'],
+            'domain' => ['required', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i'],
+            'sitemap_url' => ['nullable', 'url:http,https'],
+            'verify_ownership' => ['nullable', 'boolean'],
+            'request_indexing' => ['nullable', 'boolean'],
         ]);
 
         $domain = $validated['domain'];
         $sitemapUrl = $validated['sitemap_url'] ?? '';
+        $verifyOwnership = $validated['verify_ownership'] ?? true;
+        $requestIndexing = $validated['request_indexing'] ?? true;
 
         try {
-            $result = $this->searchConsoleService->registerDomain($domain, $sitemapUrl);
+            $result = $this->searchConsoleService->registerDomain(
+                $domain,
+                $sitemapUrl,
+                $verifyOwnership,
+                $requestIndexing,
+            );
 
             return response()->json([
                 'success' => true,
-                'message' => 'Google Search Console registration initiated.',
+                'message' => 'Domain registered and submitted to Google Search Console.',
                 'data' => $result,
             ]);
         } catch (Exception $e) {
@@ -51,12 +60,45 @@ class GoogleSearchConsoleController extends Controller
     }
 
     /**
+     * Add a site property directly to Google Search Console without requiring DNS verification.
+     */
+    public function addProperty(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'property' => ['required', 'string', 'max:253'],
+        ]);
+
+        $property = $validated['property'];
+
+        try {
+            $result = $this->searchConsoleService->addProperty($property);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Property added to Google Search Console.',
+                'data' => $result,
+            ]);
+        } catch (Exception $e) {
+            Log::error('GSC add property API failed', [
+                'property' => $property,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add property to Google Search Console.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Verify domain property ownership via Cloudflare DNS TXT.
      */
     public function verifyProperty(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
+            'domain' => ['required', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i'],
         ]);
 
         $domain = $validated['domain'];
@@ -92,8 +134,8 @@ class GoogleSearchConsoleController extends Controller
     public function submitSitemap(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string'],
-            'sitemap_url' => ['nullable', 'url'],
+            'domain' => ['required', 'string', 'max:253'],
+            'sitemap_url' => ['nullable', 'url:http,https'],
         ]);
 
         $domain = $validated['domain'];
@@ -126,69 +168,173 @@ class GoogleSearchConsoleController extends Controller
     }
 
     /**
-     * Request indexing for specific URLs directly via Indexing API.
+     * Request indexing for a specific URL using the Google Indexing API.
      */
     public function requestIndexing(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'urls' => ['required', 'array', 'min:1'],
-            'urls.*' => ['required', 'url'],
+            'url' => ['required', 'url:http,https'],
+            'type' => ['nullable', 'string', 'in:URL_UPDATED,URL_DELETED'],
         ]);
 
-        $urls = $validated['urls'];
+        $url = $validated['url'];
+        $type = $validated['type'] ?? 'URL_UPDATED';
 
         try {
-            $results = $this->searchConsoleService->requestIndexing($urls);
+            $result = $this->searchConsoleService->requestIndexing($url, $type);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Indexing request processed.',
-                'data' => [
-                    'results' => $results,
-                ],
+                'message' => 'Indexing request published to Google.',
+                'data' => $result,
             ]);
         } catch (Exception $e) {
-            Log::error('GSC request indexing API failed', [
-                'urls' => $urls,
+            Log::error('Google Indexing API failed', [
+                'url' => $url,
+                'type' => $type,
                 'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to request indexing.',
+                'message' => 'Failed to request URL indexing with Google.',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Test fetching and parsing sitemap URLs.
+     * Check indexing notification metadata for a URL.
      */
-    public function testFetchSitemap(Request $request): JsonResponse
+    public function getIndexingStatus(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'sitemap_url' => ['required', 'url'],
+            'url' => ['required', 'url:http,https'],
         ]);
 
-        $sitemapUrl = $validated['sitemap_url'];
+        $url = $validated['url'];
 
         try {
-            $urls = $this->searchConsoleService->fetchSitemapUrls($sitemapUrl);
+            $result = $this->searchConsoleService->getIndexingStatus($url);
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'sitemap_url' => $sitemapUrl,
-                    'total_urls' => count($urls),
-                    'urls' => array_slice($urls, 0, 50), // Return preview of first 50
+                'data' => $result,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get indexing status from Google.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Google OAuth consent URL.
+     */
+    public function getOAuthUrl(Request $request): JsonResponse
+    {
+        try {
+            $authUrl = $this->searchConsoleService->createOAuthUrl((int) $request->user()->getKey());
+
+            return response()->json([
+                'success' => true,
+                'auth_url' => $authUrl,
+                'redirect_uri' => config('services.google_search_console.redirect_uri'),
+                'client_id' => config('services.google_search_console.client_id'),
+                'scopes' => [
+                    'https://www.googleapis.com/auth/webmasters',
+                    'https://www.googleapis.com/auth/siteverification',
+                    'https://www.googleapis.com/auth/indexing',
+                    'openid',
+                    'email',
                 ],
             ]);
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch sitemap.',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => $e->getMessage(),
+            ], 400);
         }
     }
+
+    /**
+     * Exchange an authorization code or refresh token for stored OAuth credentials.
+     */
+    public function exchangeOAuthCode(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['nullable', 'string', 'required_without:refresh_token'],
+            'refresh_token' => ['nullable', 'string', 'required_without:code'],
+            'email' => ['nullable', 'email'],
+        ]);
+
+        try {
+            if (! empty($validated['code'])) {
+                $account = $this->searchConsoleService->handleOAuthCallback(
+                    $validated['code'],
+                    $request->user()?->id,
+                );
+            } else {
+                $account = $this->searchConsoleService->handleRefreshToken(
+                    $validated['refresh_token'],
+                    $validated['email'] ?? null,
+                    $request->user()?->id,
+                );
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Google account linked and activated successfully.',
+                'data' => [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'client_email' => $account->client_email,
+                    'is_active' => $account->is_active,
+                ],
+            ]);
+        } catch (Exception $e) {
+            Log::error('OAuth token exchange failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to exchange authorization code: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Check Google Search Console connection & OAuth status.
+     */
+    public function oauthStatus(Request $request): JsonResponse
+    {
+        $activeAccount = app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleAccountService::class)->active();
+        $accountType = null;
+
+        if ($activeAccount) {
+            $accountType = $activeAccount->credentials['type'] ?? 'service_account';
+        } elseif ($this->searchConsoleService->hasOAuthEnvFallback()) {
+            $accountType = 'oauth_env';
+        } elseif ($this->searchConsoleService->hasLegacyFallback()) {
+            $accountType = 'service_account_file';
+        }
+
+        return response()->json([
+            'success' => true,
+            'is_enabled' => $this->searchConsoleService->isEnabled(),
+            'oauth_configured' => $this->searchConsoleService->hasOAuthConfiguration(),
+            'client_id' => config('services.google_search_console.client_id'),
+            'redirect_uri' => config('services.google_search_console.redirect_uri'),
+            'timeout' => (int) config('services.google_search_console.timeout', 30),
+            'active_account' => $activeAccount ? [
+                'id' => $activeAccount->id,
+                'name' => $activeAccount->name,
+                'client_email' => $activeAccount->client_email,
+                'type' => $accountType,
+            ] : null,
+            'account_type' => $accountType,
+        ]);
+    }
+
 }
