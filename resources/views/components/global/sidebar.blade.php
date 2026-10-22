@@ -119,36 +119,6 @@
                         <span class="text-sm font-medium truncate">Dashboard</span>
                     </a>
                 </li>
-
-                <li class="px-2 mt-6 mb-1">
-                    <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
-                </li>
-                <li>
-                    <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-terminal class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Environment Variables</span>
-                    </a>
-                </li>
-                @if(auth()->user()?->isAdmin())
-                    <li>
-                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                            <x-lucide-search class="size-4.5 shrink-0" />
-                            <span class="text-sm font-medium truncate">Google Search Console</span>
-                        </a>
-                    </li>
-                @endif
-                <li>
-                    <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-server class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Servers</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
-                        <x-lucide-users class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Users</span>
-                    </a>
-                </li>
                 @if(auth()->user()?->isAdmin())
                     <li class="px-2 mt-6 mb-1">
                         <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">Settings</span>
@@ -157,6 +127,12 @@
                         <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
                             <x-lucide-terminal class="size-4.5 shrink-0" />
                             <span class="text-sm font-medium truncate">Environment Variables</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100">
+                            <x-lucide-search class="size-4.5 shrink-0" />
+                            <span class="text-sm font-medium truncate">Google Search Console</span>
                         </a>
                     </li>
                     <li>

@@ -84,4 +84,4 @@ Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAu
             return view('pages.users', compact('users'));
         })->name('users');
     });
-});
+
