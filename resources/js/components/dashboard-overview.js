@@ -22,7 +22,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         // Drawer Form state
         form: {
             domain: '',
-            server_id: (Array.isArray(initialServers) && initialServers.length > 0) ? initialServers[0].server_id : '',
+            server_id: '',
             version: 'non-www',
             source_type: 'url',
             archive_url: '',
@@ -30,7 +30,10 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         },
         serverDropdownOpen: false,
         get selectedServer() {
-            return this.servers.find(s => s.server_id == this.form.server_id) || null;
+            if (!this.form.server_id && this.servers.length > 0) {
+                this.form.server_id = this.servers[0].server_id;
+            }
+            return this.servers.find(s => String(s.server_id) === String(this.form.server_id)) || null;
         },
         errors: {},
 
@@ -38,6 +41,9 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         pollInterval: null,
 
         async init() {
+            if (this.servers.length > 0 && !this.form.server_id) {
+                this.form.server_id = this.servers[0].server_id;
+            }
             try {
                 fetchCurrentUser()
                     .then(user => {
@@ -53,7 +59,12 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                         this.loadServers(),
                         this.loadDeployments(),
                     ]);
-                } else if (!this.form.server_id && this.servers.length > 0) {
+                } else {
+                    // Refresh servers in the background to ensure fresh state
+                    this.loadServers().catch(() => { });
+                }
+
+                if (!this.form.server_id && this.servers.length > 0) {
                     this.form.server_id = this.servers[0].server_id;
                 }
             } catch (error) {
@@ -282,9 +293,13 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
             this.showModal = true;
             this.serverDropdownOpen = false;
             this.errors = {};
+            const defaultServerId = (this.form.server_id && this.servers.some(s => String(s.server_id) === String(this.form.server_id)))
+                ? this.form.server_id
+                : (this.servers.length > 0 ? this.servers[0].server_id : '');
+
             this.form = {
                 domain: '',
-                server_id: this.servers.length > 0 ? this.servers[0].server_id : '',
+                server_id: defaultServerId,
                 version: 'non-www',
                 source_type: 'url',
                 archive_url: '',

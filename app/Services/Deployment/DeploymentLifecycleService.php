@@ -127,16 +127,19 @@ class DeploymentLifecycleService
             throw new DomainException('Only failed or cancelled deployments can be retried.');
         }
 
-        $waitsForArchive = filled($deployment->archive_url);
+        $hasLocalArchive = filled($deployment->archive_path)
+            && Storage::disk('local')->exists($deployment->archive_path)
+            && Storage::disk('local')->size($deployment->archive_path) > 0;
 
-        if ($deployment->archive_source === 'upload'
-            && (blank($deployment->archive_path) || ! Storage::disk('local')->exists($deployment->archive_path))) {
+        $waitsForArchive = filled($deployment->archive_url) && ! $hasLocalArchive;
+
+        if ($deployment->archive_source === 'upload' && ! $hasLocalArchive) {
             throw new DomainException('The uploaded ZIP is no longer available. Upload it again before retrying.');
         }
 
-        $readyStep = $deployment->archive_source === 'upload' ? 'archive_ready' : 'queued';
+        $readyStep = ($deployment->archive_source === 'upload' || $hasLocalArchive) ? 'archive_ready' : 'queued';
 
-        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep): void {
+        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep, $hasLocalArchive): void {
             $deployment->update([
                 'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : ArchiveStatus::Ready,
                 'status' => DeploymentStatus::Pending,
@@ -147,7 +150,9 @@ class DeploymentLifecycleService
                 'status' => 'in_progress',
                 'message' => $waitsForArchive
                     ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
-                    : 'Deployment retry queued by an administrator.',
+                    : ($hasLocalArchive
+                        ? 'Deployment retry queued. Existing archive file is ready, resuming deployment.'
+                        : 'Deployment retry queued by an administrator.'),
             ]);
         });
 
