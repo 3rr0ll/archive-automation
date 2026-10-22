@@ -39,6 +39,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/cloudflare/dns/setup-runcloud', [CloudflareController::class, 'setupRunCloudDns']);
     Route::post('/cloudflare/dns', [CloudflareController::class, 'setupRunCloudDns']);
     Route::post('/cloudflare/cache/purge', [CloudflareController::class, 'purgeCache']);
+
+    // Deployments API (Authenticated Users)
+    Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
 });
 
 // Admin API Routes (Requires Admin Role)
@@ -67,7 +70,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::post('/servers/sync', [ServerController::class, 'sync'])->name('servers.sync');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
-    Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
     Route::post('/servers/{server}/archives/unzip', [ArchiveController::class, 'unzip'])
         ->name('servers.archives.unzip');
     Route::patch('/servers/{server}/toggle-active', [ServerController::class, 'toggleActive'])->name('servers.toggle-active');
@@ -83,7 +85,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::apiResource('environment-variables', EnvironmentVariableController::class);
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
-    Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::get('/deployments/statistics', [DeploymentController::class, 'statistics'])->name('deployments.statistics');
     Route::get('/api-usage', [ApiUsageController::class, 'index'])->name('api-usage.index');
     Route::post('/deployments/bulk-cancel', [DeploymentController::class, 'bulkCancel'])->name('deployments.bulk-cancel');

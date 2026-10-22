@@ -56,3 +56,32 @@ Route::middleware('auth')->group(function (): void {
 // Google OAuth callback (matches GOOGLE_REDIRECT_URI)
 Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAuthController::class, 'handleCallback'])
     ->name('google.callback');
+
+    // Admin-Only Web Pages
+    Route::middleware('admin')->group(function (): void {
+        Route::get('/environment-variables', function () {
+            $variables = \App\Models\EnvironmentVariable::with('user')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($env) {
+                    if ($env->type === 'secret') {
+                        $env->value = null;
+                    } else {
+                        $env->makeVisible('value');
+                    }
+                    return $env;
+                });
+            return view('pages.environment-variables', compact('variables'));
+        })->name('environment-variables');
+
+        Route::get('/servers', function () {
+            $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
+            return view('pages.servers', compact('servers'));
+        })->name('servers');
+
+        Route::get('/users', function () {
+            $users = \App\Models\User::orderBy('created_at', 'desc')->get();
+            return view('pages.users', compact('users'));
+        })->name('users');
+    });
+});

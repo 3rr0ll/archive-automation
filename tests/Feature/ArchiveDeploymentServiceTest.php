@@ -641,6 +641,76 @@ class ArchiveDeploymentServiceTest extends TestCase
         ]);
     }
 
+    public function test_retry_resumes_from_failed_cloudflare_step_without_redownloading_or_reuploading(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('deployments/2/archive.zip', 'zip contents');
+        Server::factory()->create([
+            'server_id' => 123,
+            'ip_address' => '192.0.2.10',
+        ]);
+
+        $deployment = $this->deployment([
+            'id' => 2,
+            'archive_source' => 'wayback',
+            'archive_url' => 'https://web.archive.org/download/example/example.zip',
+            'archive_path' => 'deployments/2/archive.zip',
+            'status' => 'pending',
+            'current_step' => 'archive_ready',
+        ]);
+
+        // Prior successful steps
+        $deployment->logs()->create([
+            'step_name' => 'downloading_archive',
+            'status' => 'success',
+            'message' => 'Downloaded the archive ZIP (12 bytes).',
+        ]);
+        $deployment->logs()->create([
+            'step_name' => 'provisioning_web_app',
+            'status' => 'success',
+            'message' => 'Provisioned the web app.',
+        ]);
+        $deployment->logs()->create([
+            'step_name' => 'uploading_and_extracting_archive',
+            'status' => 'success',
+            'message' => 'Uploaded and extracted 15 archive entries.',
+        ]);
+
+        $archiveService = Mockery::mock(InternetArchiveService::class);
+        $archiveService->shouldNotReceive('downloadArchiveFromUrl');
+
+        $runCloudService = Mockery::mock(RunCloudService::class);
+        $runCloudService->shouldReceive('createEmptyWebApplication')
+            ->once()
+            ->andReturn(['already_exists' => true]);
+        $runCloudService->shouldReceive('generateWebAppName')
+            ->once()
+            ->andReturn('example');
+
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldNotReceive('uploadAndExtract');
+
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')
+            ->once()
+            ->with('example.com', 'non-www')
+            ->andReturn(['routes' => []]);
+
+        $result = $this->createService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+            $sftpArchiveService,
+        )->deploy($deployment);
+
+        $this->assertSame('completed', $result->status->value);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'uploading_and_extracting_archive',
+            'message' => 'Archive files were already uploaded and extracted in a previous attempt. Skipping.',
+        ]);
+    }
+
     /**
      * @param  array<string, mixed>  $attributes
      */

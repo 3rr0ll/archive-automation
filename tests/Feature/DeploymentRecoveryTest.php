@@ -191,21 +191,22 @@ class DeploymentRecoveryTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_regular_user_cannot_submit_recovery(): void
+    public function test_regular_user_can_submit_recovery(): void
     {
         Queue::fake([WaitForWaybackArchive::class]);
         $user = User::factory()->create(['role' => 'user']);
         $token = $user->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
 
         $this->withToken($token)->postJson('/api/deployments', [
             'server_id' => 123,
             'domain' => 'example.com',
             'version' => 'non-www',
             'archive_url' => 'https://web.archive.org/download/example/example.zip',
-        ])->assertForbidden();
+        ])->assertAccepted();
 
-        $this->assertDatabaseCount('deployments', 0);
-        Queue::assertNothingPushed();
+        $this->assertDatabaseCount('deployments', 1);
+        Queue::assertPushed(WaitForWaybackArchive::class);
     }
 
     public function test_recovery_requires_an_active_server_from_the_catalog(): void

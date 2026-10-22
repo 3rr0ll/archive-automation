@@ -51,43 +51,61 @@ class ArchiveDeploymentService
                 ? $deployment->version->value
                 : (string) $deployment->version;
 
+            $archiveExists = filled($deployment->archive_path)
+                && Storage::disk('local')->exists($deployment->archive_path)
+                && Storage::disk('local')->size($deployment->archive_path) > 0;
+
             if ($deployment->archive_source === 'upload') {
                 $this->transition($deployment, 'preparing_archive', 'Preparing the uploaded ZIP.', DeploymentStatus::Processing);
 
-                if (blank($deployment->archive_path)
-                    || ! Storage::disk('local')->exists($deployment->archive_path)) {
+                if (! $archiveExists) {
                     throw new RuntimeException('The uploaded ZIP is no longer available.');
                 }
             } else {
-                $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
+                $archiveRelativePath = filled($deployment->archive_path)
+                    ? $deployment->archive_path
+                    : "deployments/{$deployment->id}/archive.zip";
 
-                $archiveRelativePath = "deployments/{$deployment->id}/archive.zip";
-                $archiveAbsolutePath = Storage::disk('local')->path($archiveRelativePath);
+                if ($archiveExists) {
+                    $this->transition($deployment, 'downloading_archive', 'Reusing previously downloaded archive ZIP.', DeploymentStatus::Processing);
+                    $deployment->logs()->create([
+                        'step_name' => 'downloading_archive',
+                        'status' => 'success',
+                        'message' => sprintf(
+                            'Reusing the already downloaded archive ZIP (%d bytes).',
+                            Storage::disk('local')->size($archiveRelativePath),
+                        ),
+                    ]);
+                } else {
+                    $this->transition($deployment, 'downloading_archive', 'Downloading the archived website.', DeploymentStatus::Processing);
 
-                if (blank($deployment->archive_url)) {
-                    throw new RuntimeException('The archive download URL is not available.');
+                    $archiveAbsolutePath = Storage::disk('local')->path($archiveRelativePath);
+
+                    if (blank($deployment->archive_url)) {
+                        throw new RuntimeException('The archive download URL is not available.');
+                    }
+
+                    $downloadSuccess = $this->archiveService->downloadArchiveFromUrl(
+                        $deployment->archive_url,
+                        $archiveAbsolutePath,
+                    );
+
+                    if (! $downloadSuccess
+                        || ! Storage::disk('local')->exists($archiveRelativePath)
+                        || Storage::disk('local')->size($archiveRelativePath) === 0) {
+                        throw new RuntimeException('The archived website could not be downloaded.');
+                    }
+
+                    $deployment->update(['archive_path' => $archiveRelativePath]);
+                    $deployment->logs()->create([
+                        'step_name' => 'downloading_archive',
+                        'status' => 'success',
+                        'message' => sprintf(
+                            'Downloaded the archive ZIP (%d bytes).',
+                            Storage::disk('local')->size($archiveRelativePath),
+                        ),
+                    ]);
                 }
-
-                $downloadSuccess = $this->archiveService->downloadArchiveFromUrl(
-                    $deployment->archive_url,
-                    $archiveAbsolutePath,
-                );
-
-                if (! $downloadSuccess
-                    || ! Storage::disk('local')->exists($archiveRelativePath)
-                    || Storage::disk('local')->size($archiveRelativePath) === 0) {
-                    throw new RuntimeException('The archived website could not be downloaded.');
-                }
-
-                $deployment->update(['archive_path' => $archiveRelativePath]);
-                $deployment->logs()->create([
-                    'step_name' => 'downloading_archive',
-                    'status' => 'success',
-                    'message' => sprintf(
-                        'Downloaded the archive ZIP (%d bytes).',
-                        Storage::disk('local')->size($archiveRelativePath),
-                    ),
-                ]);
             }
 
             $deployment->refresh();
@@ -111,7 +129,7 @@ class ArchiveDeploymentService
 
             if (! empty($result['already_exists'])) {
                 $canResumeDeployment = $deployment->logs()
-                    ->where('step_name', 'uploading_and_extracting_archive')
+                    ->whereIn('step_name', ['provisioning_web_app', 'uploading_and_extracting_archive'])
                     ->exists()
                     || Deployment::query()
                         ->whereKeyNot($deployment->getKey())
@@ -146,20 +164,46 @@ class ArchiveDeploymentService
                 throw new RuntimeException('The local archive ZIP is unavailable for server deployment.');
             }
 
-            $this->deployArchiveToServer($deployment, $result, $serverIp);
+            $archiveAlreadyExtracted = $deployment->logs()
+                ->where('step_name', 'uploading_and_extracting_archive')
+                ->where('status', 'success')
+                ->exists();
+
+            if ($archiveAlreadyExtracted) {
+                $deployment->logs()->create([
+                    'step_name' => 'uploading_and_extracting_archive',
+                    'status' => 'success',
+                    'message' => 'Archive files were already uploaded and extracted in a previous attempt. Skipping.',
+                ]);
+            } else {
+                $this->deployArchiveToServer($deployment, $result, $serverIp);
+            }
 
             $deployment->refresh();
             if ($deployment->status === DeploymentStatus::Cancelled) {
                 return $deployment;
             }
 
-            $this->transition(
-                $deployment,
-                'configuring_cloudflare_workers',
-                'Assigning the Cloudflare Worker routes.',
-            );
+            $workersAlreadyConfigured = $deployment->logs()
+                ->where('step_name', 'configuring_cloudflare_workers')
+                ->where('status', 'success')
+                ->exists();
 
-            $this->cloudflareWorkerService->changeWorkers($deployment->domain, $version);
+            if ($workersAlreadyConfigured) {
+                $deployment->logs()->create([
+                    'step_name' => 'configuring_cloudflare_workers',
+                    'status' => 'success',
+                    'message' => 'Cloudflare Worker routes were already configured in a previous attempt. Skipping.',
+                ]);
+            } else {
+                $this->transition(
+                    $deployment,
+                    'configuring_cloudflare_workers',
+                    'Assigning the Cloudflare Worker routes.',
+                );
+
+                $this->cloudflareWorkerService->changeWorkers($deployment->domain, $version);
+            }
 
             $deployment->refresh();
             if ($deployment->status === DeploymentStatus::Cancelled) {

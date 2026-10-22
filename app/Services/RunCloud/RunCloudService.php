@@ -132,22 +132,27 @@ class RunCloudService
             ?? 0
         ) ?: null;
 
-        // 5. Configure Cloudflare DNS.
-        // For HTTP-01 challenges, create A records unproxied (grey cloud) so Let's Encrypt can
-        // immediately reach the origin server without Cloudflare proxy delay or verification failures.
-        $authMethod = (string) $this->client->getEnvValue('RUNCLOUD_SSL_AUTH_METHOD', Config::get('services.runcloud.ssl_authorization_method', 'http-01'));
-        $initialProxyStatus = ($authMethod === 'dns-01');
+        // 5. Configure Domain: enable WWW for this domain/subdomain & set preferred domain version to "do not set" (redirection: none)
+        try {
+            $configuredDomain = $this->webAppService->configureDomain($server, $appId, $domain, $domainId);
+            if (! $domainId && ! empty($configuredDomain['id'])) {
+                $domainId = (int) $configuredDomain['id'];
+            }
+        } catch (Exception $e) {
+            Log::warning('RunCloud configure domain (enable www / redirection: none) failed', [
+                'server_id' => $server,
+                'web_app_id' => $appId,
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
+        // 6. Configure Cloudflare DNS.
         $dnsSetup = null;
         $resolvedIp = $serverIp ?: $this->serverService->getServerIp($server);
         try {
-            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, $initialProxyStatus);
+            $dnsSetup = $this->cloudflareDnsService->setupRunCloudDns($domain, $resolvedIp, true);
         } catch (Exception $e) {
-            // For HTTP-01 challenges, DNS must succeed; fail immediately rather than attempting SSL without DNS
-            if (! $initialProxyStatus) {
-                throw new Exception("Cloudflare DNS setup failed for {$domain}: {$e->getMessage()}", 0, $e);
-            }
-
             Log::warning('Direct Cloudflare DNS setup was not applied during RunCloud web app creation', [
                 'domain' => $domain,
                 'server_id' => $server,
@@ -155,41 +160,17 @@ class RunCloudService
             ]);
         }
 
-        // Stop if DNS propagation fails for HTTP-01
-        if (! $initialProxyStatus) {
-            $dnsReady = $this->sslService->waitForDnsPropagation($domain, $resolvedIp);
-
-            if (! $dnsReady) {
-                throw new Exception("DNS for {$domain} has not propagated to {$resolvedIp}. SSL was not requested.");
-            }
-        }
-
-        // 6. Configure Advanced SSL / AutoSSL (passing domainId skips GET /domains if already present)
-        $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
-
-        // 7. If DNS was initialized unproxied for HTTP-01 validation, only switch Cloudflare proxy back ON
-        // once SSL is confirmed issued by RunCloud.
-        if (! $initialProxyStatus) {
-            $domainId = $domainId ?? $this->webAppService->getDomainId($server, $appId, $domain);
-            $sslIssued = $this->sslService->waitForSslIssued($server, $appId, $domain, $domainId);
-
-            if (! $sslIssued) {
-                throw new Exception(
-                    "SSL issuance was not confirmed for {$domain}. Cloudflare proxy remains disabled for HTTP-01 validation."
-                );
-            }
-
-            try {
-                $this->cloudflareDnsService->setProxyStatus($domain, true);
-                if (is_array($dnsSetup)) {
-                    $dnsSetup['proxied'] = true;
-                }
-            } catch (Exception $e) {
-                Log::warning('Failed to re-enable Cloudflare proxy status after SSL initiation', [
-                    'domain' => $domain,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        // 7. Configure Advanced SSL (Let's Encrypt dns-01 via Cloudflare externalApi + AutoSSL)
+        $sslConfig = null;
+        try {
+            $sslConfig = $this->sslService->configureAdvancedSsl($server, $appId, $domain, $domainId);
+        } catch (Exception $e) {
+            Log::warning('RunCloud Advanced SSL configuration failed during empty web app creation', [
+                'server_id' => $server,
+                'web_app_id' => $appId,
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         Log::info('Successfully created RunCloud Empty Web Application', [
@@ -199,8 +180,6 @@ class RunCloudService
             'domain' => $domain,
             'php_version' => self::DEFAULT_PHP_VERSION,
         ]);
-
-        $sslAuthLabel = strtoupper($authMethod);
 
         return [
             'success' => true,
@@ -214,7 +193,7 @@ class RunCloudService
             'preferred_domain' => 'unset (none)',
             'dns_integration' => 'cloudflare_direct',
             'dns_setup' => $dnsSetup,
-            'ssl' => "Let's Encrypt (Advanced SSL / {$sslAuthLabel})",
+            'ssl' => "Let's Encrypt (Advanced SSL / AutoSSL / dns-01)",
             'ssl_config' => $sslConfig,
             'data' => $createdApp,
         ];
@@ -274,9 +253,9 @@ class RunCloudService
         return $this->webAppService->customWebAppPayload($webAppName, $domain, $systemUserId);
     }
 
-    public function configureDomain(int $serverId, int $appId, string $domain): array
+    public function configureDomain(int $serverId, int $appId, string $domain, ?int $domainId = null): array
     {
-        return $this->webAppService->configureDomain($serverId, $appId, $domain);
+        return $this->webAppService->configureDomain($serverId, $appId, $domain, $domainId);
     }
 
     public function getDomainId(int $serverId, int $appId, string $domain): ?int
@@ -294,21 +273,6 @@ class RunCloudService
     public function enableAdvancedSslMode(int $serverId, int $appId): bool
     {
         return $this->sslService->enableAdvancedSslMode($serverId, $appId);
-    }
-
-    public function configureAutoSsl(int $serverId, int $appId): array
-    {
-        return $this->sslService->configureAutoSsl($serverId, $appId);
-    }
-
-    public function waitForDnsPropagation(string $domain, string $expectedIp, int $maxAttempts = 10, int $sleepSeconds = 3): bool
-    {
-        return $this->sslService->waitForDnsPropagation($domain, $expectedIp, $maxAttempts, $sleepSeconds);
-    }
-
-    public function waitForSslIssued(int $serverId, int $appId, string $domain, ?int $domainId = null, int $maxAttempts = 30, int $sleepSeconds = 5): bool
-    {
-        return $this->sslService->waitForSslIssued($serverId, $appId, $domain, $domainId, $maxAttempts, $sleepSeconds);
     }
 
     // --- Client / HTTP Delegations ---
