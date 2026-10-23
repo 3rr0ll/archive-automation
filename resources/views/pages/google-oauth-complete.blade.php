@@ -25,12 +25,36 @@
                 type: 'google-oauth-complete',
                 success: @js($success),
                 message: @js($message),
+                account: @js($account ?? null),
             };
 
+            // 1. Post to opener if available
             if (window.opener && !window.opener.closed) {
-                window.opener.postMessage(result, window.location.origin);
-                window.setTimeout(() => window.close(), 150);
+                try {
+                    window.opener.postMessage(result, window.location.origin);
+                } catch (e) {}
             }
+
+            // 2. BroadcastChannel for cross-tab communication
+            try {
+                const channel = new BroadcastChannel('google_oauth_channel');
+                channel.postMessage(result);
+                channel.close();
+            } catch (e) {}
+
+            // 3. Fallback localStorage trigger
+            try {
+                localStorage.setItem('google_oauth_result', JSON.stringify({
+                    timestamp: Date.now(),
+                    ...result
+                }));
+            } catch (e) {}
+
+            window.setTimeout(() => {
+                if (window.opener && !window.opener.closed) {
+                    window.close();
+                }
+            }, 300);
         })();
     </script>
 </body>

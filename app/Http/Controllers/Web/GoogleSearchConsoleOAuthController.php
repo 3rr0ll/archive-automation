@@ -75,6 +75,16 @@ class GoogleSearchConsoleOAuthController extends Controller
             return response()->view('pages.google-oauth-complete', [
                 'success' => true,
                 'message' => "Google Search Console account {$account->client_email} connected successfully!",
+                'account' => [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'client_email' => $account->client_email,
+                    'owner_email' => $account->owner_email,
+                    'is_active' => (bool) $account->is_active,
+                    'has_credentials' => true,
+                    'created_at' => $account->created_at?->toIso8601String(),
+                    'updated_at' => $account->updated_at?->toIso8601String(),
+                ],
             ]);
         } catch (Throwable $e) {
             Log::error('Google OAuth callback exchange failed', [

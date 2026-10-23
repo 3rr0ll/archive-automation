@@ -21,8 +21,8 @@
     <div class="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-200 dark:divide-zinc-800 transition-colors">
         @for ($i = 0; $i < 3; $i++)
             <div class="px-4 py-4 sm:px-6 flex items-center justify-between">
-                <div class="flex items-center gap-4 flex-1 min-w-0 pr-4">
-                    <div class="size-9 rounded-lg bg-zinc-200/80 dark:bg-zinc-800 shrink-0"></div>
+                <div class="flex items-center gap-3.5 flex-1 min-w-0 pr-4">
+                    <div class="size-4 rounded bg-zinc-200/70 dark:bg-zinc-800 shrink-0"></div>
                     <div class="flex-1 min-w-0 space-y-1.5">
                         <div class="flex items-center gap-2.5">
                             <div class="h-4 w-40 bg-zinc-200/80 dark:bg-zinc-800 rounded"></div>
