@@ -15,7 +15,7 @@
             <button type="button"
                     x-show="selectedDeploymentIds.length > 0"
                     @click="deleteSelectedDeploymentsPrompt()"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-700 bg-white hover:bg-red-50 transition">
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 dark:border-rose-900/40 text-red-700 dark:text-rose-300/90 bg-white dark:bg-zinc-900 hover:bg-red-50 dark:hover:bg-rose-950/40 transition">
                 <x-lucide-trash-2 class="size-3.5" />
                 <span x-text="`Delete (${selectedDeploymentIds.length})`"></span>
             </button>
@@ -32,7 +32,7 @@
             <p class="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">Get started by launching a new deployment from an archived website snapshot.</p>
             <button type="button" 
                     @click="openModal()" 
-                    class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 transition">
+                    class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 transition cursor-pointer shadow-sm">
                 <x-lucide-plus class="size-3.5" />
                 <span>New Deployment</span>
             </button>

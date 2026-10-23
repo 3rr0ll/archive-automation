@@ -84,6 +84,7 @@ class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
         $account = new GoogleSearchConsoleAccount;
         $account->credentials = [
             'type' => 'service_account',
+            'client_id' => '123456789',
             'client_email' => 'test@example.iam.gserviceaccount.com',
             'private_key' => "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
         ];

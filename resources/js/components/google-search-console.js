@@ -15,31 +15,71 @@ const emptyAccountForm = () => ({
     is_active: false,
 });
 
-export function googleSearchConsolePage() {
+export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallback = false) {
     return {
-        accounts: [],
-        legacyFallbackConfigured: false,
-        isLoading: true,
+        accounts: Array.isArray(initialAccounts) ? initialAccounts : [],
+        legacyFallbackConfigured: Boolean(initialLegacyFallback),
+        isLoading: false,
         isSaving: false,
         testingId: null,
         activatingId: null,
         showAccountForm: false,
         editingId: null,
         accountForm: emptyAccountForm(),
-        isRegistering: false,
-        registrationResult: null,
-        domainForm: { domain: '', sitemap_url: '' },
+        searchQuery: '',
+        statusFilter: 'all',
+        sortBy: 'newest',
+
+        get filteredAccounts() {
+            let list = [...this.accounts];
+
+            if (this.searchQuery.trim() !== '') {
+                const q = this.searchQuery.toLowerCase().trim();
+                list = list.filter(item =>
+                    (item.name && item.name.toLowerCase().includes(q)) ||
+                    (item.client_email && item.client_email.toLowerCase().includes(q)) ||
+                    (item.owner_email && item.owner_email.toLowerCase().includes(q))
+                );
+            }
+
+            if (this.statusFilter === 'active') {
+                list = list.filter(item => Boolean(item.is_active));
+            } else if (this.statusFilter === 'inactive') {
+                list = list.filter(item => !Boolean(item.is_active));
+            }
+
+            if (this.sortBy === 'name') {
+                list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            } else if (this.sortBy === 'email') {
+                list.sort((a, b) => (a.client_email || '').localeCompare(b.client_email || ''));
+            } else {
+                // newest
+                list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+            }
+
+            return list;
+        },
 
         get hasActiveAccount() {
             return this.accounts.some((account) => account.is_active) || this.legacyFallbackConfigured;
         },
 
-        async init() {
-            await this.loadAccounts();
+        formatDate(dateString) {
+            if (!dateString) return 'Just now';
+            const date = new Date(dateString);
+            return isNaN(date.getTime())
+                ? 'Just now'
+                : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         },
 
-        async loadAccounts() {
-            this.isLoading = true;
+        async init() {
+            if (!this.accounts || this.accounts.length === 0) {
+                await this.loadAccounts();
+            }
+        },
+
+        async loadAccounts(showLoader = true) {
+            if (showLoader) this.isLoading = true;
             try {
                 const response = await fetchGoogleAccounts();
                 this.accounts = response.data || [];
@@ -47,7 +87,7 @@ export function googleSearchConsolePage() {
             } catch (error) {
                 window.toast?.error(error.message || 'Unable to load Google service accounts.');
             } finally {
-                this.isLoading = false;
+                if (showLoader) this.isLoading = false;
             }
         },
 
