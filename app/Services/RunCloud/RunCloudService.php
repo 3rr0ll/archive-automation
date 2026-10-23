@@ -101,6 +101,12 @@ class RunCloudService
 
         if (! $createResponse['success']) {
             if ($createResponse['is_duplicate'] ?? false) {
+                $existingApp = $this->webAppService->findExistingWebApplication(
+                    $server,
+                    $domain,
+                    $webAppName,
+                );
+
                 Log::warning('RunCloud Web Application already exists (caught on creation)', [
                     'server_id' => $server,
                     'domain' => $domain,
@@ -110,7 +116,9 @@ class RunCloudService
                 return [
                     'already_exists' => true,
                     'message' => 'Web application with this domain or name already exists on RunCloud.',
-                    'app' => $createResponse['data'] ?? [],
+                    'web_app_id' => (int) ($existingApp['id'] ?? 0) ?: null,
+                    'web_app_name' => $existingApp['name'] ?? $webAppName,
+                    'app' => $existingApp ?? ($createResponse['data'] ?? []),
                 ];
             }
 
@@ -227,6 +235,16 @@ class RunCloudService
     public function findExistingWebApplication(int $serverId, string $domain, string $appName): ?array
     {
         return $this->webAppService->findExistingWebApplication($serverId, $domain, $appName);
+    }
+
+    public function resolveWebApplication(int $serverId, string $domain, string $appName): ?array
+    {
+        return $this->webAppService->resolveWebApplication($serverId, $domain, $appName);
+    }
+
+    public function deleteWebApplication(int $serverId, int $webAppId): void
+    {
+        $this->webAppService->deleteWebApplication($serverId, $webAppId);
     }
 
     public function attemptCreateCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array

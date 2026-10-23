@@ -8,7 +8,9 @@ use App\Jobs\DeployArchivedWebsite;
 use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
 use App\Models\User;
+use App\Services\ApiUsage\ApiUsageContext;
 use App\Services\Logging\AuditLogger;
+use App\Services\RunCloud\RunCloudService;
 use DomainException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +22,8 @@ class DeploymentLifecycleService
 {
     public function __construct(
         private AuditLogger $auditLogger,
+        private RunCloudService $runCloudService,
+        private ApiUsageContext $apiUsageContext,
     ) {}
 
     /**
@@ -176,6 +180,18 @@ class DeploymentLifecycleService
             throw new DomainException('Cancel a processing deployment before deleting it.');
         }
 
+        try {
+            $this->apiUsageContext->forDeployment(
+                (int) $deployment->getKey(),
+                fn () => $this->deleteRemoteWebApplication($deployment),
+            );
+        } catch (Throwable $exception) {
+            throw new DomainException(
+                'The RunCloud web application could not be deleted, so the local deployment was kept. '.$exception->getMessage(),
+                previous: $exception,
+            );
+        }
+
         $archivePath = $deployment->archive_path;
         $deployment->delete();
         $this->auditLogger->record('deployment.deleted', $deployment, [
@@ -187,6 +203,39 @@ class DeploymentLifecycleService
             Storage::disk('local')->delete($archivePath);
             Storage::disk('local')->deleteDirectory("deployments/{$deployment->id}");
         }
+    }
+
+    private function deleteRemoteWebApplication(Deployment $deployment): void
+    {
+        $webAppId = (int) ($deployment->runcloud_web_app_id ?? 0);
+
+        if ($webAppId === 0) {
+            $reachedRunCloudProvisioning = $deployment->logs()
+                ->where('step_name', 'provisioning_web_app')
+                ->exists();
+
+            if (! $reachedRunCloudProvisioning) {
+                return;
+            }
+
+            $webAppName = $deployment->runcloud_web_app_name
+                ?: $this->runCloudService->generateWebAppName($deployment->domain);
+            $webApp = $this->runCloudService->resolveWebApplication(
+                (int) $deployment->server_id,
+                $deployment->domain,
+                $webAppName,
+            );
+            $webAppId = (int) ($webApp['id'] ?? 0);
+
+            if ($webAppId === 0) {
+                return;
+            }
+        }
+
+        $this->runCloudService->deleteWebApplication(
+            (int) $deployment->server_id,
+            $webAppId,
+        );
     }
 
     /**

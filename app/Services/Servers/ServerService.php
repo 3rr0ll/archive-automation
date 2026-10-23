@@ -24,6 +24,19 @@ class ServerService
     }
 
     /**
+     * Get servers that are available as deployment targets.
+     *
+     * @return Collection<int, Server>
+     */
+    public function getActive(): Collection
+    {
+        return Server::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
      * Sync servers from RunCloud API into local database.
      * Updates or creates records using server_id, keeping existing is_active flag.
      *

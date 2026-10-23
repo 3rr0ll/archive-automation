@@ -126,14 +126,24 @@ class ServerApiTest extends TestCase
             ->assertStatus(405);
     }
 
+    public function test_regular_user_can_list_only_active_servers(): void
+    {
+        $user = User::factory()->create(['role' => 'user']);
+        $activeServer = Server::factory()->create(['is_active' => true]);
+        Server::factory()->create(['is_active' => false]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/servers')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $activeServer->id)
+            ->assertJsonPath('data.0.is_active', true);
+    }
+
     public function test_regular_user_cannot_manage_servers(): void
     {
         $user = User::factory()->create(['role' => 'user']);
         $server = Server::factory()->create();
-
-        $this->actingAs($user, 'sanctum')
-            ->getJson('/api/servers')
-            ->assertForbidden();
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/servers/sync')

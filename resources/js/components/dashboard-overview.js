@@ -1,7 +1,12 @@
 // resources/js/components/dashboard-overview.js
 
 import { fetchCurrentUser } from '../services/auth-service.js';
-import { fetchDeployments, createDeployment } from '../services/deployment-service.js';
+import {
+    fetchDeployments,
+    createDeployment,
+    deleteDeployment,
+    bulkDeleteDeployments,
+} from '../services/deployment-service.js';
 import { getServers } from '../services/server-service.js';
 
 export function dashboardOverview(initialDeployments = [], initialServers = []) {
@@ -14,6 +19,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         isSubmitting: false,
         showModal: false,
         searchQuery: '',
+        selectedDeploymentIds: [],
 
         // Data arrays initialized with server-provided cached data
         deployments: Array.isArray(initialDeployments) ? initialDeployments : [],
@@ -87,19 +93,23 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
             }
         },
 
-        async loadServers() {
+        async loadServers(forceRefresh = false) {
             try {
-                const res = await getServers();
+                const res = await getServers(forceRefresh);
                 const list = res.data || res || [];
                 if (Array.isArray(list)) {
                     this.servers = list.filter(s => Boolean(s.is_active));
-                    if (this.servers.length > 0 && !this.form.server_id) {
-                        this.form.server_id = this.servers[0].server_id;
+                    const selectedServerStillActive = this.servers.some(
+                        s => String(s.server_id) === String(this.form.server_id)
+                    );
+                    if (!selectedServerStillActive) {
+                        this.form.server_id = this.servers.length > 0
+                            ? this.servers[0].server_id
+                            : '';
                     }
                 }
             } catch (err) {
                 console.warn('Could not load servers from /api:', err);
-                this.servers = [];
             }
         },
 
@@ -202,6 +212,89 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
             }
         },
 
+        get selectableDeployments() {
+            return this.paginatedDeployments.filter(item => item.status !== 'processing');
+        },
+
+        get allVisibleDeploymentsSelected() {
+            return this.selectableDeployments.length > 0
+                && this.selectableDeployments.every(item => this.selectedDeploymentIds.includes(item.id));
+        },
+
+        toggleDeploymentSelection(id) {
+            this.selectedDeploymentIds = this.selectedDeploymentIds.includes(id)
+                ? this.selectedDeploymentIds.filter(selectedId => selectedId !== id)
+                : [...this.selectedDeploymentIds, id];
+        },
+
+        toggleVisibleDeploymentSelection() {
+            const visibleIds = this.selectableDeployments.map(item => item.id);
+            if (this.allVisibleDeploymentsSelected) {
+                this.selectedDeploymentIds = this.selectedDeploymentIds.filter(id => !visibleIds.includes(id));
+                return;
+            }
+            this.selectedDeploymentIds = [...new Set([...this.selectedDeploymentIds, ...visibleIds])];
+        },
+
+        deleteDeploymentPrompt(item) {
+            if (item.status === 'processing') {
+                window.toast?.warning('Cancel this deployment before deleting it.');
+                return;
+            }
+
+            window.confirmModal?.show({
+                title: 'Delete Deployment and RunCloud App',
+                message: 'This permanently deletes the RunCloud web application, its server files, and the local deployment record. This cannot be undone.',
+                key: item.domain,
+                metaLabel: 'Domain',
+                confirmText: 'Delete Everywhere',
+                type: 'danger',
+                onConfirm: async () => {
+                    try {
+                        await deleteDeployment(item.hash || item.id);
+                        this.deployments = this.deployments.filter(deployment => deployment.id !== item.id);
+                        this.selectedDeploymentIds = this.selectedDeploymentIds.filter(id => id !== item.id);
+                        window.toast?.success('Deployment and RunCloud web application deleted.');
+                    } catch (error) {
+                        window.toast?.error(error.message || 'Failed to delete deployment.');
+                        throw error;
+                    }
+                },
+            });
+        },
+
+        deleteSelectedDeploymentsPrompt() {
+            const ids = [...this.selectedDeploymentIds];
+            if (ids.length === 0) return;
+
+            window.confirmModal?.show({
+                title: 'Bulk Delete Deployments',
+                message: `This permanently deletes ${ids.length} RunCloud web application(s), their server files, and local deployment records. This cannot be undone.`,
+                key: `${ids.length} selected deployment(s)`,
+                metaLabel: 'Selection',
+                confirmText: 'Delete All Everywhere',
+                type: 'danger',
+                onConfirm: async () => {
+                    try {
+                        const response = await bulkDeleteDeployments(ids);
+                        const processedIds = response?.data?.processed_ids || [];
+                        const skipped = response?.data?.skipped || [];
+                        this.deployments = this.deployments.filter(item => !processedIds.includes(item.id));
+                        this.selectedDeploymentIds = this.selectedDeploymentIds.filter(id => !processedIds.includes(id));
+
+                        if (skipped.length > 0) {
+                            window.toast?.warning(`${processedIds.length} deleted; ${skipped.length} could not be deleted.`);
+                        } else {
+                            window.toast?.success(`${processedIds.length} deployment(s) deleted everywhere.`);
+                        }
+                    } catch (error) {
+                        window.toast?.error(error.message || 'Bulk deletion failed.');
+                        throw error;
+                    }
+                },
+            });
+        },
+
         isItemActive(item) {
             return item.status === 'pending' || item.status === 'processing';
         },
@@ -291,10 +384,11 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         },
 
         // Drawer Controls
-        openModal() {
+        async openModal() {
             this.showModal = true;
             this.serverDropdownOpen = false;
             this.errors = {};
+            await this.loadServers(true);
             const defaultServerId = (this.form.server_id && this.servers.some(s => String(s.server_id) === String(this.form.server_id)))
                 ? this.form.server_id
                 : (this.servers.length > 0 ? this.servers[0].server_id : '');

@@ -21,10 +21,14 @@ class ServerController extends Controller
         private AuditLogger $auditLogger,
     ) {}
 
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
+        $servers = $request->user()?->isAdmin()
+            ? $this->serverService->getAll()
+            : $this->serverService->getActive();
+
         return ServerResource::collection(
-            $this->serverService->getAll()
+            $servers
         );
     }
 

@@ -41,6 +41,18 @@ export async function retryDeployment(id) {
     return res;
 }
 
+export async function deleteDeployment(id) {
+    const res = await api.delete(`/deployments/${id}`);
+    clientCache.invalidate('deployments*');
+    return res;
+}
+
+export async function bulkDeleteDeployments(ids) {
+    const res = await api.post('/deployments/bulk-delete', { ids });
+    clientCache.invalidate('deployments*');
+    return res;
+}
+
 export async function createDeployment(payload) {
     let result;
     if (typeof FormData !== 'undefined' && payload instanceof FormData) {

@@ -1,6 +1,12 @@
 // resources/js/components/deployment-logs.js
 
-import { fetchDeployment, fetchDeploymentLogs, retryDeployment, cancelDeployment } from '../services/deployment-service.js';
+import {
+    fetchDeployment,
+    fetchDeploymentLogs,
+    retryDeployment,
+    cancelDeployment,
+    deleteDeployment,
+} from '../services/deployment-service.js';
 
 export function deploymentLogsPage(deploymentId, initialDeployment = null) {
     return {
@@ -14,6 +20,7 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
         statusFilter: 'all',
         isRetrying: false,
         isCancelling: false,
+        isDeleting: false,
         autoScroll: true,
 
         async init() {
@@ -191,6 +198,37 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             } finally {
                 this.isCancelling = false;
             }
+        },
+
+        triggerDelete() {
+            if (this.isDeleting || !this.deployment) return;
+
+            if (this.deployment.status === 'processing') {
+                window.toast?.warning('Cancel this deployment before deleting it.');
+                return;
+            }
+
+            window.confirmModal?.show({
+                title: 'Delete Deployment and RunCloud App',
+                message: 'This permanently deletes the RunCloud web application, its server files, and the local deployment record. This cannot be undone.',
+                key: this.deployment.domain,
+                metaLabel: 'Domain',
+                confirmText: 'Delete Everywhere',
+                type: 'danger',
+                onConfirm: async () => {
+                    this.isDeleting = true;
+                    try {
+                        await deleteDeployment(this.deploymentId);
+                        window.toast?.success('Deployment and RunCloud web application deleted.');
+                        window.location.href = '/dashboard';
+                    } catch (error) {
+                        window.toast?.error(error.message || 'Failed to delete deployment.');
+                        throw error;
+                    } finally {
+                        this.isDeleting = false;
+                    }
+                },
+            });
         }
     };
 }

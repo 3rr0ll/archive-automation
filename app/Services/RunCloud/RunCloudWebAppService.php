@@ -85,6 +85,58 @@ class RunCloudWebAppService
     }
 
     /**
+     * Resolve a web application for destructive operations without hiding API failures.
+     */
+    public function resolveWebApplication(int $serverId, string $domain, string $appName): ?array
+    {
+        $response = $this->client->client()->get("/servers/{$serverId}/webapps", [
+            'search' => $appName,
+            'perPage' => 40,
+        ]);
+
+        if (! $response->successful()) {
+            $this->client->handleApiError('RunCloud webapp lookup failed', $response);
+        }
+
+        $apps = $response->json('data') ?? $response->json() ?? [];
+        $normalizedDomain = $this->normalizeDomain($domain);
+
+        foreach ($apps as $app) {
+            $existingName = strtolower((string) ($app['name'] ?? ''));
+            $domains = array_filter([
+                $app['domainName'] ?? null,
+                $app['primaryDomain']['name'] ?? null,
+                ...array_column($app['domains'] ?? [], 'name'),
+            ]);
+            $domainMatches = collect($domains)->contains(
+                fn (mixed $candidate): bool => $this->normalizeDomain((string) $candidate) === $normalizedDomain
+            );
+
+            if ($existingName === strtolower($appName) || $domainMatches) {
+                return $app;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Delete a web application. A missing app is already in the desired state.
+     */
+    public function deleteWebApplication(int $serverId, int $webAppId): void
+    {
+        $response = $this->client->client()->delete("/servers/{$serverId}/webapps/{$webAppId}");
+
+        if ($response->status() === 404) {
+            return;
+        }
+
+        if (! $response->successful()) {
+            $this->client->handleApiError('RunCloud delete webapp failed', $response);
+        }
+    }
+
+    /**
      * Attempt to create custom web app, detecting 422 duplicate/conflict responses without an upfront GET.
      */
     public function attemptCreateCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array

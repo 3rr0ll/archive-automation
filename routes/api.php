@@ -26,6 +26,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
 
+
+    Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
+
     // RunCloud Empty WebApp Creation API
     Route::get('/runcloud/servers', [RunCloudController::class, 'getServers']);
     Route::post('/runcloud/webapp', [RunCloudController::class, 'createApp']);
@@ -75,7 +78,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::post('/admin/google-search-console/indexing/request', [GoogleSearchConsoleController::class, 'requestIndexing']);
     Route::get('/admin/google-search-console/indexing/status', [GoogleSearchConsoleController::class, 'getIndexingStatus']);
 
-    Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
     Route::post('/servers/sync', [ServerController::class, 'sync'])->name('servers.sync');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
