@@ -23,9 +23,6 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
         isSaving: false,
         testingId: null,
         activatingId: null,
-        showAccountForm: false,
-        editingId: null,
-        accountForm: emptyAccountForm(),
         searchQuery: '',
         statusFilter: 'all',
         sortBy: 'newest',
@@ -76,6 +73,11 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
 
         async handleOAuthResult(data) {
             if (!data) return;
+
+            if (this.oauthPollTimer) {
+                clearInterval(this.oauthPollTimer);
+                this.oauthPollTimer = null;
+            }
 
             if (this.oauthWindow && !this.oauthWindow.closed) {
                 try {
@@ -151,6 +153,10 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
         },
 
         destroy() {
+            if (this.oauthPollTimer) {
+                clearInterval(this.oauthPollTimer);
+                this.oauthPollTimer = null;
+            }
             if (this.oauthMessageHandler) {
                 window.removeEventListener('message', this.oauthMessageHandler);
             }
@@ -171,6 +177,33 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
             }
 
             this.oauthWindow.focus();
+
+            // Clear any previous watcher
+            if (this.oauthPollTimer) {
+                clearInterval(this.oauthPollTimer);
+            }
+
+            // Fallback polling: If cross-origin or popup close disconnects the opener,
+            // poll loadAccounts() while popup is active and once right when it closes.
+            const initialAccountCount = this.accounts.length;
+            this.oauthPollTimer = setInterval(async () => {
+                if (!this.oauthWindow || this.oauthWindow.closed) {
+                    clearInterval(this.oauthPollTimer);
+                    this.oauthPollTimer = null;
+                    this.oauthWindow = null;
+                    await this.loadAccounts(false);
+                    return;
+                }
+
+                // Check in background every 2 seconds
+                try {
+                    await this.loadAccounts(false);
+                    if (this.accounts.length > initialAccountCount) {
+                        clearInterval(this.oauthPollTimer);
+                        this.oauthPollTimer = null;
+                    }
+                } catch (e) {}
+            }, 2000);
         },
 
         async loadAccounts(showLoader = true) {
@@ -183,55 +216,6 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
                 window.toast?.error(error.message || 'Unable to load Google service accounts.');
             } finally {
                 if (showLoader) this.isLoading = false;
-            }
-        },
-
-        openCreateForm() {
-            this.editingId = null;
-            this.accountForm = emptyAccountForm();
-            this.showAccountForm = true;
-        },
-
-        openEditForm(account) {
-            this.editingId = account.id;
-            this.accountForm = {
-                name: account.name,
-                owner_email: account.owner_email || '',
-                credentials_json: '',
-                is_active: account.is_active,
-            };
-            this.showAccountForm = true;
-        },
-
-        closeAccountForm() {
-            this.showAccountForm = false;
-            this.editingId = null;
-            this.accountForm = emptyAccountForm();
-        },
-
-        async saveAccount() {
-            this.isSaving = true;
-            try {
-                const payload = {
-                    name: this.accountForm.name.trim(),
-                    owner_email: this.accountForm.owner_email.trim() || null,
-                    is_active: Boolean(this.accountForm.is_active),
-                };
-                if (this.accountForm.credentials_json.trim()) {
-                    payload.credentials_json = this.accountForm.credentials_json.trim();
-                }
-
-                const response = this.editingId
-                    ? await updateGoogleAccount(this.editingId, payload)
-                    : await createGoogleAccount(payload);
-                window.toast?.success(response.message);
-                this.closeAccountForm();
-                await this.loadAccounts();
-            } catch (error) {
-                const validationMessage = Object.values(error.errors || {})?.[0]?.[0];
-                window.toast?.error(validationMessage || error.message || 'Unable to save Google service account.');
-            } finally {
-                this.isSaving = false;
             }
         },
 

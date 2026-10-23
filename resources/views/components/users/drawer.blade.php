@@ -174,56 +174,56 @@
                  x-transition:leave="ease-in duration-150"
                  x-transition:leave-start="opacity-100 scale-100"
                  x-transition:leave-end="opacity-0 scale-95"
-                 class="relative transform overflow-hidden rounded-2xl bg-white text-left transition-all sm:my-8 sm:w-full sm:max-w-md border border-zinc-200 p-6 space-y-5"
+                 class="relative transform overflow-hidden rounded-2xl bg-white dark:bg-[#18181b] text-left transition-all sm:my-8 sm:w-full sm:max-w-md border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-xl"
                  @click.stop>
                 <div>
-                    <h3 class="text-lg font-bold text-zinc-950 tracking-tight" id="reset-modal-title">Reset Password</h3>
-                    <p class="text-xs text-zinc-500 mt-1">
-                        Set a new password for <span class="font-semibold text-zinc-800" x-text="passwordForm.user_name"></span>.
+                    <h3 class="text-lg font-bold text-zinc-950 dark:text-zinc-100 tracking-tight" id="reset-modal-title">Reset Password</h3>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                        Set a new password for <span class="font-semibold text-zinc-800 dark:text-zinc-200" x-text="passwordForm.user_name"></span>.
                     </p>
                 </div>
 
                 <form @submit.prevent="submitPasswordReset" id="reset-password-form" class="space-y-4">
                     <div>
-                        <label for="reset-password" class="block text-xs font-medium text-zinc-700 mb-1.5">
-                            New Password <span class="text-red-500">*</span>
+                        <label for="reset-password" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                            New Password <span class="text-rose-500">*</span>
                         </label>
                         <input type="password" 
                                id="reset-password" 
                                x-model="passwordForm.password" 
                                placeholder="••••••••" 
                                required
-                               class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none transition">
+                               class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none transition">
                         <template x-if="passwordErrors.password">
-                            <p class="text-xs text-red-500 mt-1" x-text="passwordErrors.password[0]"></p>
+                            <p class="text-xs text-rose-500 dark:text-rose-400 mt-1" x-text="passwordErrors.password[0]"></p>
                         </template>
                     </div>
 
                     <div>
-                        <label for="reset-password-confirmation" class="block text-xs font-medium text-zinc-700 mb-1.5">
-                            Confirm New Password <span class="text-red-500">*</span>
+                        <label for="reset-password-confirmation" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                            Confirm New Password <span class="text-rose-500">*</span>
                         </label>
                         <input type="password" 
                                id="reset-password-confirmation" 
                                x-model="passwordForm.password_confirmation" 
                                placeholder="••••••••" 
                                required
-                               class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none transition">
+                               class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none transition">
                     </div>
                 </form>
 
-                <div class="pt-4 flex items-center justify-between border-t border-zinc-100">
+                <div class="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
                     <button type="button" 
                             @click="closePasswordModal()" 
                             :disabled="isResettingPassword"
-                            class="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
-                        <x-lucide-x class="size-4 text-zinc-500" />
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                        <x-lucide-x class="size-4 text-zinc-500 dark:text-zinc-400" />
                         <span>Cancel</span>
                     </button>
                     <button type="submit" 
                             form="reset-password-form" 
                             :disabled="isResettingPassword"
-                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 dark:border dark:border-zinc-700/80 transition focus:outline-none disabled:opacity-50 cursor-pointer shadow-sm">
                         <span x-show="isResettingPassword" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
                         <x-lucide-key-round x-show="!isResettingPassword" class="size-4" />
                         <span x-text="isResettingPassword ? 'Resetting' : 'Reset Password'"></span>
