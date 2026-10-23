@@ -6,10 +6,16 @@ import {
     createDeployment,
     deleteDeployment,
     bulkDeleteDeployments,
+    uploadArchiveInChunks,
 } from '../services/deployment-service.js';
 import { getServers } from '../services/server-service.js';
 
-export function dashboardOverview(initialDeployments = [], initialServers = []) {
+export function dashboardOverview(
+    initialDeployments = [],
+    initialServers = [],
+    maxArchiveUploadBytes = 512 * 1024 * 1024,
+    archiveChunkBytes = 1024 * 1024,
+) {
     const hasInitialData = (Array.isArray(initialDeployments) && initialDeployments.length > 0) || 
                            (Array.isArray(initialServers) && initialServers.length > 0);
 
@@ -17,6 +23,9 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         userName: '',
         isLoading: !hasInitialData,
         isSubmitting: false,
+        uploadProgress: 0,
+        maxArchiveUploadBytes,
+        archiveChunkBytes,
         showModal: false,
         searchQuery: '',
         selectedDeploymentIds: [],
@@ -412,13 +421,23 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
         handleFileUpload(event) {
             const file = event.target.files?.[0];
             if (file) {
+                if (file.size > this.maxArchiveUploadBytes) {
+                    this.form.archiveFile = null;
+                    event.target.value = '';
+                    this.errors = { archive: ['The ZIP archive must not exceed 512 MB.'] };
+                    return;
+                }
+                this.errors = { ...this.errors, archive: undefined };
                 this.form.archiveFile = file;
             }
         },
 
         async submitDeployment() {
+            if (this.isSubmitting) return;
+
             console.log('[submitDeployment] Starting submission with form data:', JSON.parse(JSON.stringify(this.form)));
             this.isSubmitting = true;
+            this.uploadProgress = 0;
             this.errors = {};
 
             if (!this.form.domain || !this.form.domain.trim()) {
@@ -435,15 +454,32 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                 return;
             }
 
+            if (this.form.source_type === 'upload' && !this.form.archiveFile) {
+                this.errors = { archive: ['Please choose a ZIP archive.'] };
+                this.isSubmitting = false;
+                return;
+            }
+
+            if (this.form.archiveFile?.size > this.maxArchiveUploadBytes) {
+                this.errors = { archive: ['The ZIP archive must not exceed 512 MB.'] };
+                this.isSubmitting = false;
+                return;
+            }
+
             try {
                 let payload;
                 if (this.form.source_type === 'upload' && this.form.archiveFile) {
-                    const formData = new FormData();
-                    formData.append('domain', this.form.domain.trim());
-                    formData.append('server_id', this.form.server_id);
-                    formData.append('version', this.form.version);
-                    formData.append('archive', this.form.archiveFile);
-                    payload = formData;
+                    const uploadToken = await uploadArchiveInChunks(
+                        this.form.archiveFile,
+                        progress => { this.uploadProgress = progress; },
+                        this.archiveChunkBytes,
+                    );
+                    payload = {
+                        domain: this.form.domain.trim(),
+                        server_id: parseInt(this.form.server_id, 10),
+                        version: this.form.version,
+                        archive_upload_token: uploadToken,
+                    };
                 } else {
                     payload = {
                         domain: this.form.domain.trim(),
@@ -484,6 +520,7 @@ export function dashboardOverview(initialDeployments = [], initialServers = []) 
                 }
             } finally {
                 this.isSubmitting = false;
+                this.uploadProgress = 0;
             }
         }
     };

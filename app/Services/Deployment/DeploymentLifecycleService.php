@@ -24,19 +24,22 @@ class DeploymentLifecycleService
         private AuditLogger $auditLogger,
         private RunCloudService $runCloudService,
         private ApiUsageContext $apiUsageContext,
+        private ChunkedArchiveUploadService $chunkedUploads,
     ) {}
 
     /**
-     * @param  array{server_id: int, domain: string, version: string, archive_url?: string|null, archive?: UploadedFile|null}  $data
+     * @param  array{server_id: int, domain: string, version: string, archive_url?: string|null, archive?: UploadedFile|null, archive_upload_token?: string|null}  $data
      */
     public function submit(User $user, array $data): Deployment
     {
         $upload = $data['archive'] ?? null;
-        $isUpload = $upload instanceof UploadedFile;
+        $uploadToken = $data['archive_upload_token'] ?? null;
+        $isChunkedUpload = is_string($uploadToken) && $uploadToken !== '';
+        $isUpload = $upload instanceof UploadedFile || $isChunkedUpload;
         $storedPath = null;
 
         try {
-            $deployment = DB::transaction(function () use ($user, $data, $upload, $isUpload, &$storedPath): Deployment {
+            $deployment = DB::transaction(function () use ($user, $data, $upload, $uploadToken, $isChunkedUpload, $isUpload, &$storedPath): Deployment {
                 $step = $isUpload ? 'archive_ready' : 'waiting_for_archive';
 
                 $deployment = Deployment::create([
@@ -46,13 +49,24 @@ class DeploymentLifecycleService
                     'version' => $data['version'],
                     'archive_source' => $isUpload ? 'upload' : 'url',
                     'archive_url' => $isUpload ? null : ($data['archive_url'] ?? null),
-                    'archive_original_name' => $isUpload ? $upload->getClientOriginalName() : null,
+                    'archive_original_name' => $upload instanceof UploadedFile ? $upload->getClientOriginalName() : null,
                     'archive_status' => $isUpload ? ArchiveStatus::Ready : ArchiveStatus::Waiting,
                     'status' => DeploymentStatus::Pending,
                     'current_step' => $step,
                 ]);
 
-                if ($isUpload) {
+                if ($isChunkedUpload) {
+                    $completedUpload = $this->chunkedUploads->copyToDeployment(
+                        $user,
+                        $uploadToken,
+                        (int) $deployment->getKey(),
+                    );
+                    $storedPath = $completedUpload['path'];
+                    $deployment->update([
+                        'archive_path' => $storedPath,
+                        'archive_original_name' => $completedUpload['original_name'],
+                    ]);
+                } elseif ($upload instanceof UploadedFile) {
                     $storedPath = $upload->storeAs(
                         "deployments/{$deployment->id}",
                         'archive.zip',
@@ -82,6 +96,10 @@ class DeploymentLifecycleService
             }
 
             throw $exception;
+        }
+
+        if ($isChunkedUpload) {
+            $this->chunkedUploads->forget($user, $uploadToken);
         }
 
         if ($isUpload) {

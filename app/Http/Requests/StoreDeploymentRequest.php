@@ -39,7 +39,7 @@ class StoreDeploymentRequest extends FormRequest
             'version' => ['required', Rule::enum(DomainVersion::class)],
             'archive_url' => [
                 'nullable',
-                Rule::prohibitedIf(fn (): bool => $this->hasFile('archive')),
+                Rule::prohibitedIf(fn (): bool => $this->hasFile('archive') || $this->filled('archive_upload_token')),
                 'string',
                 'url',
                 'starts_with:https://',
@@ -55,10 +55,15 @@ class StoreDeploymentRequest extends FormRequest
             ],
             'archive' => [
                 'nullable',
-                Rule::prohibitedIf(fn (): bool => $this->filled('archive_url')),
+                Rule::prohibitedIf(fn (): bool => $this->filled('archive_url') || $this->filled('archive_upload_token')),
                 'file',
                 'mimes:zip',
                 'max:'.config('archive.max_upload_kb'),
+            ],
+            'archive_upload_token' => [
+                'nullable',
+                Rule::prohibitedIf(fn (): bool => $this->filled('archive_url') || $this->hasFile('archive')),
+                'uuid',
             ],
         ];
     }
