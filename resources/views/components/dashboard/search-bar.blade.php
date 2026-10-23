@@ -24,7 +24,7 @@
         <!-- Add / New Deployment Button (opens Drawer) -->
         <button type="button" 
                 @click="openModal()" 
-                class="h-9 inline-flex items-center gap-1.5 px-3.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 transition shadow-sm cursor-pointer shrink-0">
+                class="h-9 inline-flex items-center gap-1.5 px-3.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 transition shadow-sm cursor-pointer shrink-0">
             <x-lucide-plus class="size-3.5" />
             <span>New Deployment</span>
         </button>

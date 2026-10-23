@@ -36,7 +36,7 @@
                 @click="triggerRetry()"
                 :disabled="isRetrying"
                 x-show="deployment && (deployment.status === 'failed' || deployment.status === 'completed')"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 rounded-md transition cursor-pointer">
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 dark:border dark:border-zinc-700/80 disabled:opacity-50 rounded-md transition cursor-pointer shadow-sm">
             <x-lucide-rotate-cw class="size-3.5" x-bind:class="isRetrying ? 'animate-spin' : ''" />
             <span x-text="isRetrying ? 'Retrying...' : 'Redeploy'"></span>
         </button>
@@ -46,8 +46,8 @@
                 @click="triggerCancel()"
                 :disabled="isCancelling"
                 x-show="deployment && (deployment.status === 'pending' || deployment.status === 'processing')"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 rounded-md transition cursor-pointer">
-            <x-lucide-ban class="size-3.5 text-red-600" />
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-rose-300/90 bg-red-50 dark:bg-rose-950/40 hover:bg-red-100 dark:hover:bg-rose-950/60 border border-red-200 dark:border-rose-900/40 disabled:opacity-50 rounded-md transition cursor-pointer">
+            <x-lucide-ban class="size-3.5 text-red-600 dark:text-rose-400" />
             <span x-text="isCancelling ? 'Cancelling...' : 'Cancel'"></span>
         </button>
 
@@ -56,8 +56,8 @@
             <button type="button"
                     @click="triggerDelete()"
                     :disabled="isDeleting"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-white hover:bg-red-50 border border-red-200 disabled:opacity-50 rounded-md transition cursor-pointer">
-                <x-lucide-trash-2 class="size-3.5 text-red-600" />
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-rose-300/90 bg-white dark:bg-zinc-900 hover:bg-red-50 dark:hover:bg-rose-950/40 border border-red-200 dark:border-rose-900/40 disabled:opacity-50 rounded-md transition cursor-pointer">
+                <x-lucide-trash-2 class="size-3.5 text-red-600 dark:text-rose-400" />
                 <span x-text="isDeleting ? 'Deleting...' : 'Delete'"></span>
             </button>
         @endif

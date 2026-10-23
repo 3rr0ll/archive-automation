@@ -33,7 +33,20 @@ Route::middleware('auth')->group(function (): void {
         return view('pages.environment-variables', compact('variables'));
     })->name('environment-variables');
     Route::get('/google-search-console', function () {
-        return view('pages.google-search-console');
+        $accounts = \App\Models\GoogleSearchConsoleAccount::orderBy('created_at', 'desc')->get()->map(function ($account) {
+            return [
+                'id' => $account->id,
+                'name' => $account->name,
+                'client_email' => $account->client_email,
+                'owner_email' => $account->owner_email,
+                'is_active' => (bool) $account->is_active,
+                'has_credentials' => true,
+                'created_at' => $account->created_at?->toIso8601String(),
+                'updated_at' => $account->updated_at?->toIso8601String(),
+            ];
+        });
+        $legacyFallback = app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)->hasLegacyFallback();
+        return view('pages.google-search-console', compact('accounts', 'legacyFallback'));
     })->middleware('admin')->name('google-search-console');
     Route::get('/servers', function () {
         $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
