@@ -90,13 +90,13 @@ aria-modal="true"
                  x-transition:leave="ease-in duration-150"
                  x-transition:leave-start="opacity-100 scale-100"
                  x-transition:leave-end="opacity-0 scale-95"
-                 class="relative transform overflow-hidden rounded-2xl bg-white text-left transition-all sm:my-8 sm:w-full sm:max-w-lg border border-zinc-200 p-6 space-y-5"
+                 class="relative transform overflow-hidden rounded-2xl bg-white dark:bg-[#18181b] text-left transition-all sm:my-8 sm:w-full sm:max-w-lg border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-xl"
                  @click.stop>
 
                 <!-- Header Title & Subtitle -->
                 <div>
-                    <h3 class="text-lg font-bold text-zinc-950 tracking-tight" id="confirm-modal-title" x-text="title"></h3>
-                    <p class="text-sm text-zinc-500 mt-2 leading-relaxed" x-text="message"></p>
+                    <h3 class="text-lg font-bold text-zinc-950 dark:text-zinc-100 tracking-tight" id="confirm-modal-title" x-text="title"></h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed" x-text="message"></p>
                 </div>
 
                 <!-- Dynamic Fields Display -->
@@ -104,28 +104,28 @@ aria-modal="true"
                     <div class="space-y-3">
                         <template x-for="(field, fIdx) in fields" :key="fIdx">
                             <div class="space-y-1.5">
-                                <label class="block text-xs font-semibold text-zinc-600" x-text="field.label || 'Value'"></label>
-                                <div class="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3.5 py-2 text-sm text-zinc-900 font-mono" x-text="field.value"></div>
+                                <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400" x-text="field.label || 'Value'"></label>
+                                <div class="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/60 px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-100 font-mono" x-text="field.value"></div>
                             </div>
                         </template>
                     </div>
                 </template>
 
                 <!-- Footer Actions: Cancel on the left, Action on the right -->
-                <div class="pt-4 flex items-center justify-between border-t border-zinc-100">
+                <div class="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
                     <button type="button"
                             @click="close()"
                             :disabled="isProcessing"
-                            class="inline-flex items-center gap-1.5 justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
-                        <x-lucide-x class="size-4 text-zinc-500" />
+                            class="inline-flex items-center gap-1.5 justify-center rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                        <x-lucide-x class="size-4 text-zinc-500 dark:text-zinc-400" />
                         <span x-text="cancelText">Cancel</span>
                     </button>
 
                     <button type="button"
                             @click="confirm()"
                             :disabled="isProcessing"
-                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white transition focus:outline-none disabled:opacity-50 cursor-pointer"
-                            :class="type === 'danger' ? 'bg-[#DC2626] hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'">
+                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white transition focus:outline-none disabled:opacity-50 cursor-pointer shadow-sm"
+                            :class="type === 'danger' ? 'bg-[#DC2626] hover:bg-red-700 dark:bg-rose-600 dark:hover:bg-rose-700' : 'bg-zinc-900 hover:bg-zinc-800 dark:border dark:border-zinc-700/80'">
                         <template x-if="!isProcessing">
                             <span class="inline-flex items-center gap-1.5">
                                 <x-lucide-trash-2 x-show="type === 'danger'" class="size-4" />
