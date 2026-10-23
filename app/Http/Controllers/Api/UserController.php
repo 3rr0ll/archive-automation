@@ -41,11 +41,14 @@ class UserController extends Controller
     }
 
     /**
-     * Create a user (admin only). Only one admin account is allowed.
+     * Create a regular user (admin only).
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
-        $user = User::create($request->validated());
+        $user = User::create([
+            ...$request->validated(),
+            'role' => 'user',
+        ]);
 
         return response()->json([
             'success' => true,

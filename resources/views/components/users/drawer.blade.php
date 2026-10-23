@@ -61,8 +61,8 @@
                                     </template>
                                 </div>
 
-                                <!-- Role Selection -->
-                                <div>
+                                <!-- Role Selection (regular users only) -->
+                                <div x-show="modalMode === 'edit' && !editingUserIsAdmin">
                                     <label class="block text-xs font-medium text-zinc-700 mb-2">Role <span class="text-red-500">*</span></label>
                                     <div class="grid grid-cols-2 gap-3">
                                         <!-- User Role -->

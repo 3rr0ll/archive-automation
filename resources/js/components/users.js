@@ -14,6 +14,7 @@ export function usersPage(initialUsers = [], currentUserId = null) {
         // Drawer state for Create / Edit
         showModal: false,
         modalMode: 'create', // 'create' | 'edit'
+        editingUserIsAdmin: false,
         isSubmitting: false,
         formErrors: {},
         userForm: {
@@ -124,6 +125,7 @@ export function usersPage(initialUsers = [], currentUserId = null) {
 
         openCreateModal() {
             this.modalMode = 'create';
+            this.editingUserIsAdmin = false;
             this.formErrors = {};
             this.userForm = {
                 id: null,
@@ -138,6 +140,7 @@ export function usersPage(initialUsers = [], currentUserId = null) {
 
         openEditModal(user) {
             this.modalMode = 'edit';
+            this.editingUserIsAdmin = user.role === 'admin';
             this.formErrors = {};
             this.userForm = {
                 id: user.id,
@@ -162,7 +165,12 @@ export function usersPage(initialUsers = [], currentUserId = null) {
 
             try {
                 if (this.modalMode === 'create') {
-                    const response = await createUser(this.userForm);
+                    const response = await createUser({
+                        name: this.userForm.name,
+                        email: this.userForm.email,
+                        password: this.userForm.password,
+                        password_confirmation: this.userForm.password_confirmation,
+                    });
                     if (response?.data) {
                         this.items.unshift(response.data);
                     }
@@ -171,8 +179,10 @@ export function usersPage(initialUsers = [], currentUserId = null) {
                     const payload = {
                         name: this.userForm.name,
                         email: this.userForm.email,
-                        role: this.userForm.role,
                     };
+                    if (!this.editingUserIsAdmin) {
+                        payload.role = this.userForm.role;
+                    }
                     const response = await updateUser(this.userForm.id, payload);
                     if (response?.data) {
                         const idx = this.items.findIndex(u => u.id === this.userForm.id);

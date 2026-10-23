@@ -55,7 +55,6 @@ class AdminUserManagementTest extends TestCase
                 'email' => 'newuser@example.com',
                 'password' => 'password123',
                 'password_confirmation' => 'password123',
-                'role' => 'user',
             ]);
 
         $response->assertCreated()

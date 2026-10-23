@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
-use Illuminate\Validation\Validator;
 
 class StoreUserRequest extends FormRequest
 {
@@ -23,16 +21,7 @@ class StoreUserRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'role' => ['required', 'in:user,admin'],
+            'role' => ['prohibited'],
         ];
-    }
-
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator): void {
-            if ($this->input('role') === 'admin' && User::adminExists()) {
-                $validator->errors()->add('role', 'An admin account already exists. Only one admin is allowed.');
-            }
-        });
     }
 }
