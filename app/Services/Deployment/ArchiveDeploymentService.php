@@ -127,6 +127,14 @@ class ArchiveDeploymentService
                     (int) $deployment->server_id,
                 );
 
+            $runCloudWebAppId = (int) ($result['web_app_id'] ?? $result['app']['id'] ?? 0);
+            $runCloudWebAppName = $result['web_app_name'] ?? $result['app']['name'] ?? null;
+
+            $deployment->update([
+                'runcloud_web_app_id' => $runCloudWebAppId > 0 ? $runCloudWebAppId : null,
+                'runcloud_web_app_name' => is_string($runCloudWebAppName) ? $runCloudWebAppName : null,
+            ]);
+
             if (! empty($result['already_exists'])) {
                 $canResumeDeployment = $deployment->logs()
                     ->whereIn('step_name', ['provisioning_web_app', 'uploading_and_extracting_archive'])

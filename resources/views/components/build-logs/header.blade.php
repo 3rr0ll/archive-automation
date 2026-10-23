@@ -50,5 +50,16 @@
             <x-lucide-ban class="size-3.5 text-red-600" />
             <span x-text="isCancelling ? 'Cancelling...' : 'Cancel'"></span>
         </button>
+
+        @if(auth()->user()?->isAdmin())
+            <!-- Delete locally and from RunCloud (admin only) -->
+            <button type="button"
+                    @click="triggerDelete()"
+                    :disabled="isDeleting"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-white hover:bg-red-50 border border-red-200 disabled:opacity-50 rounded-md transition cursor-pointer">
+                <x-lucide-trash-2 class="size-3.5 text-red-600" />
+                <span x-text="isDeleting ? 'Deleting...' : 'Delete'"></span>
+            </button>
+        @endif
     </div>
 </div>

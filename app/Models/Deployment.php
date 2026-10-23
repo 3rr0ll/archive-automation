@@ -17,6 +17,8 @@ class Deployment extends Model
     protected $fillable = [
         'user_id',
         'server_id',
+        'runcloud_web_app_id',
+        'runcloud_web_app_name',
         'domain',
         'version',
         'archive_source',
@@ -39,6 +41,7 @@ class Deployment extends Model
             'archive_status' => ArchiveStatus::class,
             'status' => DeploymentStatus::class,
             'version' => DomainVersion::class,
+            'runcloud_web_app_id' => 'integer',
         ];
     }
 

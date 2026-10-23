@@ -1,9 +1,25 @@
 <div class="lg:col-span-8 xl:col-span-9">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between gap-3 mb-4">
         <h2 class="text-sm font-semibold text-zinc-900">
             Deployed Domains
             <span class="text-xs font-normal text-zinc-500 ml-1.5" x-text="`(${displayedDeployments.length})`"></span>
         </h2>
+        <div x-show="$store.auth.isAdmin && displayedDeployments.length > 0" class="flex items-center gap-2">
+            <label class="inline-flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer">
+                <input type="checkbox"
+                       :checked="allVisibleDeploymentsSelected"
+                       @change="toggleVisibleDeploymentSelection()"
+                       class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500">
+                <span>Select page</span>
+            </label>
+            <button type="button"
+                    x-show="selectedDeploymentIds.length > 0"
+                    @click="deleteSelectedDeploymentsPrompt()"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-700 bg-white hover:bg-red-50 transition">
+                <x-lucide-trash-2 class="size-3.5" />
+                <span x-text="`Delete (${selectedDeploymentIds.length})`"></span>
+            </button>
+        </div>
     </div>
     
     <!-- Empty State -->
@@ -27,7 +43,7 @@
     <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'grid'">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <template x-for="item in paginatedDeployments" :key="'grid-'+item.id">
-                <a :href="'/deployments/' + (item.hash || item.id) + '/logs'" 
+                <div @click="window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'"
                    class="bg-white border border-zinc-200 rounded-lg transition hover:border-zinc-300 group p-4 flex flex-col justify-between min-h-[140px] cursor-pointer">
                     <div class="flex items-start justify-between">
                         <div class="flex items-center gap-3 min-w-0">
@@ -40,6 +56,12 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
+                            <input x-show="$store.auth.isAdmin && item.status !== 'processing'"
+                                   type="checkbox"
+                                   :checked="selectedDeploymentIds.includes(item.id)"
+                                   @click.stop="toggleDeploymentSelection(item.id)"
+                                   class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+                                   title="Select deployment">
                             <!-- In Progress Badge for active first in line -->
                             <template x-if="isItemActive(item)">
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-800 border border-zinc-200">
@@ -67,8 +89,15 @@
                             <span>Logs</span>
                             <x-lucide-arrow-right class="size-3" />
                         </span>
+                        <button x-show="$store.auth.isAdmin && item.status !== 'processing'"
+                                type="button"
+                                @click.stop="deleteDeploymentPrompt(item)"
+                                class="p-1 text-zinc-400 hover:text-red-600 transition rounded"
+                                title="Delete deployment and RunCloud app">
+                            <x-lucide-trash-2 class="size-3.5" />
+                        </button>
                     </div>
-                </a>
+                </div>
             </template>
         </div>
     </template>
@@ -103,6 +132,12 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
+                            <input x-show="$store.auth.isAdmin && item.status !== 'processing'"
+                                   type="checkbox"
+                                   :checked="selectedDeploymentIds.includes(item.id)"
+                                   @click.stop="toggleDeploymentSelection(item.id)"
+                                   class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+                                   title="Select deployment">
                             <template x-if="isItemActive(item)">
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 border border-zinc-200">
                                     <span class="size-1.5 rounded-full bg-zinc-900 animate-pulse"></span>
@@ -118,6 +153,13 @@
                             <a :href="'https://' + item.domain" target="_blank" rel="noopener" class="p-1.5 text-zinc-400 hover:text-zinc-700 transition rounded-md border border-zinc-200 hover:bg-zinc-50" title="Visit website" @click.stop>
                                 <x-lucide-external-link class="size-3.5" />
                             </a>
+                            <button x-show="$store.auth.isAdmin && item.status !== 'processing'"
+                                    type="button"
+                                    @click.stop="deleteDeploymentPrompt(item)"
+                                    class="p-1.5 text-zinc-400 hover:text-red-600 transition rounded-md border border-zinc-200 hover:bg-red-50"
+                                    title="Delete deployment and RunCloud app">
+                                <x-lucide-trash-2 class="size-3.5" />
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -198,5 +240,4 @@
         </div>
     </template>
 </div>
-
 

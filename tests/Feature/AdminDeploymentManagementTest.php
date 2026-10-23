@@ -8,6 +8,8 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -164,6 +166,50 @@ class AdminDeploymentManagementTest extends TestCase
         $this->assertDatabaseMissing('deployments', ['id' => $failed->id]);
         $this->assertDatabaseMissing('deployments', ['id' => $pending->id]);
         $this->assertDatabaseHas('deployments', ['id' => $processing->id]);
+    }
+
+    public function test_deleting_a_deployment_also_deletes_its_runcloud_web_application(): void
+    {
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/123/webapps/501' => Http::response([], 200),
+        ]);
+        $deployment = $this->deployment([
+            'status' => 'completed',
+            'runcloud_web_app_id' => 501,
+            'runcloud_web_app_name' => 'example',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/deployments/{$deployment->id}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('deployments', ['id' => $deployment->id]);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+            && $request->url() === 'https://manage.runcloud.io/api/v3/servers/123/webapps/501');
+    }
+
+    public function test_local_deployment_is_kept_when_runcloud_deletion_fails(): void
+    {
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/123/webapps/501' => Http::response([
+                'message' => 'RunCloud is unavailable.',
+            ], 503),
+        ]);
+        $deployment = $this->deployment([
+            'status' => 'completed',
+            'runcloud_web_app_id' => 501,
+            'runcloud_web_app_name' => 'example',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/deployments/{$deployment->id}")
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'message',
+                'The RunCloud web application could not be deleted, so the local deployment was kept. RunCloud API error (503): RunCloud is unavailable.',
+            );
+
+        $this->assertDatabaseHas('deployments', ['id' => $deployment->id]);
     }
 
     public function test_bulk_endpoints_validate_ids_and_require_an_admin(): void

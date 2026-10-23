@@ -24,9 +24,18 @@
                                 <p class="text-xs font-semibold text-zinc-900 truncate" x-text="item.domain"></p>
                                 <p class="text-[10px] text-zinc-400" x-text="formatDate(item.created_at)"></p>
                             </div>
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 border border-red-200 shrink-0">
-                                Failed
-                            </span>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 border border-red-200">
+                                    Failed
+                                </span>
+                                <button x-show="$store.auth.isAdmin"
+                                        type="button"
+                                        @click.stop="deleteDeploymentPrompt(item)"
+                                        class="p-1 text-zinc-400 hover:text-red-600 transition rounded"
+                                        title="Delete deployment and RunCloud app">
+                                    <x-lucide-trash-2 class="size-3.5" />
+                                </button>
+                            </div>
                         </li>
                     </template>
                 </ul>
@@ -34,4 +43,3 @@
         </template>
     </div>
 </div>
-
