@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ApiUsageController;
 use App\Http\Controllers\Api\ArchiveController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CloudflareController;
+use App\Http\Controllers\Api\ChunkedArchiveUploadController;
 use App\Http\Controllers\Api\DeploymentController;
 use App\Http\Controllers\Api\EnvironmentVariableController;
 use App\Http\Controllers\Api\GoogleSearchConsoleAccountController;
@@ -44,6 +45,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/cloudflare/cache/purge', [CloudflareController::class, 'purgeCache']);
 
     // Deployments API (Authenticated Users)
+    Route::post('/deployment-uploads/chunks', [ChunkedArchiveUploadController::class, 'store']);
+    Route::post('/deployment-uploads/complete', [ChunkedArchiveUploadController::class, 'complete']);
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::get('/deployments/statistics', [DeploymentController::class, 'statistics'])->middleware('admin')->name('deployments.statistics');
     Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');

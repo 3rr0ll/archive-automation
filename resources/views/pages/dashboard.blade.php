@@ -1,7 +1,12 @@
 @extends('layouts.app')
 
 @section('content')
-<div x-data="dashboardOverview(@js($deployments ?? []), @js($servers ?? []))">
+<div x-data="dashboardOverview(
+    @js($deployments ?? []),
+    @js($servers ?? []),
+    {{ (int) config('archive.max_upload_kb') * 1024 }},
+    {{ (int) config('archive.chunk_upload_kb') * 1024 }}
+)">
     <!-- Slide-over Drawer for New Deployment (fixed overlay, outside flow) -->
     <x-dashboard.drawer />
 

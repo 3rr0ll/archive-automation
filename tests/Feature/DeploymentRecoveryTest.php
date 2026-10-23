@@ -104,6 +104,46 @@ class DeploymentRecoveryTest extends TestCase
         Queue::assertNotPushed(WaitForWaybackArchive::class);
     }
 
+    public function test_admin_can_upload_a_zip_in_chunks_before_deployment(): void
+    {
+        Storage::fake('local');
+        Queue::fake([DeployArchivedWebsite::class]);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $token = $admin->createToken('test-token')->plainTextToken;
+        Server::factory()->create(['server_id' => 123]);
+        $uploadId = 'a4fb54d7-82cb-4dda-b5cb-b13b0a2deadc';
+
+        foreach (['PKab', 'cdef'] as $index => $contents) {
+            $this->withToken($token)->post('/api/deployment-uploads/chunks', [
+                'upload_id' => $uploadId,
+                'chunk_index' => $index,
+                'total_chunks' => 2,
+                'original_name' => 'large-website.zip',
+                'total_size' => 8,
+                'chunk' => UploadedFile::fake()->createWithContent("chunk-{$index}.part", $contents),
+            ], ['Accept' => 'application/json'])->assertOk();
+        }
+
+        $this->withToken($token)
+            ->postJson('/api/deployment-uploads/complete', ['upload_id' => $uploadId])
+            ->assertOk()
+            ->assertJsonPath('data.upload_token', $uploadId)
+            ->assertJsonPath('data.size', 8);
+
+        $response = $this->withToken($token)->postJson('/api/deployments', [
+            'server_id' => 123,
+            'domain' => 'large-example.com',
+            'version' => 'non-www',
+            'archive_upload_token' => $uploadId,
+        ])->assertAccepted()
+            ->assertJsonPath('data.archive_original_name', 'large-website.zip');
+
+        $deployment = Deployment::findOrFail($response->json('data.id'));
+        Storage::disk('local')->assertExists($deployment->archive_path);
+        Storage::disk('local')->assertMissing("deployment-uploads/{$admin->id}/{$uploadId}");
+        Queue::assertPushed(DeployArchivedWebsite::class);
+    }
+
     public function test_recovery_allows_omitting_archive_url_to_auto_discover_archive(): void
     {
         Storage::fake('local');
