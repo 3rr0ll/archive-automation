@@ -16,9 +16,9 @@
                          index === filteredItems.length - 1 && editingId !== item.id ? 'rounded-b-lg' : '',
                          editingId === item.id ? 'border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40' : ''
                      ]">
-                    <div class="flex items-center gap-4 flex-1 min-w-0 pr-4">
-                        <div class="flex-shrink-0 size-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 flex items-center justify-center text-zinc-600 dark:text-zinc-300">
-                            <x-lucide-server class="h-4.5 w-4.5 text-zinc-700 dark:text-zinc-300" />
+                    <div class="flex items-center gap-3.5 flex-1 min-w-0 pr-4">
+                        <div class="flex-shrink-0 text-zinc-400 dark:text-zinc-500">
+                            <x-lucide-server class="h-4 w-4" />
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2.5">

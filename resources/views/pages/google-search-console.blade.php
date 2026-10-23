@@ -195,10 +195,9 @@
                                      index === 0 ? 'rounded-t-lg' : '',
                                      index === filteredAccounts.length - 1 ? 'rounded-b-lg' : ''
                                  ]">
-                                <!-- Account Info (Icon, Name, Badge, Email, Owner) -->
-                                <div class="flex items-center gap-4 flex-1 min-w-0 pr-4">
-                                    <div class="flex-shrink-0 size-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 flex items-center justify-center text-zinc-600 dark:text-zinc-300">
-                                        <x-lucide-globe class="h-4.5 w-4.5 text-blue-600 dark:text-blue-400" />
+                                <div class="flex items-center gap-3.5 flex-1 min-w-0 pr-4">
+                                    <div class="flex-shrink-0 text-zinc-400 dark:text-zinc-500">
+                                        <x-lucide-globe class="h-4 w-4" />
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center gap-2.5">

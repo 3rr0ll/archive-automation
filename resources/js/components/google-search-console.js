@@ -74,6 +74,41 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
                 : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         },
 
+        async handleOAuthResult(data) {
+            if (!data) return;
+
+            if (this.oauthWindow && !this.oauthWindow.closed) {
+                try {
+                    this.oauthWindow.close();
+                } catch (e) {}
+            }
+            this.oauthWindow = null;
+
+            if (data.success) {
+                window.toast?.success(data.message || 'Google account connected successfully!');
+
+                if (data.account && data.account.id) {
+                    // Instantly insert or update the account in the reactive list
+                    const existingIndex = this.accounts.findIndex(a => a.id === data.account.id || a.client_email === data.account.client_email);
+                    if (existingIndex !== -1) {
+                        this.accounts.splice(existingIndex, 1, data.account);
+                    } else {
+                        // Deactivate others if this new account is active
+                        if (data.account.is_active) {
+                            this.accounts = this.accounts.map(a => ({ ...a, is_active: false }));
+                        }
+                        this.accounts.unshift(data.account);
+                    }
+                }
+
+                // Silently re-sync full list from server in the background
+                await this.loadAccounts(false);
+                return;
+            }
+
+            window.toast?.error(data.message || 'Google authorization failed.');
+        },
+
         async init() {
             if (this.oauthMessageHandler) {
                 return;
@@ -83,20 +118,35 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
                 if (event.origin !== window.location.origin || event.data?.type !== 'google-oauth-complete') {
                     return;
                 }
-
-                this.oauthWindow = null;
-
-                if (event.data.success) {
-                    window.location.reload();
-                    return;
-                }
-
-                window.toast?.error(event.data.message || 'Google authorization failed.');
+                await this.handleOAuthResult(event.data);
             };
             window.addEventListener('message', this.oauthMessageHandler);
 
+            // Cross-tab broadcast channel
+            try {
+                this.oauthChannel = new BroadcastChannel('google_oauth_channel');
+                this.oauthChannel.onmessage = async (event) => {
+                    if (event.data?.type === 'google-oauth-complete') {
+                        await this.handleOAuthResult(event.data);
+                    }
+                };
+            } catch (e) {}
+
+            // LocalStorage fallback for older browsers or detached windows
+            this.storageHandler = async (event) => {
+                if (event.key === 'google_oauth_result' && event.newValue) {
+                    try {
+                        const parsed = JSON.parse(event.newValue);
+                        if (parsed.type === 'google-oauth-complete' && Date.now() - (parsed.timestamp || 0) < 10000) {
+                            await this.handleOAuthResult(parsed);
+                        }
+                    } catch (e) {}
+                }
+            };
+            window.addEventListener('storage', this.storageHandler);
+
             if (!this.accounts || this.accounts.length === 0) {
-                await this.loadAccounts();
+                await this.loadAccounts(false);
             }
         },
 
@@ -104,13 +154,19 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
             if (this.oauthMessageHandler) {
                 window.removeEventListener('message', this.oauthMessageHandler);
             }
+            if (this.oauthChannel) {
+                this.oauthChannel.close();
+            }
+            if (this.storageHandler) {
+                window.removeEventListener('storage', this.storageHandler);
+            }
         },
 
         connectGoogle(oauthUrl) {
-            this.oauthWindow = window.open(oauthUrl, 'google-oauth-connect');
+            this.oauthWindow = window.open(oauthUrl, 'google-oauth-connect', 'width=600,height=700,scrollbars=yes');
 
             if (!this.oauthWindow) {
-                window.toast?.error('Your browser blocked the Google sign-in tab. Please allow pop-ups for this site and try again.');
+                window.toast?.error('Your browser blocked the Google sign-in window. Please allow pop-ups for this site and try again.');
                 return;
             }
 
