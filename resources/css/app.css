@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
+@custom-variant dark (&:where(.dark, .dark *));
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -19,6 +20,94 @@ html, body, input, button, select, textarea {
     display: none !important;
 }
 
+/* Global Dark Mode Scrollbars & Base Rules */
+html.dark {
+    color-scheme: dark;
+}
+
+html.dark body {
+    background-color: #121214;
+    color: #f4f4f5;
+}
+
+/* Global Dark Mode Surface Adaptations */
+html.dark .bg-white {
+    background-color: #18181b !important;
+}
+
+html.dark .bg-zinc-50 {
+    background-color: #27272a !important;
+}
+
+html.dark .bg-zinc-100 {
+    background-color: #27272a !important;
+}
+
+html.dark .border-zinc-200 {
+    border-color: #27272a !important;
+}
+
+html.dark .border-zinc-100 {
+    border-color: #27272a !important;
+}
+
+html.dark .border-zinc-300 {
+    border-color: #3f3f46 !important;
+}
+
+html.dark .text-zinc-900 {
+    color: #f4f4f5 !important;
+}
+
+html.dark .text-zinc-800 {
+    color: #e4e4e7 !important;
+}
+
+html.dark .text-zinc-700 {
+    color: #d4d4d8 !important;
+}
+
+html.dark .text-zinc-600 {
+    color: #a1a1aa !important;
+}
+
+html.dark .text-zinc-500 {
+    color: #71717a !important;
+}
+
+/* Global Dark Mode Hover Adaptations (Matches Sidebar hover: hover:bg-zinc-100 dark:hover:bg-zinc-800/60) */
+html.dark .hover\:bg-zinc-50:hover,
+html.dark .hover\:bg-zinc-50\/50:hover,
+html.dark .hover\:bg-zinc-100:hover,
+html.dark .hover\:bg-zinc-100\/50:hover,
+html.dark .hover\:bg-zinc-200\/50:hover {
+    background-color: rgba(39, 39, 42, 0.6) !important; /* zinc-800/60 */
+    color: #f4f4f5;
+}
+
+html.dark [class*="hover:bg-zinc-"]:hover {
+    background-color: rgba(39, 39, 42, 0.6) !important;
+}
+
+html.dark .hover\:text-zinc-900:hover,
+html.dark .group:hover .group-hover\:text-black,
+html.dark .group:hover .group-hover\:text-zinc-900 {
+    color: #f4f4f5 !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+    background-color: #18181b !important;
+    border-color: #27272a !important;
+    color: #f4f4f5 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+    color: #71717a !important;
+}
+
 /* IDE Dark Theme Scrollbar Styles */
 .ide-dark,
 .ide-dark * {
@@ -26,39 +115,54 @@ html, body, input, button, select, textarea {
 }
 
 .ide-dark ::-webkit-scrollbar,
-.ide-dark .cm-scroller::-webkit-scrollbar {
+.ide-dark .cm-scroller::-webkit-scrollbar,
+html.dark ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
     background-color: #1e1e1e;
 }
 
 .ide-dark ::-webkit-scrollbar-track,
-.ide-dark .cm-scroller::-webkit-scrollbar-track {
+.ide-dark .cm-scroller::-webkit-scrollbar-track,
+html.dark ::-webkit-scrollbar-track {
     background: #1e1e1e;
 }
 
 .ide-dark ::-webkit-scrollbar-thumb,
-.ide-dark .cm-scroller::-webkit-scrollbar-thumb {
+.ide-dark .cm-scroller::-webkit-scrollbar-thumb,
+html.dark ::-webkit-scrollbar-thumb {
     background-color: #3e4451;
     border-radius: 4px;
     border: 2px solid #1e1e1e;
 }
 
 .ide-dark ::-webkit-scrollbar-thumb:hover,
-.ide-dark .cm-scroller::-webkit-scrollbar-thumb:hover {
+.ide-dark .cm-scroller::-webkit-scrollbar-thumb:hover,
+html.dark ::-webkit-scrollbar-thumb:hover {
     background-color: #5c6370;
 }
 
 .ide-dark ::-webkit-scrollbar-corner,
-.ide-dark .cm-scroller::-webkit-scrollbar-corner {
+.ide-dark .cm-scroller::-webkit-scrollbar-corner,
+html.dark ::-webkit-scrollbar-corner {
     background-color: #1e1e1e;
 }
 
 /* Firefox scrollbar support */
 .ide-dark,
-.ide-dark .cm-scroller {
+.ide-dark .cm-scroller,
+html.dark {
     scrollbar-color: #3e4451 #1e1e1e;
     scrollbar-width: thin;
+}
+
+@media (min-width: 768px) {
+    .sidebar-collapsed-shell {
+        padding-left: 4rem !important;
+    }
+    .sidebar-collapsed-nav {
+        width: 4rem !important;
+    }
 }
 
 

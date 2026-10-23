@@ -42,6 +42,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Deployments API (Authenticated Users)
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
+    Route::get('/deployments/statistics', [DeploymentController::class, 'statistics'])->middleware('admin')->name('deployments.statistics');
+    Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');
+    Route::get('/deployments/{deployment}/logs', [DeploymentController::class, 'logs'])->name('deployments.logs');
+    Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
+    Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
     Route::get('/deployments/{deployment}/files/tree', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'listDirectory']);
     Route::get('/deployments/{deployment}/files/read', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'readFile']);
     Route::post('/deployments/{deployment}/files/write', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'writeFile']);
@@ -89,15 +94,10 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::apiResource('environment-variables', EnvironmentVariableController::class);
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
-    Route::get('/deployments/statistics', [DeploymentController::class, 'statistics'])->name('deployments.statistics');
     Route::get('/api-usage', [ApiUsageController::class, 'index'])->name('api-usage.index');
     Route::post('/deployments/bulk-cancel', [DeploymentController::class, 'bulkCancel'])->name('deployments.bulk-cancel');
     Route::post('/deployments/bulk-retry', [DeploymentController::class, 'bulkRetry'])->name('deployments.bulk-retry');
     Route::post('/deployments/bulk-delete', [DeploymentController::class, 'bulkDestroy'])->name('deployments.bulk-delete');
-    Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');
-    Route::get('/deployments/{deployment}/logs', [DeploymentController::class, 'logs'])->name('deployments.logs');
     Route::get('/deployments/{deployment}/api-usage', [ApiUsageController::class, 'deployment'])->name('deployments.api-usage');
-    Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
-    Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
     Route::delete('/deployments/{deployment}', [DeploymentController::class, 'adminDestroy'])->name('deployments.destroy');
 });

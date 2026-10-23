@@ -1,13 +1,99 @@
-import { EditorView, basicSetup } from 'codemirror';
-import { keymap } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { html } from '@codemirror/lang-html';
+import { EditorView } from '@codemirror/view';
+import { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
+import { foldGutter, syntaxHighlighting, defaultHighlightStyle, foldKeymap, LRLanguage } from '@codemirror/language';
+import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { SearchQuery, setSearchQuery, findNext, findPrevious, replaceNext, replaceAll, search, SearchCursor, RegExpCursor } from '@codemirror/search';
+import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete';
+import { parser as htmlParser, configureNesting } from '@lezer/html';
+import { htmlCompletionSource, autoCloseTags } from '@codemirror/lang-html';
 import { css } from '@codemirror/lang-css';
-import { javascript } from '@codemirror/lang-javascript';
+import { javascript, javascriptLanguage } from '@codemirror/lang-javascript';
 import { php } from '@codemirror/lang-php';
 import { oneDark } from '@codemirror/theme-one-dark';
 
+// HTML tags dictionary for fast autocompletion (whether typing bare 'script' or '<script')
+const HTML_TAG_NAMES = [
+    "a","abbr","address","area","article","aside","audio","b","base","bdi","bdo",
+    "blockquote","body","br","button","canvas","caption","center","cite","code",
+    "col","colgroup","data","datalist","dd","del","details","dfn","dialog","div",
+    "dl","dt","em","embed","fieldset","figcaption","figure","footer","form",
+    "h1","h2","h3","h4","h5","h6","head","header","hgroup","hr","html","i",
+    "iframe","img","input","ins","kbd","label","legend","li","link","main","map",
+    "mark","menu","meta","meter","nav","noscript","object","ol","optgroup","option",
+    "output","p","param","picture","pre","progress","q","rp","rt","ruby","s","samp",
+    "script","section","select","slot","small","source","span","strong","style",
+    "sub","summary","sup","svg","table","tbody","td","template","textarea","tfoot",
+    "th","thead","time","title","tr","track","u","ul","var","video","wbr"
+];
+
+const VOID_TAGS = new Set(["area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"]);
+
+function smartHtmlCompletionSource(context) {
+    // 1. Try CodeMirror's standard HTML completion (covers attributes like class, id, src, type, etc.)
+    const standard = htmlCompletionSource(context);
+    if (standard) return standard;
+
+    // 2. Custom smart tag completion: handles typing bare tag name like 'script', 'div', or '<script'
+    const word = context.matchBefore(/<?[a-zA-Z0-9]*/);
+    if (!word || (word.from === word.to && !context.explicit)) return null;
+
+    const hasBracket = word.text.startsWith('<');
+    const prefix = (hasBracket ? word.text.slice(1) : word.text).toLowerCase();
+
+    if (!prefix && !context.explicit) return null;
+
+    const matchedTags = HTML_TAG_NAMES.filter(tag => tag.startsWith(prefix));
+    if (!matchedTags.length) return null;
+
+    return {
+        from: word.from,
+        options: matchedTags.map(tag => ({
+            label: tag,
+            type: 'type',
+            detail: VOID_TAGS.has(tag) ? 'tag' : `<${tag}>...</${tag}>`,
+            apply: (view, completion, from, to) => {
+                let insert = '';
+                let cursorOffset = 0;
+
+                if (VOID_TAGS.has(tag)) {
+                    insert = `<${tag} />`;
+                    cursorOffset = insert.length;
+                } else if (tag === 'script' || tag === 'style') {
+                    insert = `<${tag}>\n\t\n</${tag}>`;
+                    cursorOffset = tag.length + 3; // Position inside the body on the empty line
+                } else {
+                    insert = `<${tag}></${tag}>`;
+                    cursorOffset = tag.length + 2; // Position between <tag> and </tag>
+                }
+
+                view.dispatch({
+                    changes: { from, to, insert },
+                    selection: { anchor: from + cursorOffset }
+                });
+            }
+        }))
+    };
+}
+
+// Fast HTML language with embedded JavaScript parsing and tag autocompletion
+const htmlWithJsLanguage = LRLanguage.define({
+    name: 'html',
+    parser: htmlParser.configure({
+        wrap: configureNesting([
+            { tag: 'script', attrs: () => true, parser: javascriptLanguage.parser }
+        ])
+    }),
+    languageData: {
+        autocomplete: smartHtmlCompletionSource
+    }
+});
+
 export function deploymentFilesPage(deploymentId, deploymentData) {
+    let rawEditorView = null;
+    let isCurrentlyModified = false;
+    const tabContents = new Map(); // path -> string content (outside Alpine proxy)
+
     return {
         deploymentId: deploymentId,
         deployment: deploymentData,
@@ -17,14 +103,26 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
         items: [],
         currentDir: '',
         rootDir: '',
-        openTabs: [], // Array of { path, name, size, content, originalContent, isModified }
+        openTabs: [], // Array of { path, name, size, isModified }
         activeFile: null, // Points to active tab item
-        editorView: null,
-        theme: localStorage.getItem('ide_theme') || 'light', // 'light' (default) | 'dark'
+        get theme() {
+            return window.Alpine ? window.Alpine.store('theme')?.mode || 'light' : 'light';
+        },
         saveStatus: '', // 'Saved', 'Unsaved changes', 'Saving...'
         isCreatingFile: false,
         newFileName: '',
         searchFileQuery: '',
+
+        // Editor Find & Replace State
+        searchOpen: false,
+        replaceOpen: false,
+        searchQuery: '',
+        replaceQuery: '',
+        caseSensitive: false,
+        wholeWord: false,
+        isRegex: false,
+        matchCount: 0,
+        currentMatchIndex: 0,
 
         get isModified() {
             return this.activeFile ? !!this.activeFile.isModified : false;
@@ -32,14 +130,191 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
 
         init() {
             this.loadTree();
+            window.addEventListener('app-theme-changed', (e) => {
+                if (rawEditorView && this.activeFile) {
+                    const currentDoc = rawEditorView.state.doc.toString();
+                    this.mountCodeMirror(currentDoc, this.activeFile.name);
+                }
+            });
             window.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                // Ctrl+S / Cmd+S: Save file
+                if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
                     e.preventDefault();
                     if (this.activeFile && !this.saving) {
                         this.saveFile();
                     }
                 }
+                // Ctrl+F / Cmd+F: Open search
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+                    if (this.activeFile) {
+                        e.preventDefault();
+                        this.openEditorSearch(false);
+                    }
+                }
+                // Ctrl+H / Cmd+H: Open replace
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+                    if (this.activeFile) {
+                        e.preventDefault();
+                        this.openEditorSearch(true);
+                    }
+                }
+                // Escape closes search widget if open
+                if (e.key === 'Escape' && this.searchOpen) {
+                    this.closeEditorSearch();
+                }
             });
+        },
+
+        openEditorSearch(withReplace = false) {
+            this.searchOpen = true;
+            if (withReplace) {
+                this.replaceOpen = true;
+            }
+            if (rawEditorView) {
+                const selection = rawEditorView.state.sliceDoc(
+                    rawEditorView.state.selection.main.from,
+                    rawEditorView.state.selection.main.to
+                );
+                if (selection && selection.length > 0 && !selection.includes('\n')) {
+                    this.searchQuery = selection;
+                }
+                this.updateSearchQuery();
+            }
+            this.$nextTick(() => {
+                const input = document.getElementById(withReplace ? 'editor-replace-input' : 'editor-search-input') 
+                    || document.getElementById('editor-search-input');
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            });
+        },
+
+        closeEditorSearch() {
+            this.searchOpen = false;
+            if (rawEditorView) {
+                rawEditorView.dispatch({
+                    effects: setSearchQuery.of(new SearchQuery({ search: '' }))
+                });
+                rawEditorView.focus();
+            }
+        },
+
+        toggleReplace() {
+            this.replaceOpen = !this.replaceOpen;
+            if (this.replaceOpen) {
+                this.$nextTick(() => {
+                    const input = document.getElementById('editor-replace-input');
+                    if (input) input.focus();
+                });
+            }
+        },
+
+        toggleCaseSensitive() {
+            this.caseSensitive = !this.caseSensitive;
+            this.updateSearchQuery();
+        },
+
+        toggleWholeWord() {
+            this.wholeWord = !this.wholeWord;
+            this.updateSearchQuery();
+        },
+
+        toggleRegex() {
+            this.isRegex = !this.isRegex;
+            this.updateSearchQuery();
+        },
+
+        updateSearchQuery() {
+            if (!rawEditorView) return;
+            const q = this.searchQuery;
+            rawEditorView.dispatch({
+                effects: setSearchQuery.of(new SearchQuery({
+                    search: q,
+                    caseSensitive: this.caseSensitive,
+                    wholeWord: this.wholeWord,
+                    regexp: this.isRegex,
+                    replace: this.replaceQuery
+                }))
+            });
+            this.calculateMatchCount();
+        },
+
+        calculateMatchCount() {
+            if (!rawEditorView || !this.searchQuery) {
+                this.matchCount = 0;
+                this.currentMatchIndex = 0;
+                return;
+            }
+            try {
+                const doc = rawEditorView.state.doc;
+                let count = 0;
+                let activeIdx = 0;
+                const currentFrom = rawEditorView.state.selection.main.from;
+                const currentTo = rawEditorView.state.selection.main.to;
+
+                if (this.isRegex) {
+                    let pat = this.searchQuery;
+                    if (this.wholeWord) pat = '\\b(?:' + pat + ')\\b';
+                    const cursor = new RegExpCursor(doc, pat, { ignoreCase: !this.caseSensitive });
+                    while (!cursor.next().done) {
+                        count++;
+                        if (cursor.value.from === currentFrom && cursor.value.to === currentTo) {
+                            activeIdx = count;
+                        }
+                    }
+                } else if (this.wholeWord) {
+                    let escaped = this.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const cursor = new RegExpCursor(doc, '\\b' + escaped + '\\b', { ignoreCase: !this.caseSensitive });
+                    while (!cursor.next().done) {
+                        count++;
+                        if (cursor.value.from === currentFrom && cursor.value.to === currentTo) {
+                            activeIdx = count;
+                        }
+                    }
+                } else {
+                    const cursor = new SearchCursor(doc, this.searchQuery, 0, doc.length, this.caseSensitive ? undefined : x => x.toLowerCase());
+                    while (!cursor.next().done) {
+                        count++;
+                        if (cursor.value.from === currentFrom && cursor.value.to === currentTo) {
+                            activeIdx = count;
+                        }
+                    }
+                }
+                this.matchCount = count;
+                this.currentMatchIndex = activeIdx;
+            } catch (e) {
+                this.matchCount = 0;
+                this.currentMatchIndex = 0;
+            }
+        },
+
+        findNextMatch() {
+            if (!rawEditorView) return;
+            this.updateSearchQuery();
+            findNext(rawEditorView);
+            this.calculateMatchCount();
+        },
+
+        findPrevMatch() {
+            if (!rawEditorView) return;
+            this.updateSearchQuery();
+            findPrevious(rawEditorView);
+            this.calculateMatchCount();
+        },
+
+        replaceCurrent() {
+            if (!rawEditorView) return;
+            this.updateSearchQuery();
+            replaceNext(rawEditorView);
+            this.calculateMatchCount();
+        },
+
+        replaceAllMatches() {
+            if (!rawEditorView) return;
+            this.updateSearchQuery();
+            replaceAll(rawEditorView);
+            this.calculateMatchCount();
         },
 
         showToast(message, type = 'info') {
@@ -193,8 +468,8 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
             }
 
             // Sync current editor content to active tab before opening new one
-            if (this.activeFile && this.editorView) {
-                this.activeFile.content = this.editorView.state.doc.toString();
+            if (this.activeFile && rawEditorView) {
+                tabContents.set(this.activeFile.path, rawEditorView.state.doc.toString());
             }
 
             this.fileLoading = true;
@@ -204,18 +479,19 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    const content = data.data.content || '';
+                    tabContents.set(file.path, content);
+
                     const newTab = {
                         path: file.path,
                         name: file.name,
                         size: file.size ?? 0,
-                        content: data.data.content,
-                        originalContent: data.data.content,
                         isModified: false
                     };
 
                     this.openTabs.push(newTab);
                     this.activeFile = newTab;
-                    this.mountCodeMirror(newTab.content, newTab.name);
+                    this.mountCodeMirror(content, newTab.name);
                     this.saveStatus = 'Saved';
                 } else {
                     this.showToast(data.message || 'Could not read file', 'error');
@@ -231,12 +507,13 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
             if (this.activeFile?.path === tab.path) return;
 
             // Save current doc content to current active tab state before switching
-            if (this.activeFile && this.editorView) {
-                this.activeFile.content = this.editorView.state.doc.toString();
+            if (this.activeFile && rawEditorView) {
+                tabContents.set(this.activeFile.path, rawEditorView.state.doc.toString());
             }
 
             this.activeFile = tab;
-            this.mountCodeMirror(tab.content, tab.name);
+            const content = tabContents.get(tab.path) || '';
+            this.mountCodeMirror(content, tab.name);
             this.saveStatus = tab.isModified ? 'Unsaved changes' : 'Saved';
         },
 
@@ -250,6 +527,7 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
                 if (!discard) return;
             }
 
+            tabContents.delete(tab.path);
             const index = this.openTabs.findIndex(t => t.path === tab.path);
             if (index === -1) return;
 
@@ -262,9 +540,9 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
                     this.switchToTab(this.openTabs[nextIndex]);
                 } else {
                     this.activeFile = null;
-                    if (this.editorView) {
-                        this.editorView.destroy();
-                        this.editorView = null;
+                    if (rawEditorView) {
+                        rawEditorView.destroy();
+                        rawEditorView = null;
                     }
                     const container = document.getElementById('codemirror-editor');
                     if (container) container.innerHTML = '';
@@ -334,7 +612,7 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
             switch (ext) {
                 case 'html':
                 case 'htm':
-                    return html();
+                    return [htmlWithJsLanguage, javascript().support, autoCloseTags];
                 case 'css':
                     return css();
                 case 'js':
@@ -353,48 +631,118 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
 
             // Clear old editor
             container.innerHTML = '';
-            if (this.editorView) {
-                this.editorView.destroy();
+            if (rawEditorView) {
+                rawEditorView.destroy();
+                rawEditorView = null;
             }
 
             const extensions = [
-                basicSetup,
+                lineNumbers(),
+                highlightActiveLineGutter(),
+                highlightSpecialChars(),
                 history(),
-                keymap.of([...defaultKeymap, ...historyKeymap]),
+                foldGutter(),
+                drawSelection(),
+                dropCursor(),
+                EditorState.allowMultipleSelections.of(true),
+                syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+                closeBrackets(),
+                autocompletion({
+                    activateOnTyping: true,
+                    activateOnTypingDelay: 100,
+                    maxRenderedOptions: 30
+                }),
+                highlightActiveLine(),
+                search({
+                    createPanel: () => ({ dom: document.createElement('div') }) // Hide default DOM panel since we have a custom top-right widget
+                }),
+                keymap.of([
+                    ...closeBracketsKeymap,
+                    ...completionKeymap,
+                    {
+                        key: 'Mod-f',
+                        run: () => {
+                            this.openEditorSearch(false);
+                            return true;
+                        },
+                        scope: 'editor search-panel'
+                    },
+                    {
+                        key: 'Mod-h',
+                        run: () => {
+                            this.openEditorSearch(true);
+                            return true;
+                        },
+                        scope: 'editor search-panel'
+                    },
+                    {
+                        key: 'Escape',
+                        run: () => {
+                            if (this.searchOpen) {
+                                this.closeEditorSearch();
+                                return true;
+                            }
+                            return false;
+                        },
+                        scope: 'editor search-panel'
+                    },
+                    {
+                        key: 'F3',
+                        run: () => {
+                            this.findNextMatch();
+                            return true;
+                        },
+                        shift: () => {
+                            this.findPrevMatch();
+                            return true;
+                        }
+                    },
+                    ...defaultKeymap,
+                    ...historyKeymap,
+                    ...foldKeymap
+                ]),
                 this.getLanguageExtension(filename),
                 EditorView.updateListener.of((update) => {
-                    if (update.docChanged && this.activeFile) {
-                        const newDoc = update.state.doc.toString();
-                        this.activeFile.content = newDoc;
-                        this.activeFile.isModified = (newDoc !== this.activeFile.originalContent);
-                        this.saveStatus = this.activeFile.isModified ? 'Unsaved changes' : 'Saved';
+                    if (update.docChanged && !isCurrentlyModified) {
+                        isCurrentlyModified = true;
+                        requestAnimationFrame(() => {
+                            if (this.activeFile) {
+                                this.activeFile.isModified = true;
+                            }
+                            this.saveStatus = 'Unsaved changes';
+                        });
+                    }
+                    if (update.selectionSet || update.docChanged) {
+                        if (this.searchOpen) {
+                            this.calculateMatchCount();
+                        }
                     }
                 }),
                 EditorView.theme({
                     '&': { height: '100%', fontSize: '13.5px', fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace' },
                     '.cm-scroller': {
                         overflow: 'auto',
-                        scrollbarColor: this.theme === 'dark' ? '#3e4451 #1e1e1e' : '#cbd5e1 #f8fafc',
+                        scrollbarColor: this.theme === 'dark' ? '#3e4451 #1e1e22' : '#cbd5e1 #f8fafc',
                         scrollbarWidth: 'thin'
                     },
                     '.cm-scroller::-webkit-scrollbar': {
                         width: '10px',
                         height: '10px',
-                        backgroundColor: this.theme === 'dark' ? '#1e1e1e' : '#f8fafc'
+                        backgroundColor: this.theme === 'dark' ? '#1e1e22' : '#f8fafc'
                     },
                     '.cm-scroller::-webkit-scrollbar-track': {
-                        backgroundColor: this.theme === 'dark' ? '#1e1e1e' : '#f8fafc'
+                        backgroundColor: this.theme === 'dark' ? '#1e1e22' : '#f8fafc'
                     },
                     '.cm-scroller::-webkit-scrollbar-thumb': {
                         backgroundColor: this.theme === 'dark' ? '#3e4451' : '#cbd5e1',
                         borderRadius: '4px',
-                        border: `2px solid ${this.theme === 'dark' ? '#1e1e1e' : '#f8fafc'}`
+                        border: `2px solid ${this.theme === 'dark' ? '#1e1e22' : '#f8fafc'}`
                     },
                     '.cm-scroller::-webkit-scrollbar-thumb:hover': {
                         backgroundColor: this.theme === 'dark' ? '#5c6370' : '#94a3b8'
                     },
                     '.cm-scroller::-webkit-scrollbar-corner': {
-                        backgroundColor: this.theme === 'dark' ? '#1e1e1e' : '#f8fafc'
+                        backgroundColor: this.theme === 'dark' ? '#1e1e22' : '#f8fafc'
                     },
                     '.cm-content': { padding: '12px 0' }
                 })
@@ -402,34 +750,30 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
 
             if (this.theme === 'dark') {
                 extensions.push(oneDark);
+                extensions.push(EditorView.theme({
+                    '&': { backgroundColor: '#1e1e22 !important' },
+                    '.cm-gutters': { backgroundColor: '#1e1e22 !important', borderRight: '1px solid #2e2e36' },
+                    '.cm-activeLine': { backgroundColor: '#25252b !important' },
+                    '.cm-activeLineGutter': { backgroundColor: '#25252b !important' }
+                }));
             }
 
-            this.editorView = new EditorView({
+            isCurrentlyModified = this.activeFile ? !!this.activeFile.isModified : false;
+
+            rawEditorView = new EditorView({
                 doc: content,
                 extensions,
                 parent: container
             });
         },
 
-        toggleTheme() {
-            this.theme = this.theme === 'dark' ? 'light' : 'dark';
-            try {
-                localStorage.setItem('ide_theme', this.theme);
-            } catch (e) { }
-
-            if (this.editorView && this.activeFile) {
-                const currentDoc = this.editorView.state.doc.toString();
-                this.mountCodeMirror(currentDoc, this.activeFile.name);
-            }
-        },
-
         async saveFile() {
-            if (!this.activeFile || !this.editorView || this.saving) return;
+            if (!this.activeFile || !rawEditorView || this.saving) return;
 
             this.saving = true;
             this.saveStatus = 'Saving';
 
-            const content = this.editorView.state.doc.toString();
+            const content = rawEditorView.state.doc.toString();
 
             try {
                 const res = await fetch(`/api/deployments/${this.deploymentId}/files/write`, {

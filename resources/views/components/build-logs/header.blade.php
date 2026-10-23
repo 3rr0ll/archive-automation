@@ -18,7 +18,7 @@
         <a :href="'https://' + (deployment ? deployment.domain : '{{ $deployment->domain }}')" 
            target="_blank" 
            rel="noopener"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition shadow-xs">
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-md transition shadow-xs">
             <span>Visit site</span>
             <x-lucide-external-link class="size-3.5 text-zinc-400" />
         </a>
@@ -26,8 +26,8 @@
         <!-- Edit Files via SFTP Button -->
         <a :href="'/deployments/' + (deployment ? (deployment.hash || deployment.id) : '{{ $deployment->hash }}') + '/files'"
            x-show="deployment && (deployment.status === 'completed' || deployment.status === 'failed')"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition shadow-xs">
-            <x-lucide-file-code class="size-3.5 text-zinc-500" />
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-md transition shadow-xs">
+            <x-lucide-file-code class="size-3.5 text-zinc-500 dark:text-zinc-400" />
             <span>Edit files</span>
         </a>
 
@@ -36,7 +36,7 @@
                 @click="triggerRetry()"
                 :disabled="isRetrying"
                 x-show="deployment && (deployment.status === 'failed' || deployment.status === 'completed')"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-md transition cursor-pointer">
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 rounded-md transition cursor-pointer">
             <x-lucide-rotate-cw class="size-3.5" x-bind:class="isRetrying ? 'animate-spin' : ''" />
             <span x-text="isRetrying ? 'Retrying...' : 'Redeploy'"></span>
         </button>
