@@ -29,6 +29,8 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
         searchQuery: '',
         statusFilter: 'all',
         sortBy: 'newest',
+        oauthWindow: null,
+        oauthMessageHandler: null,
 
         get filteredAccounts() {
             let list = [...this.accounts];
@@ -73,9 +75,46 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
         },
 
         async init() {
+            if (this.oauthMessageHandler) {
+                return;
+            }
+
+            this.oauthMessageHandler = async (event) => {
+                if (event.origin !== window.location.origin || event.data?.type !== 'google-oauth-complete') {
+                    return;
+                }
+
+                this.oauthWindow = null;
+
+                if (event.data.success) {
+                    window.location.reload();
+                    return;
+                }
+
+                window.toast?.error(event.data.message || 'Google authorization failed.');
+            };
+            window.addEventListener('message', this.oauthMessageHandler);
+
             if (!this.accounts || this.accounts.length === 0) {
                 await this.loadAccounts();
             }
+        },
+
+        destroy() {
+            if (this.oauthMessageHandler) {
+                window.removeEventListener('message', this.oauthMessageHandler);
+            }
+        },
+
+        connectGoogle(oauthUrl) {
+            this.oauthWindow = window.open(oauthUrl, 'google-oauth-connect');
+
+            if (!this.oauthWindow) {
+                window.toast?.error('Your browser blocked the Google sign-in tab. Please allow pop-ups for this site and try again.');
+                return;
+            }
+
+            this.oauthWindow.focus();
         },
 
         async loadAccounts(showLoader = true) {

@@ -30,8 +30,10 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 400);
             }
 
-            return redirect()->route('google-search-console')
-                ->with('error', 'Google authorization failed: ' . $error);
+            return response()->view('pages.google-oauth-complete', [
+                'success' => false,
+                'message' => 'Google authorization failed: ' . $error,
+            ], 400);
         }
 
         $code = (string) $request->query('code');
@@ -43,8 +45,10 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 400);
             }
 
-            return redirect()->route('google-search-console')
-                ->with('error', 'Missing authorization code from Google.');
+            return response()->view('pages.google-oauth-complete', [
+                'success' => false,
+                'message' => 'Missing authorization code from Google.',
+            ], 400);
         }
 
         try {
@@ -68,8 +72,10 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ]);
             }
 
-            return redirect()->route('google-search-console')
-                ->with('success', "Google Search Console account {$account->client_email} connected successfully!");
+            return response()->view('pages.google-oauth-complete', [
+                'success' => true,
+                'message' => "Google Search Console account {$account->client_email} connected successfully!",
+            ]);
         } catch (Throwable $e) {
             Log::error('Google OAuth callback exchange failed', [
                 'error' => $e->getMessage(),
@@ -82,8 +88,10 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 500);
             }
 
-            return redirect()->route('google-search-console')
-                ->with('error', 'Failed to link Google account: ' . $e->getMessage());
+            return response()->view('pages.google-oauth-complete', [
+                'success' => false,
+                'message' => 'Failed to link Google account: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }

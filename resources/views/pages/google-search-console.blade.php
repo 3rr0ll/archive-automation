@@ -18,11 +18,11 @@
                 </p>
             </div>
             <div class="flex items-center gap-3">
-                <a href="{{ route('google.redirect') }}"
+                <button type="button" @click="connectGoogle(@js(route('google.redirect')))"
                    class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent dark:border-zinc-700/80 text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none transition-colors shadow-sm cursor-pointer">
                     <x-lucide-log-in class="w-4 h-4" />
                     <span>Connect with Google (OAuth)</span>
-                </a>
+                </button>
             </div>
         </div>
 
@@ -160,11 +160,11 @@
                     <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
                         Connect your Google account with OAuth to automatically manage and verify domains in Search Console.
                     </p>
-                    <a href="{{ route('google.redirect') }}" 
+                    <button type="button" @click="connectGoogle(@js(route('google.redirect')))"
                        class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 transition cursor-pointer shadow-sm">
                         <x-lucide-log-in class="size-3.5" />
                         <span>Connect with Google (OAuth)</span>
-                    </a>
+                    </button>
                 </div>
             </template>
 

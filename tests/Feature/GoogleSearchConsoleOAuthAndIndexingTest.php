@@ -139,8 +139,10 @@ class GoogleSearchConsoleOAuthAndIndexingTest extends TestCase
     public function test_web_callback_handles_missing_code(): void
     {
         $response = $this->get('/google/callback');
-        $response->assertRedirect(route('google-search-console'));
-        $response->assertSessionHas('error');
+        $response->assertStatus(400)
+            ->assertViewIs('pages.google-oauth-complete')
+            ->assertViewHas('success', false)
+            ->assertSee('google-oauth-complete', false);
     }
 
     public function test_web_callback_returns_json_when_requested(): void
