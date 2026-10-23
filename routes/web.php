@@ -66,8 +66,15 @@ Route::middleware('auth')->group(function (): void {
     })->name('deployments.files.page');
     Route::get('/deployments/{deployment}/files/download', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'downloadZip'])->name('deployments.files.download');
     Route::get('/google/redirect', function (\Illuminate\Http\Request $request) {
-        return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
-            ->createOAuthUrl((int) $request->user()->getKey()));
+        try {
+            return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
+                ->createOAuthUrl((int) $request->user()->getKey()));
+        } catch (\Throwable $e) {
+            return response()->view('pages.google-oauth-complete', [
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
     })->middleware('admin')->name('google.redirect');
 });
 

@@ -35,7 +35,7 @@
                 } catch (e) {}
             }
 
-            // 2. BroadcastChannel for cross-tab communication
+            // 2. BroadcastChannel for cross-tab/popup communication
             try {
                 const channel = new BroadcastChannel('google_oauth_channel');
                 channel.postMessage(result);
@@ -50,11 +50,12 @@
                 }));
             } catch (e) {}
 
+            // Close the popup window automatically
             window.setTimeout(() => {
-                if (window.opener && !window.opener.closed) {
+                try {
                     window.close();
-                }
-            }, 300);
+                } catch (e) {}
+            }, 600);
         })();
     </script>
 </body>
