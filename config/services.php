@@ -46,6 +46,7 @@ return [
         'api_token' => env('RUNCLOUD_API_TOKEN'),
         'server_id' => env('RUNCLOUD_DEFAULT_SERVER_ID'),
         'server_ip' => env('RUNCLOUD_DEFAULT_SERVER_IP'),
+        'user_id' => env('RUNCLOUD_USER_ID', env('RUNCLOUD_SYSTEM_USER_ID')),
         'timeout' => (int) env('RUNCLOUD_TIMEOUT', 30),
         'cloudflare_external_api_id' => env('RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID'),
         'ssl_authorization_method' => env('RUNCLOUD_SSL_AUTH_METHOD', 'http-01'),

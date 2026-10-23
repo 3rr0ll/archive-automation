@@ -122,6 +122,17 @@ class ApplicationCachingTest extends TestCase
         $this->assertSame(2, $this->recordedRequestsTo('/servers'));
     }
 
+    public function test_configured_runcloud_user_id_avoids_a_server_users_api_request(): void
+    {
+        config(['services.runcloud.user_id' => 2011310]);
+        Http::fake();
+
+        $userId = app(RunCloudService::class)->getRunCloudSystemUserId(99);
+
+        $this->assertSame(2011310, $userId);
+        Http::assertNothingSent();
+    }
+
     public function test_archive_settings_and_deployment_statistics_are_invalidated_after_changes(): void
     {
         $settings = app(InternetArchiveSettings::class);
