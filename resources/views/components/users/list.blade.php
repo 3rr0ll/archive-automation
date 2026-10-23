@@ -60,24 +60,27 @@
                                  role="menu">
                                 <button type="button" 
                                         @click="openEditModal(user); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Edit Profile
+                                    <x-lucide-pencil class="size-4 text-zinc-400" />
+                                    <span>Edit Profile</span>
                                 </button>
                                 <button type="button" 
                                         @click="openPasswordModal(user); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Reset Password
+                                    <x-lucide-key-round class="size-4 text-zinc-400" />
+                                    <span>Reset Password</span>
                                 </button>
                                 <template x-if="user.id !== currentUserId && user.role !== 'admin'">
                                     <div>
                                         <div class="border-t border-zinc-100 my-1"></div>
                                         <button type="button" 
                                                 @click="deleteUserPrompt(user); open = false;" 
-                                                class="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 cursor-pointer" 
+                                                class="flex items-center gap-2 w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 cursor-pointer" 
                                                 role="menuitem">
-                                            Delete User
+                                            <x-lucide-trash-2 class="size-4 text-red-500" />
+                                            <span>Delete User</span>
                                         </button>
                                     </div>
                                 </template>

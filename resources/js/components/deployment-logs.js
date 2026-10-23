@@ -181,15 +181,35 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
 
         async triggerCancel() {
             if (this.isCancelling) return;
-            this.isCancelling = true;
-            try {
-                await cancelDeployment(this.deploymentId);
-                window.toast?.success('Deployment cancelled.');
-                await this.loadData(false);
-            } catch (error) {
-                window.toast?.error(error.message || 'Failed to cancel deployment.');
-            } finally {
-                this.isCancelling = false;
+
+            const executeCancel = async () => {
+                this.isCancelling = true;
+                try {
+                    await cancelDeployment(this.deploymentId);
+                    window.toast?.success('Deployment cancelled.');
+                    await this.loadData(false);
+                } catch (error) {
+                    window.toast?.error(error.message || 'Failed to cancel deployment.');
+                } finally {
+                    this.isCancelling = false;
+                }
+            };
+
+            if (window.confirmModal) {
+                window.confirmModal.show({
+                    title: 'Cancel Deployment',
+                    message: 'Are you sure you want to cancel this active deployment? Ongoing provisioning or build steps will be aborted.',
+                    key: this.deployment?.domain || '',
+                    metaLabel: 'Domain',
+                    confirmText: 'Cancel Deployment',
+                    type: 'danger',
+                    onConfirm: executeCancel
+                });
+                return;
+            }
+
+            if (confirm('Are you sure you want to cancel this active deployment?')) {
+                await executeCancel();
             }
         }
     };

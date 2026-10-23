@@ -116,16 +116,23 @@ aria-modal="true"
                     <button type="button"
                             @click="close()"
                             :disabled="isProcessing"
-                            class="inline-flex justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                            class="inline-flex items-center gap-1.5 justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                        <x-lucide-x class="size-4 text-zinc-500" />
                         <span x-text="cancelText">Cancel</span>
                     </button>
 
                     <button type="button"
                             @click="confirm()"
                             :disabled="isProcessing"
-                            class="inline-flex items-center justify-center rounded-lg px-5 py-2 text-sm font-medium text-white transition focus:outline-none disabled:opacity-50 cursor-pointer"
+                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white transition focus:outline-none disabled:opacity-50 cursor-pointer"
                             :class="type === 'danger' ? 'bg-[#DC2626] hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'">
-                        <span x-show="!isProcessing" x-text="confirmText">Delete</span>
+                        <template x-if="!isProcessing">
+                            <span class="inline-flex items-center gap-1.5">
+                                <x-lucide-trash-2 x-show="type === 'danger'" class="size-4" />
+                                <x-lucide-check x-show="type !== 'danger'" class="size-4" />
+                                <span x-text="confirmText">Delete</span>
+                            </span>
+                        </template>
                         <span x-show="isProcessing" class="inline-flex items-center gap-2">
                             <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
                             <span>Processing</span>

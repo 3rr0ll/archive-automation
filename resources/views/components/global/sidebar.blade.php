@@ -83,12 +83,8 @@
         <!-- Brand Header -->
         <div class="flex items-center h-14 border-b border-zinc-200 dark:border-zinc-800 shrink-0 transition-all duration-200"
              :class="$store.sidebar?.collapsed ? 'px-0 justify-center' : 'px-4'">
-            <template x-if="!$store.sidebar?.collapsed">
-                <span class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 truncate">Archive Automation</span>
-            </template>
-            <template x-if="$store.sidebar?.collapsed">
-                <span class="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100">AA</span>
-            </template>
+            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 truncate">Archive Automation</span>
+            <span x-show="$store.sidebar?.collapsed" class="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100" style="display: none;">AA</span>
         </div>
 
         <!-- Navigation Links -->
@@ -110,7 +106,7 @@
                     <li class="px-2 mt-6 mb-1" x-show="!$store.sidebar?.collapsed">
                         <span class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Settings</span>
                     </li>
-                    <li class="my-2 border-t border-zinc-200 dark:border-zinc-800/80" x-show="$store.sidebar?.collapsed"></li>
+                    <li class="my-2 border-t border-zinc-200 dark:border-zinc-800/80" x-show="$store.sidebar?.collapsed" style="display: none;"></li>
                     <li>
                         <a href="/environment-variables"
                            :title="$store.sidebar?.collapsed ? 'Environment Variables' : ''"

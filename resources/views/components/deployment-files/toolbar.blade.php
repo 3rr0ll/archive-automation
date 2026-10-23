@@ -7,7 +7,8 @@
     <!-- Left: Project & Breadcrumbs -->
     <div class="flex items-center gap-2 min-w-0">
         <a href="/deployments/{{ $deployment->hash }}/logs" 
-           class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded transition"
+           @click.prevent="navigateWithCheck('/deployments/{{ $deployment->hash }}/logs')"
+           class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded transition cursor-pointer"
            :class="theme === 'dark' ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'">
             <x-lucide-arrow-left class="size-3.5" />
             <span>Logs</span>
@@ -58,6 +59,25 @@
             </template>
             <span x-text="saving ? 'Saving' : 'Save'"></span>
         </button>
+
+        <!-- Download ZIP Button -->
+        <a href="/deployments/{{ $deployment->hash }}/files/download" 
+           download="{{ $deployment->domain }}.zip"
+           x-data="{ downloading: false }"
+           @click="downloading = true; setTimeout(() => downloading = false, 5000)"
+           class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border transition cursor-pointer"
+           :class="theme === 'dark' ? 'text-zinc-300 hover:text-white bg-zinc-900/60 border-zinc-700 hover:bg-zinc-800' : 'text-zinc-700 hover:text-zinc-900 bg-white border-zinc-200 hover:bg-zinc-50'"
+           title="Download all workspace files as ZIP">
+            <template x-if="downloading">
+                <span class="animate-spin inline-block size-3.5 border-2 rounded-full"
+                      :class="theme === 'dark' ? 'border-zinc-500 border-t-zinc-200' : 'border-zinc-300 border-t-zinc-800'"></span>
+            </template>
+            <template x-if="!downloading">
+                <x-lucide-download class="size-3.5 text-zinc-400" />
+            </template>
+            <span class="hidden sm:inline" x-text="downloading ? 'Preparing ZIP...' : 'Download ZIP'"></span>
+            <span class="sm:hidden" x-text="downloading ? 'ZIP...' : 'ZIP'"></span>
+        </a>
 
         <!-- Visit Site Link -->
         <a href="https://{{ $deployment->domain }}" 

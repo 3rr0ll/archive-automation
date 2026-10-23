@@ -215,4 +215,29 @@ class DeploymentFileEditorController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Download the deployment files as a ZIP archive.
+     */
+    public function downloadZip(Deployment $deployment)
+    {
+        $deployment->load('server');
+        $target = $this->resolveDeploymentTarget($deployment);
+
+        try {
+            $domainClean = preg_replace('/[^a-zA-Z0-9\.\-_]/', '', $deployment->domain);
+            $zipFilename = "{$domainClean}.zip";
+            $zipBasename = str_replace(['.', ' ', '/'], ['-', '-', '-'], $deployment->domain);
+            $zipPath = $this->sftpFileService->downloadDirectoryAsZip($target['host'], $target['root_dir'], $zipBasename);
+
+            return response()->download($zipPath, $zipFilename)->deleteFileAfterSend(true);
+        } catch (Throwable $e) {
+            Log::error('SFTP zip download failed: ' . $e->getMessage(), [
+                'deployment_id' => $deployment->id,
+                'domain' => $deployment->domain,
+            ]);
+
+            return back()->with('error', 'Failed to generate ZIP archive: ' . $e->getMessage());
+        }
+    }
 }

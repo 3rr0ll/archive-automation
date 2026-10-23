@@ -8,8 +8,9 @@
     <div class="flex items-center gap-3">
         <button type="button" 
                 @click="openModal()" 
-                class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors">
-            Add Environment Variable
+                class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors cursor-pointer">
+            <x-lucide-plus class="size-4" />
+            <span>Add Environment Variable</span>
         </button>
     </div>
 </div>

@@ -213,15 +213,17 @@
                         <div class="px-6 py-4 border-t border-zinc-100 flex items-center justify-between bg-white">
                             <button type="button" 
                                     @click="closeModal()" 
-                                    class="inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 hover:bg-zinc-100 transition border border-zinc-200">
-                                Cancel
+                                    class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 hover:bg-zinc-100 transition border border-zinc-200 cursor-pointer">
+                                <x-lucide-x class="size-3.5 text-zinc-500" />
+                                <span>Cancel</span>
                             </button>
 
                             <button type="submit" 
                                     form="deployment-form" 
                                     @click="submitDeployment()"
                                     :disabled="isSubmitting" 
-                                    class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer">
+                                    class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer">
+                                <x-lucide-rocket x-show="!isSubmitting" class="size-3.5" />
                                 <span x-show="!isSubmitting">Deploy Domain</span>
                                 <span x-show="isSubmitting" class="flex items-center gap-1.5">
                                     <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>

@@ -79,13 +79,89 @@
 
     <!-- Explorer File List (Tree Accordion) -->
     <div class="flex-1 overflow-y-auto p-1 font-mono text-[12px] select-none">
-        <!-- Loading State -->
+        <!-- Loading State (Skeleton File Tree) -->
         <template x-if="treeLoading">
-            <div class="p-4 text-center text-xs flex flex-col items-center gap-2"
-                 :class="theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'">
-                <span class="animate-spin inline-block size-4 border-2 rounded-full"
-                      :class="theme === 'dark' ? 'border-zinc-600 border-t-zinc-200' : 'border-zinc-300 border-t-zinc-800'"></span>
-                <span class="font-sans">Loading files...</span>
+            <div class="p-2 space-y-2 animate-pulse select-none" aria-hidden="true">
+                <!-- Status indicator -->
+                <div class="px-2 py-1.5 flex items-center gap-2 text-xs"
+                     :class="theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'">
+                    <span class="animate-spin inline-block size-3.5 border-2 rounded-full shrink-0"
+                          :class="theme === 'dark' ? 'border-zinc-600 border-t-zinc-200' : 'border-zinc-300 border-t-zinc-800'"></span>
+                    <span class="font-sans text-[11px] font-medium tracking-wide">Loading workspace files...</span>
+                </div>
+
+                <!-- Skeleton Rows Mocking Folders and Files -->
+                <div class="space-y-1.5 pt-1">
+                    <!-- Folder 1 -->
+                    <div class="flex items-center gap-2 px-2 py-1.5 rounded"
+                         :class="theme === 'dark' ? 'bg-zinc-800/40' : 'bg-zinc-100/70'">
+                        <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/80' : 'bg-zinc-300'"></div>
+                        <div class="h-3 w-20 rounded" :class="theme === 'dark' ? 'bg-zinc-700/80' : 'bg-zinc-300'"></div>
+                    </div>
+                    <!-- Nested items -->
+                    <div class="pl-5 space-y-1.5">
+                        <div class="flex items-center justify-between px-2 py-1 rounded"
+                             :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                            <div class="flex items-center gap-2">
+                                <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                                <div class="h-3 w-24 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            </div>
+                            <div class="h-2.5 w-7 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                        </div>
+                        <div class="flex items-center justify-between px-2 py-1 rounded"
+                             :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                            <div class="flex items-center gap-2">
+                                <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                                <div class="h-3 w-28 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            </div>
+                            <div class="h-2.5 w-8 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                        </div>
+                    </div>
+
+                    <!-- Folder 2 -->
+                    <div class="flex items-center gap-2 px-2 py-1.5 rounded"
+                         :class="theme === 'dark' ? 'bg-zinc-800/40' : 'bg-zinc-100/70'">
+                        <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/80' : 'bg-zinc-300'"></div>
+                        <div class="h-3 w-16 rounded" :class="theme === 'dark' ? 'bg-zinc-700/80' : 'bg-zinc-300'"></div>
+                    </div>
+                    <!-- Nested item -->
+                    <div class="pl-5 space-y-1.5">
+                        <div class="flex items-center justify-between px-2 py-1 rounded"
+                             :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                            <div class="flex items-center gap-2">
+                                <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                                <div class="h-3 w-20 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            </div>
+                            <div class="h-2.5 w-6 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                        </div>
+                    </div>
+
+                    <!-- Root Files -->
+                    <div class="flex items-center justify-between px-2 py-1 rounded"
+                         :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                        <div class="flex items-center gap-2">
+                            <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            <div class="h-3 w-24 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                        </div>
+                        <div class="h-2.5 w-8 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                    </div>
+                    <div class="flex items-center justify-between px-2 py-1 rounded"
+                         :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                        <div class="flex items-center gap-2">
+                            <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            <div class="h-3 w-32 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                        </div>
+                        <div class="h-2.5 w-7 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                    </div>
+                    <div class="flex items-center justify-between px-2 py-1 rounded"
+                         :class="theme === 'dark' ? 'bg-zinc-800/20' : 'bg-zinc-100/50'">
+                        <div class="flex items-center gap-2">
+                            <div class="size-3.5 rounded shrink-0" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                            <div class="h-3 w-16 rounded" :class="theme === 'dark' ? 'bg-zinc-700/60' : 'bg-zinc-300/80'"></div>
+                        </div>
+                        <div class="h-2.5 w-6 rounded" :class="theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'"></div>
+                    </div>
+                </div>
             </div>
         </template>
 

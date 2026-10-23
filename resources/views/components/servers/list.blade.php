@@ -63,27 +63,31 @@
                                  role="menu">
                                 <button type="button" 
                                         @click="copyText(item.ip_address, 'IP Address'); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Copy Server IP
+                                    <x-lucide-copy class="size-4 text-zinc-400" />
+                                    <span>Copy Server IP</span>
                                 </button>
                                 <button type="button" 
                                         @click="copyText(String(item.server_id), 'Server ID'); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Copy Server ID
+                                    <x-lucide-hash class="size-4 text-zinc-400" />
+                                    <span>Copy Server ID</span>
                                 </button>
                                 <button type="button" 
                                         @click="copyText(item.name, 'Server Name'); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Copy Name
+                                    <x-lucide-copy class="size-4 text-zinc-400" />
+                                    <span>Copy Name</span>
                                 </button>
                                 <div class="border-t border-zinc-100 my-1"></div>
                                 <button type="button" 
                                         @click="toggleActive(item); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
+                                    <x-lucide-power class="size-4 text-zinc-400" />
                                     <span x-text="item.is_active ? 'Set Inactive' : 'Set Active'"></span>
                                 </button>
                             </div>

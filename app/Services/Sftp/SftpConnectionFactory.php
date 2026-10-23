@@ -37,6 +37,32 @@ class SftpConnectionFactory
         return $client;
     }
 
+    public function connectSsh(string $host): \phpseclib3\Net\SSH2
+    {
+        $username = (string) $this->getEnvironmentValue(
+            'SFTP_USERNAME',
+            config('services.sftp.username'),
+        );
+
+        if ($username === '') {
+            throw new RuntimeException('SFTP/SSH credentials are not configured.');
+        }
+
+        $client = new \phpseclib3\Net\SSH2(
+            $host,
+            (int) config('services.sftp.port', 22),
+            (int) config('services.sftp.timeout', 30),
+        );
+
+        $this->verifyHostKey($client);
+
+        if (! $client->login($username, $this->credential())) {
+            throw new RuntimeException('SSH authentication failed.');
+        }
+
+        return $client;
+    }
+
     private function credential(): string|PrivateKey
     {
         $privateKey = $this->privateKey();
@@ -109,7 +135,7 @@ class SftpConnectionFactory
         return $contents;
     }
 
-    private function verifyHostKey(SFTP $client): void
+    private function verifyHostKey(SFTP|\phpseclib3\Net\SSH2 $client): void
     {
         $expectedFingerprint = config('services.sftp.host_fingerprint');
 

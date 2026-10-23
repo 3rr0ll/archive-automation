@@ -37,7 +37,7 @@
         this.toasts = this.toasts.filter(t => t.id !== id);
     }
 }"
-class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"
+class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"
 role="region"
 aria-live="polite">
     <template x-for="item in toasts" :key="item.id">

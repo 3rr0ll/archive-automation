@@ -186,6 +186,9 @@ export function usersPage(initialUsers = [], currentUserId = null) {
             } catch (error) {
                 if (error.errors) {
                     this.formErrors = error.errors;
+                    const firstErrorKey = Object.keys(error.errors)[0];
+                    const firstErrorMessage = error.errors[firstErrorKey]?.[0] || 'Please fix the errors in the form.';
+                    window.toast?.error(firstErrorMessage);
                 } else {
                     window.toast?.error(error.message || 'Operation failed.');
                 }
