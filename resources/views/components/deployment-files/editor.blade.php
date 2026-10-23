@@ -105,6 +105,7 @@
          class="absolute top-10 right-4 z-30 flex flex-col p-1.5 rounded-lg border shadow-2xl backdrop-blur-md select-none transition-all"
          :class="theme === 'dark' ? 'bg-[#1e1e22]/95 border-zinc-700/80 text-zinc-200 shadow-black/60' : 'bg-white/95 border-zinc-300 text-zinc-800 shadow-zinc-400/30'">
         
+         
         <!-- Search Row -->
         <div class="flex items-center gap-1.5">
             <!-- Toggle Replace Arrow (caret) -->

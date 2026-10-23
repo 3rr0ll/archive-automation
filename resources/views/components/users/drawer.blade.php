@@ -137,14 +137,17 @@
                             <button type="button" 
                                     @click="closeModal()" 
                                     :disabled="isSubmitting"
-                                    class="px-4 py-2 border border-zinc-200 rounded-md text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 focus:outline-none transition cursor-pointer">
-                                Cancel
+                                    class="inline-flex items-center gap-1.5 px-4 py-2 border border-zinc-200 rounded-md text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 focus:outline-none transition cursor-pointer disabled:opacity-50">
+                                <x-lucide-x class="size-4 text-zinc-500" />
+                                <span>Cancel</span>
                             </button>
                             <button type="submit" 
                                     form="user-form"
                                     :disabled="isSubmitting"
                                     class="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none transition flex items-center gap-2 cursor-pointer">
                                 <span x-show="isSubmitting" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                                <x-lucide-user-plus x-show="!isSubmitting && modalMode === 'create'" class="size-4" />
+                                <x-lucide-save x-show="!isSubmitting && modalMode !== 'create'" class="size-4" />
                                 <span x-text="modalMode === 'create' ? (isSubmitting ? 'Creating' : 'Create User') : (isSubmitting ? 'Saving' : 'Save Changes')"></span>
                             </button>
                         </div>
@@ -213,14 +216,16 @@
                     <button type="button" 
                             @click="closePasswordModal()" 
                             :disabled="isResettingPassword"
-                            class="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
-                        Cancel
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                        <x-lucide-x class="size-4 text-zinc-500" />
+                        <span>Cancel</span>
                     </button>
                     <button type="submit" 
-                            form="reset-password-form"
+                            form="reset-password-form" 
                             :disabled="isResettingPassword"
-                            class="inline-flex items-center justify-center rounded-lg px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 transition focus:outline-none disabled:opacity-50 cursor-pointer">
-                        <span x-show="isResettingPassword" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+                            class="inline-flex items-center justify-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 transition focus:outline-none disabled:opacity-50 cursor-pointer">
+                        <span x-show="isResettingPassword" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                        <x-lucide-key-round x-show="!isResettingPassword" class="size-4" />
                         <span x-text="isResettingPassword ? 'Resetting' : 'Reset Password'"></span>
                     </button>
                 </div>

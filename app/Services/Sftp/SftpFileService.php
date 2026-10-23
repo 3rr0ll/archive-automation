@@ -107,6 +107,93 @@ class SftpFileService
     }
 
     /**
+     * Download an entire remote directory as a local temporary ZIP or tar.gz file.
+     *
+     * @return string Path to the temporary file
+     */
+    public function downloadDirectoryAsZip(string $host, string $remoteDir, string $zipBasename = 'archive'): string
+    {
+        $this->guardPath($remoteDir);
+
+        // Increase execution time for zip creation
+        @set_time_limit(300);
+
+        $remoteDirClean = rtrim(str_replace('\\', '/', $remoteDir), '/');
+
+        // Approach 1 (Fastest): Execute zip or tar natively on the remote Linux server via SSH
+        try {
+            $ssh = $this->connectionFactory->connectSsh($host);
+            $remoteTempZip = "/tmp/{$zipBasename}_" . uniqid() . ".zip";
+            
+            // Execute zip in the parent directory so contents are clean
+            $cmd = sprintf(
+                'cd %s && zip -rq %s .',
+                escapeshellarg($remoteDirClean),
+                escapeshellarg($remoteTempZip)
+            );
+            $ssh->exec($cmd);
+
+            // Verify remote zip was generated
+            $sftp = $this->connectionFactory->connect($host);
+            if ($sftp->is_file($remoteTempZip) && $sftp->filesize($remoteTempZip) > 0) {
+                $localZip = tempnam(sys_get_temp_dir(), 'zip_') . '.zip';
+                $sftp->get($remoteTempZip, $localZip);
+                $sftp->delete($remoteTempZip);
+                return $localZip;
+            }
+        } catch (Throwable $e) {
+            // If SSH exec or zip is unavailable, fall back to streaming SFTP walk below
+            \Illuminate\Support\Facades\Log::warning('Remote SSH zip failed, falling back to SFTP file stream: ' . $e->getMessage());
+        }
+
+        // Approach 2 (Fallback): SFTP recursive file fetch
+        $client = $this->connectionFactory->connect($host);
+
+        if (! $client->is_dir($remoteDirClean)) {
+            throw new RuntimeException("Directory not found: {$remoteDirClean}");
+        }
+
+        $tempZipPath = tempnam(sys_get_temp_dir(), 'zip_') . '.zip';
+        $zip = new \ZipArchive();
+
+        if ($zip->open($tempZipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Failed to create local zip archive.');
+        }
+
+        $addDirToZip = function ($dir) use (&$addDirToZip, $client, $zip, $remoteDirClean) {
+            $rawList = $client->rawlist($dir);
+            if ($rawList === false) {
+                return;
+            }
+
+            foreach ($rawList as $filename => $info) {
+                if ($filename === '.' || $filename === '..') {
+                    continue;
+                }
+
+                $fullPath = $dir . '/' . $filename;
+                $relativePath = ltrim(substr($fullPath, strlen($remoteDirClean)), '/');
+                $isDir = isset($info['type']) && $info['type'] === NET_SFTP_TYPE_DIRECTORY;
+
+                if ($isDir) {
+                    $zip->addEmptyDir($relativePath);
+                    $addDirToZip($fullPath);
+                } else {
+                    $content = $client->get($fullPath);
+                    if ($content !== false) {
+                        $zip->addFromString($relativePath, $content);
+                    }
+                }
+            }
+        };
+
+        $addDirToZip($remoteDirClean);
+        $zip->close();
+
+        return $tempZipPath;
+    }
+
+    /**
      * Prevent path traversal outside allowed root paths.
      */
     private function guardPath(string $path): void

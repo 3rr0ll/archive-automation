@@ -72,9 +72,15 @@
                 Make this the active deployment account
             </label>
             <div class="flex justify-end gap-2">
-                <button type="button" @click="closeAccountForm()" class="rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
-                <button type="submit" :disabled="isSaving" class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                        x-text="isSaving ? 'Saving...' : 'Save account'"></button>
+                <button type="button" @click="closeAccountForm()" class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 cursor-pointer">
+                    <x-lucide-x class="size-4" />
+                    <span>Cancel</span>
+                </button>
+                <button type="submit" :disabled="isSaving" class="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 cursor-pointer">
+                    <span x-show="isSaving" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                    <x-lucide-save x-show="!isSaving" class="size-4" />
+                    <span x-text="isSaving ? 'Saving...' : 'Save account'"></span>
+                </button>
             </div>
         </form>
     </section>
@@ -105,13 +111,25 @@
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" @click="testAccount(account)" :disabled="testingId === account.id"
-                                class="rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                                x-text="testingId === account.id ? 'Testing...' : 'Test'"></button>
+                                class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 cursor-pointer">
+                            <span x-show="testingId === account.id" class="animate-spin inline-block size-3.5 border-2 border-zinc-700 border-t-transparent rounded-full"></span>
+                            <x-lucide-activity x-show="testingId !== account.id" class="size-3.5 text-zinc-500" />
+                            <span x-text="testingId === account.id ? 'Testing...' : 'Test'"></span>
+                        </button>
                         <button x-show="!account.is_active" type="button" @click="activateAccount(account)" :disabled="activatingId === account.id"
-                                class="rounded-md border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                x-text="activatingId === account.id ? 'Activating...' : 'Activate'"></button>
-                        <button type="button" @click="openEditForm(account)" class="rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Edit</button>
-                        <button type="button" @click="deleteAccount(account)" class="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">Delete</button>
+                                class="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
+                            <span x-show="activatingId === account.id" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                            <x-lucide-check x-show="activatingId !== account.id" class="size-3.5" />
+                            <span x-text="activatingId === account.id ? 'Activating...' : 'Activate'"></span>
+                        </button>
+                        <button type="button" @click="openEditForm(account)" class="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 cursor-pointer">
+                            <x-lucide-pencil class="size-3.5 text-zinc-500" />
+                            <span>Edit</span>
+                        </button>
+                        <button type="button" @click="deleteAccount(account)" class="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 cursor-pointer">
+                            <x-lucide-trash-2 class="size-3.5 text-red-500" />
+                            <span>Delete</span>
+                        </button>
                     </div>
                 </div>
             </article>
@@ -133,8 +151,11 @@
                        class="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm focus:border-zinc-400 focus:outline-none">
             </div>
             <button type="submit" :disabled="!hasActiveAccount || isRegistering"
-                    class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    x-text="isRegistering ? 'Registering...' : 'Verify & submit sitemap'"></button>
+                    class="inline-flex items-center justify-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+                <span x-show="isRegistering" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                <x-lucide-shield-check x-show="!isRegistering" class="size-4" />
+                <span x-text="isRegistering ? 'Registering...' : 'Verify & submit sitemap'"></span>
+            </button>
         </form>
         <p x-show="!hasActiveAccount" class="mt-3 text-xs text-amber-700">Activate a service account before registering a domain.</p>
         <div x-show="registrationResult" x-cloak class="mt-4 rounded-md px-3 py-2 text-sm"

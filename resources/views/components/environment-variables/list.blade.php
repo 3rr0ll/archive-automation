@@ -62,21 +62,24 @@
                                  role="menu">
                                 <button type="button" 
                                         @click="copyKey(item.key); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Copy Name
+                                    <x-lucide-copy class="size-4 text-zinc-400" />
+                                    <span>Copy Name</span>
                                 </button>
                                 <button type="button" 
                                         @click="startEdit(item); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer" 
                                         role="menuitem">
-                                    Edit
+                                    <x-lucide-pencil class="size-4 text-zinc-400" />
+                                    <span>Edit</span>
                                 </button>
                                 <button type="button" 
                                         @click="deleteVariable(item.id); open = false;" 
-                                        class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50" 
+                                        class="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer" 
                                         role="menuitem">
-                                    Delete
+                                    <x-lucide-trash-2 class="size-4 text-red-500" />
+                                    <span>Delete</span>
                                 </button>
                             </div>
                         </div>
@@ -158,14 +161,16 @@
                     <div class="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
                         <button type="button" 
                                 @click="cancelEdit()" 
-                                class="px-4 py-2 text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition focus:outline-none">
-                            Cancel
+                                class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition focus:outline-none cursor-pointer">
+                            <x-lucide-x class="size-4 text-zinc-500" />
+                            <span>Cancel</span>
                         </button>
                         <button type="button" 
                                 @click="saveEdit()" 
                                 :disabled="editForm.isSaving" 
-                                class="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-md transition focus:outline-none gap-2">
+                                class="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-md transition focus:outline-none gap-2 cursor-pointer">
                             <span x-show="editForm.isSaving" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                            <x-lucide-save x-show="!editForm.isSaving" class="size-4" />
                             <span x-show="!editForm.isSaving">Save</span>
                             <span x-show="editForm.isSaving">Saving</span>
                         </button>

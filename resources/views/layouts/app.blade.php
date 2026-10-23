@@ -7,6 +7,32 @@
 
     <title>{{ $title ?? 'Archive Automation' }}</title>
 
+    <style>
+        /* Immediately style html/body background to prevent white/dark flashes */
+        html.dark, html.dark body {
+            background-color: #121214 !important;
+            color: #f4f4f5;
+        }
+        html:not(.dark), html:not(.dark) body {
+            background-color: #fafafa !important;
+            color: #18181b;
+        }
+
+        /* Pre-hydration curtain: keeps the screen clean and themed while Vite/CSS/Alpine initializes,
+           preventing raw unstyled SVG/text flashes before skeleton loaders appear */
+        body[data-page-loading="true"] {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        body {
+            transition: opacity 0.15s ease-out;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+    </style>
+
     <script>
         (function() {
             const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ide_theme');
@@ -16,6 +42,19 @@
             } else {
                 document.documentElement.classList.remove('dark');
             }
+
+            // Mark body as loading immediately
+            document.addEventListener('DOMContentLoaded', () => {
+                // If Vite CSS is ready or on window load / Alpine init, reveal page smoothly
+                const revealPage = () => {
+                    document.body.removeAttribute('data-page-loading');
+                };
+
+                document.addEventListener('alpine:initialized', revealPage, { once: true });
+                window.addEventListener('load', revealPage, { once: true });
+                // Fallback guarantee in case events fired early
+                setTimeout(revealPage, 250);
+            });
         })();
     </script>
 
@@ -43,7 +82,7 @@
         });
     </script>
 </head>
-<body class="bg-[#fafafa] dark:bg-[#121214] text-zinc-900 dark:text-zinc-100 min-h-screen antialiased flex flex-col font-sans selection:bg-zinc-950 selection:text-white dark:selection:bg-zinc-100 dark:selection:text-zinc-900 transition-colors duration-150">
+<body data-page-loading="true" class="bg-[#fafafa] dark:bg-[#121214] text-zinc-900 dark:text-zinc-100 min-h-screen antialiased flex flex-col font-sans selection:bg-zinc-950 selection:text-white dark:selection:bg-zinc-100 dark:selection:text-zinc-900 transition-colors duration-150">
     <x-global.confirmation-modal />
     <x-global.toast />
 

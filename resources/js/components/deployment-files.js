@@ -128,8 +128,43 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
             return this.activeFile ? !!this.activeFile.isModified : false;
         },
 
+        get hasUnsavedChanges() {
+            return this.openTabs.some(t => t.isModified);
+        },
+
+        navigateWithCheck(url) {
+            if (this.hasUnsavedChanges) {
+                const unsavedTab = this.openTabs.find(t => t.isModified);
+                const fileName = unsavedTab ? unsavedTab.name : 'one or more files';
+                if (window.confirmModal) {
+                    window.confirmModal.show({
+                        title: 'Leave Editor',
+                        message: `You have unsaved changes in "${fileName}". Are you sure you want to leave without saving?`,
+                        key: fileName,
+                        metaLabel: 'Unsaved File',
+                        confirmText: 'Leave without saving',
+                        type: 'danger',
+                        onConfirm: () => {
+                            window.location.href = url;
+                        }
+                    });
+                    return;
+                }
+            }
+            window.location.href = url;
+        },
+
         init() {
             this.loadTree();
+
+            // Native browser guard for closing tab/reloading page
+            window.addEventListener('beforeunload', (e) => {
+                if (this.hasUnsavedChanges) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
+            });
+
             window.addEventListener('app-theme-changed', (e) => {
                 if (rawEditorView && this.activeFile) {
                     const currentDoc = rawEditorView.state.doc.toString();
@@ -522,33 +557,52 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
                 event.stopPropagation();
             }
 
+            const executeClose = () => {
+                tabContents.delete(tab.path);
+                const index = this.openTabs.findIndex(t => t.path === tab.path);
+                if (index === -1) return;
+
+                this.openTabs.splice(index, 1);
+
+                // If we closed the active tab, switch to another tab or null
+                if (this.activeFile?.path === tab.path) {
+                    if (this.openTabs.length > 0) {
+                        const nextIndex = Math.max(0, index - 1);
+                        this.switchToTab(this.openTabs[nextIndex]);
+                    } else {
+                        this.activeFile = null;
+                        if (rawEditorView) {
+                            rawEditorView.destroy();
+                            rawEditorView = null;
+                        }
+                        const container = document.getElementById('codemirror-editor');
+                        if (container) container.innerHTML = '';
+                        this.saveStatus = '';
+                    }
+                }
+            };
+
             if (tab.isModified) {
+                if (window.confirmModal) {
+                    window.confirmModal.show({
+                        title: 'Discard Unsaved Changes',
+                        message: 'This file has unsaved changes that will be lost if you close it without saving.',
+                        key: tab.name,
+                        metaLabel: 'File',
+                        confirmText: 'Discard & Close',
+                        type: 'danger',
+                        onConfirm: () => {
+                            executeClose();
+                        }
+                    });
+                    return;
+                }
+
                 const discard = confirm(`"${tab.name}" has unsaved changes. Discard and close?`);
                 if (!discard) return;
             }
 
-            tabContents.delete(tab.path);
-            const index = this.openTabs.findIndex(t => t.path === tab.path);
-            if (index === -1) return;
-
-            this.openTabs.splice(index, 1);
-
-            // If we closed the active tab, switch to another tab or null
-            if (this.activeFile?.path === tab.path) {
-                if (this.openTabs.length > 0) {
-                    const nextIndex = Math.max(0, index - 1);
-                    this.switchToTab(this.openTabs[nextIndex]);
-                } else {
-                    this.activeFile = null;
-                    if (rawEditorView) {
-                        rawEditorView.destroy();
-                        rawEditorView = null;
-                    }
-                    const container = document.getElementById('codemirror-editor');
-                    if (container) container.innerHTML = '';
-                    this.saveStatus = '';
-                }
-            }
+            executeClose();
         },
 
         // Prompt / Create a new file

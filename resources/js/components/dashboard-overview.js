@@ -511,6 +511,7 @@ export function dashboardOverview(
                 }
 
                 this.closeModal();
+                window.toast?.success('Deployment started successfully.');
             } catch (error) {
                 console.error('Deployment error:', error);
                 if (error.status === 422 && error.errors) {
@@ -518,6 +519,7 @@ export function dashboardOverview(
                 } else {
                     this.errors = { general: error.message || 'Failed to trigger deployment.' };
                 }
+                window.toast?.error(error.message || 'Failed to start deployment.');
             } finally {
                 this.isSubmitting = false;
                 this.uploadProgress = 0;

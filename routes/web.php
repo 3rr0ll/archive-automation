@@ -51,6 +51,7 @@ Route::middleware('auth')->group(function (): void {
         $deployment->load(['server', 'user']);
         return view('pages.deployment-files', compact('deployment'));
     })->name('deployments.files.page');
+    Route::get('/deployments/{deployment}/files/download', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'downloadZip'])->name('deployments.files.download');
     Route::get('/google/redirect', function (\Illuminate\Http\Request $request) {
         return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
             ->createOAuthUrl((int) $request->user()->getKey()));

@@ -111,8 +111,9 @@
                         <div class="px-6 py-4 border-t border-zinc-100 flex items-center justify-end gap-3 bg-white">
                             <button type="button" 
                                     @click="closeModal()" 
-                                    class="px-4 py-2 text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition focus:outline-none cursor-pointer">
-                                Cancel
+                                    class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md transition focus:outline-none cursor-pointer">
+                                <x-lucide-x class="size-4 text-zinc-500" />
+                                <span>Cancel</span>
                             </button>
 
                             <button type="submit" 
@@ -120,6 +121,7 @@
                                     :disabled="isSubmitting" 
                                     class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer gap-2">
                                 <span x-show="isSubmitting" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                                <x-lucide-save x-show="!isSubmitting" class="size-4" />
                                 <span x-show="!isSubmitting">Save Server</span>
                                 <span x-show="isSubmitting">Saving</span>
                             </button>

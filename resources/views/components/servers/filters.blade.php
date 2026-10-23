@@ -5,7 +5,7 @@
                 <x-lucide-search class="h-4 w-4 text-zinc-400" />
             </div>
             <input type="text" 
-                   x-model="searchQuery" 
+                   x-model.debounce.300ms="searchQuery" 
                    class="block w-full pl-10 pr-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 bg-white" 
                    placeholder="Search server name, ID, or IP...">
         </div>
