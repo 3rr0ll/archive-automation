@@ -147,6 +147,14 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
             };
             window.addEventListener('storage', this.storageHandler);
 
+            // Window focus listener: When user returns to this tab from popup or Google sign-in, auto-refresh accounts
+            this.focusHandler = async () => {
+                if (this.oauthWindow) {
+                    await this.loadAccounts(false);
+                }
+            };
+            window.addEventListener('focus', this.focusHandler);
+
             if (!this.accounts || this.accounts.length === 0) {
                 await this.loadAccounts(false);
             }
@@ -165,6 +173,9 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
             }
             if (this.storageHandler) {
                 window.removeEventListener('storage', this.storageHandler);
+            }
+            if (this.focusHandler) {
+                window.removeEventListener('focus', this.focusHandler);
             }
         },
 
