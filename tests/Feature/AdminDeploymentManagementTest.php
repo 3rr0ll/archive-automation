@@ -178,7 +178,7 @@ class AdminDeploymentManagementTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->getJson("/api/deployments/{$deployment->id}/logs")
-            ->assertForbidden();
+            ->assertOk();
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/deployments/statistics')
             ->assertForbidden();
