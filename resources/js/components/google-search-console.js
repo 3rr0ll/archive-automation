@@ -92,15 +92,17 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
                 if (data.account && data.account.id) {
                     // Instantly insert or update the account in the reactive list
                     const existingIndex = this.accounts.findIndex(a => a.id === data.account.id || a.client_email === data.account.client_email);
+                    let updated = [...this.accounts];
                     if (existingIndex !== -1) {
-                        this.accounts.splice(existingIndex, 1, data.account);
+                        updated[existingIndex] = data.account;
                     } else {
                         // Deactivate others if this new account is active
                         if (data.account.is_active) {
-                            this.accounts = this.accounts.map(a => ({ ...a, is_active: false }));
+                            updated = updated.map(a => ({ ...a, is_active: false }));
                         }
-                        this.accounts.unshift(data.account);
+                        updated.unshift(data.account);
                     }
+                    this.accounts = updated;
                 }
 
                 // Silently re-sync full list from server in the background
@@ -147,11 +149,9 @@ export function googleSearchConsolePage(initialAccounts = [], initialLegacyFallb
             };
             window.addEventListener('storage', this.storageHandler);
 
-            // Window focus listener: When user returns to this tab from popup or Google sign-in, auto-refresh accounts
+            // Window focus listener: When user switches back to this tab after finishing in the Google tab, auto-refresh accounts
             this.focusHandler = async () => {
-                if (this.oauthWindow) {
-                    await this.loadAccounts(false);
-                }
+                await this.loadAccounts(false);
             };
             window.addEventListener('focus', this.focusHandler);
 

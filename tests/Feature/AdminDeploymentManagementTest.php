@@ -233,6 +233,81 @@ class AdminDeploymentManagementTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_admin_can_bulk_search_deployments_by_domains(): void
+    {
+        $dep1 = $this->deployment(['domain' => 'site-one.com']);
+        $dep2 = $this->deployment(['domain' => 'site-two.com']);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', [
+                'domains' => ['site-one.com', 'site-two.com', 'not-exist.com'],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertCount(2, $response['found']);
+        $this->assertEquals(['not-exist.com'], $response['missing']);
+    }
+
+    public function test_admin_can_bulk_search_and_delete_runcloud_live_apps(): void
+    {
+        $server = Server::create([
+            'server_id' => 999,
+            'name' => 'Primary Server',
+            'ip_address' => '1.2.3.4',
+            'is_active' => true,
+        ]);
+
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps*' => Http::response([
+                'data' => [
+                    [
+                        'id' => 888,
+                        'name' => 'externaldomain',
+                        'domainName' => 'external-domain.com',
+                        'domains' => [['name' => 'external-domain.com']],
+                    ],
+                ],
+            ], 200),
+            'https://manage.runcloud.io/api/v3/servers/999/webapps/888' => Http::response([], 200),
+        ]);
+
+        // Search finds it on RunCloud
+        $searchResponse = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', [
+                'domains' => ['external-domain.com'],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertCount(1, $searchResponse['found']);
+        $this->assertEquals('runcloud', $searchResponse['found'][0]['source']);
+        $this->assertEquals('rc_999_888', $searchResponse['found'][0]['id']);
+
+        // Delete removes it from RunCloud
+        $deleteResponse = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-delete', [
+                'ids' => ['rc_999_888'],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertEquals(['rc_999_888'], $deleteResponse['processed_ids']);
+    }
+
+    public function test_admin_can_access_bulk_delete_page(): void
+    {
+        $this->actingAs($this->admin)
+            ->get('/bulk-delete')
+            ->assertOk()
+            ->assertSee('Bulk Delete');
+
+        $user = User::factory()->create(['role' => 'user']);
+        $this->actingAs($user)
+            ->get('/bulk-delete')
+            ->assertForbidden();
+    }
+
     /**
      * @param  array<string, mixed>  $attributes
      */

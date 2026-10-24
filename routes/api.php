@@ -57,6 +57,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/deployments/{deployment}/files/read', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'readFile']);
     Route::post('/deployments/{deployment}/files/write', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'writeFile']);
     Route::post('/deployments/{deployment}/files/create', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'createFile']);
+    Route::post('/deployments/{deployment}/files/request-zip', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'requestZip']);
+    Route::get('/deployments/{deployment}/files/zip-status', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'zipStatus']);
 });
 
 // Admin API Routes (Requires Admin Role)
@@ -100,6 +102,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
     Route::get('/api-usage', [ApiUsageController::class, 'index'])->name('api-usage.index');
+    Route::post('/deployments/bulk-search', [DeploymentController::class, 'bulkSearchDomains'])->name('deployments.bulk-search');
     Route::post('/deployments/bulk-cancel', [DeploymentController::class, 'bulkCancel'])->name('deployments.bulk-cancel');
     Route::post('/deployments/bulk-retry', [DeploymentController::class, 'bulkRetry'])->name('deployments.bulk-retry');
     Route::post('/deployments/bulk-delete', [DeploymentController::class, 'bulkDestroy'])->name('deployments.bulk-delete');

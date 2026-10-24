@@ -73,6 +73,12 @@
                         <span class="text-sm font-medium truncate">Users</span>
                     </a>
                 </li>
+                <li>
+                    <a href="/bulk-delete" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
+                        <x-lucide-trash-2 class="size-4.5 shrink-0" />
+                        <span class="text-sm font-medium truncate">Bulk Delete</span>
+                    </a>
+                </li>
             </ul>
         </div>
     </div>
@@ -141,6 +147,15 @@
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
                             <x-lucide-users class="size-4.5 shrink-0" />
                             <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Users</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/bulk-delete"
+                           :title="$store.sidebar?.collapsed ? 'Bulk Delete' : ''"
+                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
+                            <x-lucide-trash-2 class="size-4.5 shrink-0" />
+                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Bulk Delete</span>
                         </a>
                     </li>
                 @endif

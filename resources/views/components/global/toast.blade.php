@@ -18,6 +18,19 @@
                 detail.duration || 3000
             );
         });
+
+        @if (session('success'))
+            this.add(@js(session('success')), 'success', 4000);
+        @endif
+        @if (session('error'))
+            this.add(@js(session('error')), 'error', 5000);
+        @endif
+        @if (session('warning'))
+            this.add(@js(session('warning')), 'warning', 4000);
+        @endif
+        @if (session('info'))
+            this.add(@js(session('info')), 'info', 3000);
+        @endif
     },
 
     add(message, type = 'success', duration = 3000) {

@@ -107,6 +107,88 @@ class SftpFileService
     }
 
     /**
+     * Create an archive (ZIP or tar.gz) on the remote server directly.
+     * Returns metadata: [ 'path' => string, 'size' => int, 'format' => 'zip'|'tar.gz' ]
+     *
+     * @return array{path: string, size: int, format: string}
+     */
+    public function createRemoteArchive(string $host, string $remoteDir, string $zipBasename = 'archive'): array
+    {
+        $this->guardPath($remoteDir);
+        @set_time_limit(300);
+
+        $remoteDirClean = rtrim(str_replace('\\', '/', $remoteDir), '/');
+        $sftp = $this->connectionFactory->connect($host);
+        $remoteTempZip = "/tmp/{$zipBasename}_" . uniqid() . ".zip";
+
+        // Execute zip in the target directory; if zip is unavailable, fallback to tar.gz
+        $cmd = sprintf(
+            'cd %s && if command -v zip >/dev/null 2>&1; then zip -rq %s . -x ".*"; elif command -v tar >/dev/null 2>&1; then tar -czf %s.tar.gz .; fi',
+            escapeshellarg($remoteDirClean),
+            escapeshellarg($remoteTempZip),
+            escapeshellarg($remoteTempZip)
+        );
+        $output = $sftp->exec($cmd);
+        $exitStatus = $sftp->getExitStatus();
+
+        if ($sftp->is_file($remoteTempZip)) {
+            $size = (int) $sftp->filesize($remoteTempZip);
+            if ($size > 0) {
+                return [
+                    'path' => $remoteTempZip,
+                    'size' => $size,
+                    'format' => 'zip',
+                ];
+            }
+        }
+
+        $remoteTarGz = $remoteTempZip . '.tar.gz';
+        if ($sftp->is_file($remoteTarGz)) {
+            $size = (int) $sftp->filesize($remoteTarGz);
+            if ($size > 0) {
+                return [
+                    'path' => $remoteTarGz,
+                    'size' => $size,
+                    'format' => 'tar.gz',
+                ];
+            }
+        }
+
+        throw new RuntimeException("Failed to generate archive on remote server. Exit: {$exitStatus}. Output: {$output}");
+    }
+
+    /**
+     * Stream a remote file directly to an output stream (e.g. php://output) in chunks,
+     * then delete the remote file.
+     *
+     * @param callable(string): void|null $chunkCallback Optional custom handler per chunk
+     */
+    public function streamRemoteFile(string $host, string $remoteFilePath, ?callable $chunkCallback = null, bool $deleteAfter = true): void
+    {
+        $sftp = $this->connectionFactory->connect($host);
+
+        try {
+            $handler = $chunkCallback ?? function (string $chunk) {
+                echo $chunk;
+                if (function_exists('ob_flush')) {
+                    @ob_flush();
+                }
+                flush();
+            };
+
+            $sftp->get($remoteFilePath, $handler);
+        } finally {
+            if ($deleteAfter) {
+                try {
+                    $sftp->delete($remoteFilePath);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed to delete temporary remote archive: ' . $e->getMessage());
+                }
+            }
+        }
+    }
+
+    /**
      * Download an entire remote directory as a local temporary ZIP or tar.gz file.
      *
      * @return string Path to the temporary file
@@ -120,30 +202,18 @@ class SftpFileService
 
         $remoteDirClean = rtrim(str_replace('\\', '/', $remoteDir), '/');
 
-        // Approach 1 (Fastest): Execute zip or tar natively on the remote Linux server via SSH
+        // Approach 1 (Fastest): Execute zip natively on the remote Linux server via SSH/SFTP
         try {
-            $ssh = $this->connectionFactory->connectSsh($host);
-            $remoteTempZip = "/tmp/{$zipBasename}_" . uniqid() . ".zip";
-            
-            // Execute zip in the parent directory so contents are clean
-            $cmd = sprintf(
-                'cd %s && zip -rq %s .',
-                escapeshellarg($remoteDirClean),
-                escapeshellarg($remoteTempZip)
-            );
-            $ssh->exec($cmd);
-
-            // Verify remote zip was generated
+            $archive = $this->createRemoteArchive($host, $remoteDirClean, $zipBasename);
             $sftp = $this->connectionFactory->connect($host);
-            if ($sftp->is_file($remoteTempZip) && $sftp->filesize($remoteTempZip) > 0) {
-                $localZip = tempnam(sys_get_temp_dir(), 'zip_') . '.zip';
-                $sftp->get($remoteTempZip, $localZip);
-                $sftp->delete($remoteTempZip);
-                return $localZip;
-            }
-        } catch (Throwable $e) {
-            // If SSH exec or zip is unavailable, fall back to streaming SFTP walk below
-            \Illuminate\Support\Facades\Log::warning('Remote SSH zip failed, falling back to SFTP file stream: ' . $e->getMessage());
+            $extension = $archive['format'] === 'tar.gz' ? '.tar.gz' : '.zip';
+            $localFile = tempnam(sys_get_temp_dir(), 'arch_') . $extension;
+
+            $sftp->get($archive['path'], $localFile);
+            $sftp->delete($archive['path']);
+            return $localFile;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Remote SSH/SFTP zip failed, attempting SFTP fallback: ' . $e->getMessage());
         }
 
         // Approach 2 (Fallback): SFTP recursive file fetch

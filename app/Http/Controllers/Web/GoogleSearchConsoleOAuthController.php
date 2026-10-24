@@ -19,7 +19,7 @@ class GoogleSearchConsoleOAuthController extends Controller
      */
     public function handleCallback(Request $request)
     {
-        if ($request->has('error')) {
+            if ($request->has('error')) {
             $error = (string) $request->query('error_description', $request->query('error'));
             Log::error('Google OAuth callback error', ['error' => $error]);
 
@@ -30,10 +30,8 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 400);
             }
 
-            return response()->view('pages.google-oauth-complete', [
-                'success' => false,
-                'message' => 'Google authorization failed: ' . $error,
-            ], 400);
+            return redirect()->route('google-search-console')
+                ->with('error', 'Google authorization failed: ' . $error);
         }
 
         $code = (string) $request->query('code');
@@ -45,10 +43,8 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 400);
             }
 
-            return response()->view('pages.google-oauth-complete', [
-                'success' => false,
-                'message' => 'Missing authorization code from Google.',
-            ], 400);
+            return redirect()->route('google-search-console')
+                ->with('error', 'Missing authorization code from Google.');
         }
 
         try {
@@ -58,6 +54,11 @@ class GoogleSearchConsoleOAuthController extends Controller
                 $request->user()?->id,
                 is_string($state) ? $state : null,
             );
+
+            // Re-authenticate user if session was not attached by cross-site redirect
+            if (! auth()->check() && $account->user_id) {
+                auth()->loginUsingId($account->user_id);
+            }
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -72,20 +73,8 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ]);
             }
 
-            return response()->view('pages.google-oauth-complete', [
-                'success' => true,
-                'message' => "Google Search Console account {$account->client_email} connected successfully!",
-                'account' => [
-                    'id' => $account->id,
-                    'name' => $account->name,
-                    'client_email' => $account->client_email,
-                    'owner_email' => $account->owner_email,
-                    'is_active' => (bool) $account->is_active,
-                    'has_credentials' => true,
-                    'created_at' => $account->created_at?->toIso8601String(),
-                    'updated_at' => $account->updated_at?->toIso8601String(),
-                ],
-            ]);
+            return redirect()->route('google-search-console')
+                ->with('success', "Google Search Console account {$account->client_email} connected successfully!");
         } catch (Throwable $e) {
             Log::error('Google OAuth callback exchange failed', [
                 'error' => $e->getMessage(),
@@ -98,10 +87,8 @@ class GoogleSearchConsoleOAuthController extends Controller
                 ], 500);
             }
 
-            return response()->view('pages.google-oauth-complete', [
-                'success' => false,
-                'message' => 'Failed to link Google account: ' . $e->getMessage(),
-            ], 500);
+            return redirect()->route('google-search-console')
+                ->with('error', 'Failed to link Google account: ' . $e->getMessage());
         }
     }
 }

@@ -70,10 +70,7 @@ Route::middleware('auth')->group(function (): void {
             return redirect()->away(app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleService::class)
                 ->createOAuthUrl((int) $request->user()->getKey()));
         } catch (\Throwable $e) {
-            return response()->view('pages.google-oauth-complete', [
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 400);
+            return redirect()->route('google-search-console')->with('error', $e->getMessage());
         }
     })->middleware('admin')->name('google.redirect');
 });
@@ -108,5 +105,9 @@ Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAu
             $users = \App\Models\User::orderBy('created_at', 'desc')->get();
             return view('pages.users', compact('users'));
         })->name('users');
+
+        Route::get('/bulk-delete', function () {
+            return view('pages.bulk-delete');
+        })->name('bulk-delete');
     });
 

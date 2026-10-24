@@ -120,6 +120,71 @@ class RunCloudWebAppService
         return null;
     }
 
+    public function findWebApplicationByDomain(int $serverId, string $domain): ?array
+    {
+        $normalizedDomain = $this->normalizeDomain($domain);
+        $appName = $this->generateWebAppName($domain);
+
+        // Try searching by domain first, then app name, then general list
+        $searchQueries = array_unique(array_filter([$domain, $normalizedDomain, $appName]));
+
+        foreach ($searchQueries as $search) {
+            try {
+                $response = $this->client->client()->get("/servers/{$serverId}/webapps", [
+                    'search' => $search,
+                    'perPage' => 50,
+                ]);
+
+                if ($response->successful()) {
+                    $apps = $response->json('data') ?? $response->json() ?? [];
+                    foreach ($apps as $app) {
+                        if ($this->webAppMatchesDomain($app, $normalizedDomain, $appName)) {
+                            return $app;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Try next search query
+            }
+        }
+
+        // If search filter didn't match (e.g. RunCloud search only matches app name, not domain aliases), check page 1
+        try {
+            $response = $this->client->client()->get("/servers/{$serverId}/webapps", [
+                'perPage' => 100,
+            ]);
+
+            if ($response->successful()) {
+                $apps = $response->json('data') ?? $response->json() ?? [];
+                foreach ($apps as $app) {
+                    if ($this->webAppMatchesDomain($app, $normalizedDomain, $appName)) {
+                        return $app;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        return null;
+    }
+
+    private function webAppMatchesDomain(array $app, string $normalizedDomain, string $appName): bool
+    {
+        $existingName = strtolower((string) ($app['name'] ?? ''));
+        $domains = array_filter([
+            $app['domainName'] ?? null,
+            $app['primaryDomain']['name'] ?? null,
+            ...array_column($app['domains'] ?? [], 'name'),
+        ]);
+
+        $domainMatches = collect($domains)->contains(
+            fn (mixed $candidate): bool => $this->normalizeDomain((string) $candidate) === $normalizedDomain
+        );
+
+        return $domainMatches || $existingName === strtolower($appName);
+    }
+
     /**
      * Delete a web application. A missing app is already in the desired state.
      */

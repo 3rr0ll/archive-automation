@@ -14,8 +14,11 @@ use App\Services\Http\ExternalHttpClient;
 use Illuminate\Http\Client\Events\ConnectionFailed;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -51,5 +54,17 @@ class AppServiceProvider extends ServiceProvider
         if (! app(ExternalHttpClient::class)->shouldVerifySsl()) {
             Log::warning('Outbound SSL certificate verification is disabled for this local/testing environment.');
         }
+
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(200)
+                ->by($request->user()?->id ?: $request->ip())
+                ->response(function (Request $request, array $headers) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Too many requests. Please try again later.',
+                        'retry_after' => $headers['Retry-After'] ?? null,
+                    ], 429, $headers);
+                });
+        });
     }
 }

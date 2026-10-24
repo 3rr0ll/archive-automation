@@ -100,6 +100,7 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
         treeLoading: true,
         fileLoading: false,
         saving: false,
+        downloadingZip: false,
         items: [],
         currentDir: '',
         rootDir: '',
@@ -860,6 +861,90 @@ export function deploymentFilesPage(deploymentId, deploymentData) {
                 this.showToast('Network error while saving file', 'error');
             } finally {
                 this.saving = false;
+            }
+        },
+
+        async triggerDownloadZip() {
+            if (this.downloadingZip) return;
+            this.downloadingZip = true;
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            try {
+                // 1. Dispatch background queue job to prepare the ZIP
+                const res = await fetch(`/api/deployments/${this.deploymentId}/files/request-zip`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    }
+                });
+
+                const data = await res.json();
+                if (!data.success || !data.token) {
+                    throw new Error(data.message || 'Failed to initiate archive preparation.');
+                }
+
+                const token = data.token;
+                this.showToast('Preparing ZIP archive in the background...', 'info');
+
+                // 2. Poll every 3 seconds to avoid server overhead
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/deployments/${this.deploymentId}/files/zip-status?token=${token}`, {
+                            headers: { 'Accept': 'application/json' }
+                        });
+
+                        if (!statusRes.ok) {
+                            clearInterval(pollInterval);
+                            this.downloadingZip = false;
+                            this.showToast('Archive preparation timed out or failed.', 'error');
+                            return;
+                        }
+
+                        const statusData = await statusRes.json();
+
+                        if (statusData.status === 'ready') {
+                            clearInterval(pollInterval);
+                            this.downloadingZip = false;
+                            this.showToast('ZIP ready! Starting download...', 'success');
+
+                            // 3. Hand off directly to browser's native download manager
+                            const downloadUrl = `/deployments/${this.deployment.hash}/files/download?token=${token}`;
+                            const link = document.createElement('a');
+                            link.href = downloadUrl;
+                            link.setAttribute('download', statusData.filename || `${this.deployment.domain}.zip`);
+                            document.body.appendChild(link);
+                            link.click();
+
+                            setTimeout(() => {
+                                if (link.parentNode) {
+                                    document.body.removeChild(link);
+                                }
+                            }, 5000);
+                        } else if (statusData.status === 'failed') {
+                            clearInterval(pollInterval);
+                            this.downloadingZip = false;
+                            this.showToast(statusData.error || 'Failed to prepare ZIP.', 'error');
+                        }
+                    } catch (pollErr) {
+                        // Keep polling on transient network hiccups
+                    }
+                }, 3000);
+
+                // Stop polling after 5 minutes maximum
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    if (this.downloadingZip) {
+                        this.downloadingZip = false;
+                        this.showToast('Archive preparation took too long.', 'error');
+                    }
+                }, 300000);
+
+            } catch (err) {
+                this.downloadingZip = false;
+                this.showToast(err.message || 'Error requesting ZIP download', 'error');
             }
         },
 

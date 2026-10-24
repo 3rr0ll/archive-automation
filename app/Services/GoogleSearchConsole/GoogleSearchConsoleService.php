@@ -322,22 +322,58 @@ class GoogleSearchConsoleService
             || $this->hasLegacyFallback();
     }
 
+    /**
+     * Retrieve configuration from DB EnvironmentVariable first, then config/.env fallback.
+     */
+    public function getEnvironmentValue(string $key, mixed $fallback = null): mixed
+    {
+        try {
+            $variable = \App\Models\EnvironmentVariable::query()
+                ->where('key', $key)
+                ->latest('updated_at')
+                ->latest('id')
+                ->first();
+
+            if ($variable !== null && filled($variable->value)) {
+                return $variable->value;
+            }
+        } catch (\Throwable) {
+            // DB may not be reachable or table not migrated yet
+        }
+
+        return $fallback;
+    }
+
+    public function getClientId(): ?string
+    {
+        return $this->getEnvironmentValue('GOOGLE_CLIENT_ID', config('services.google_search_console.client_id'));
+    }
+
+    public function getClientSecret(): ?string
+    {
+        return $this->getEnvironmentValue('GOOGLE_CLIENT_SECRET', config('services.google_search_console.client_secret'));
+    }
+
+    public function getRedirectUri(): string
+    {
+        return (string) $this->getEnvironmentValue('GOOGLE_REDIRECT_URI', config('services.google_search_console.redirect_uri', 'http://127.0.0.1:8000/google/callback'));
+    }
+
     public function hasOAuthConfiguration(): bool
     {
-        return filled(config('services.google_search_console.client_id'))
-            && filled(config('services.google_search_console.client_secret'));
+        return filled($this->getClientId()) && filled($this->getClientSecret());
     }
 
     public function hasOAuthEnvFallback(): bool
     {
-        return $this->hasOAuthConfiguration()
-            && filled(config('services.google_search_console.refresh_token'));
+        $refreshToken = $this->getEnvironmentValue('GOOGLE_REFRESH_TOKEN', config('services.google_search_console.refresh_token'));
+        return $this->hasOAuthConfiguration() && filled($refreshToken);
     }
 
     public function createOAuthUrl(?int $userId = null): string
     {
         if (! $this->hasOAuthConfiguration()) {
-            throw new RuntimeException('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured in .env to use Google OAuth.');
+            throw new RuntimeException('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured in Environment Variables or .env to use Google OAuth.');
         }
 
         $client = $this->createBaseOAuthClient();
@@ -551,7 +587,7 @@ class GoogleSearchConsoleService
     private function buildOAuthClientFromEnv(): GoogleClient
     {
         $client = $this->createBaseOAuthClient();
-        $refreshToken = (string) config('services.google_search_console.refresh_token');
+        $refreshToken = (string) $this->getEnvironmentValue('GOOGLE_REFRESH_TOKEN', config('services.google_search_console.refresh_token'));
         $token = $client->fetchAccessTokenWithRefreshToken($refreshToken);
         $token['refresh_token'] = $refreshToken;
         $client->setAccessToken($token);
@@ -563,9 +599,9 @@ class GoogleSearchConsoleService
     {
         $client = new GoogleClient;
         $client->setApplicationName((string) config('app.name'));
-        $client->setClientId((string) config('services.google_search_console.client_id'));
-        $client->setClientSecret((string) config('services.google_search_console.client_secret'));
-        $client->setRedirectUri((string) config('services.google_search_console.redirect_uri'));
+        $client->setClientId((string) $this->getClientId());
+        $client->setClientSecret((string) $this->getClientSecret());
+        $client->setRedirectUri((string) $this->getRedirectUri());
         $client->setAccessType('offline');
         $client->setPrompt('consent');
         $client->setScopes([

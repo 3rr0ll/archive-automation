@@ -9,8 +9,10 @@ use App\Http\Requests\DeploymentLogsRequest;
 use App\Http\Requests\StoreDeploymentRequest;
 use App\Http\Resources\DeploymentResource;
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Services\Deployment\DeploymentLifecycleService;
 use App\Services\Deployment\DeploymentStatisticsService;
+use App\Services\RunCloud\RunCloudService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +24,7 @@ class DeploymentController extends Controller
     public function __construct(
         private DeploymentLifecycleService $lifecycleService,
         private DeploymentStatisticsService $statisticsService,
+        private RunCloudService $runCloudService,
     ) {}
 
     /**
@@ -159,11 +162,195 @@ class DeploymentController extends Controller
         ], 202);
     }
 
-    public function bulkDestroy(BulkDeploymentRequest $request): JsonResponse
+    public function bulkSearchDomains(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'domains' => ['required', 'array', 'min:1', 'max:500'],
+            'domains.*' => ['required', 'string', 'max:255'],
+        ]);
+
+        $rawDomains = collect($validated['domains'])
+            ->map(fn ($domain) => strtolower(trim((string) $domain)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($rawDomains->isEmpty()) {
+            return response()->json([
+                'data' => [
+                    'found' => [],
+                    'missing' => [],
+                ],
+            ]);
+        }
+
+        // 1. Query deployments matching the exact domain (case-insensitive) in local database
+        $deployments = Deployment::query()
+            ->whereIn('domain', $rawDomains->all())
+            ->with(['user:id,name,email', 'server'])
+            ->orderBy('domain')
+            ->orderByDesc('id')
+            ->get();
+
+        $foundItems = collect(DeploymentResource::collection($deployments)->resolve())
+            ->map(function ($item) {
+                $item['source'] = 'database';
+                return $item;
+            });
+
+        $foundDomains = $deployments->pluck('domain')->map(fn ($d) => strtolower($d))->unique();
+        $missingFromDb = $rawDomains->diff($foundDomains)->values();
+
+        // 2. For domains not found in database, check RunCloud servers
+        $runCloudFound = collect();
+        $stillMissing = collect();
+
+        if ($missingFromDb->isNotEmpty()) {
+            // Check all servers registered in database as well as live RunCloud servers
+            $serversById = Server::query()->get()->keyBy('server_id');
+
+            try {
+                $liveRcServers = $this->runCloudService->getServers();
+                foreach ($liveRcServers as $liveServer) {
+                    $sid = (int) ($liveServer['id'] ?? 0);
+                    if ($sid && ! $serversById->has($sid)) {
+                        $serversById->put($sid, (object) [
+                            'id' => null,
+                            'server_id' => $sid,
+                            'name' => $liveServer['name'] ?? "Server {$sid}",
+                            'ip_address' => $liveServer['ipAddress'] ?? null,
+                        ]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // If live RunCloud server listing fails, proceed with database servers
+            }
+
+            $servers = $serversById->values();
+
+            foreach ($missingFromDb as $domain) {
+                $appName = $this->runCloudService->generateWebAppName($domain);
+                $matchedApp = null;
+                $matchedServer = null;
+
+                foreach ($servers as $server) {
+                    try {
+                        $app = $this->runCloudService->findWebApplicationByDomain(
+                            (int) $server->server_id,
+                            $domain
+                        );
+
+                        if ($app) {
+                            $matchedApp = $app;
+                            $matchedServer = $server;
+                            break;
+                        }
+                    } catch (\Throwable $e) {
+                        // Continue to next server if one fails
+                    }
+                }
+
+                if ($matchedApp && $matchedServer) {
+                    $runCloudFound->push([
+                        'id' => 'rc_'.$matchedServer->server_id.'_'.$matchedApp['id'],
+                        'hash' => null,
+                        'user_id' => null,
+                        'user' => null,
+                        'server_id' => $matchedServer->server_id,
+                        'server' => [
+                            'id' => $matchedServer->id ?? null,
+                            'server_id' => $matchedServer->server_id,
+                            'name' => $matchedServer->name,
+                            'ip_address' => $matchedServer->ip_address,
+                        ],
+                        'domain' => $domain,
+                        'version' => 'non-www',
+                        'archive_source' => 'runcloud',
+                        'archive_original_name' => null,
+                        'archive_status' => null,
+                        'status' => 'runcloud',
+                        'current_step' => 'runcloud_app',
+                        'source' => 'runcloud',
+                        'runcloud_web_app_id' => $matchedApp['id'],
+                        'runcloud_web_app_name' => $matchedApp['name'] ?? $appName,
+                        'created_at' => $matchedApp['created_at'] ?? now()->toIso8601String(),
+                        'updated_at' => $matchedApp['updated_at'] ?? now()->toIso8601String(),
+                    ]);
+                } else {
+                    $stillMissing->push($domain);
+                }
+            }
+        }
+
+        $allFound = $foundItems->concat($runCloudFound)->sortBy('domain')->values();
+
+        return response()->json([
+            'data' => [
+                'found' => $allFound,
+                'missing' => $stillMissing->values(),
+            ],
+        ]);
+    }
+
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['required'],
+        ]);
+
+        $rawIds = $validated['ids'];
+        $dbIds = [];
+        $runCloudItems = [];
+
+        foreach ($rawIds as $id) {
+            if (is_numeric($id)) {
+                $dbIds[] = (int) $id;
+            } elseif (is_string($id) && str_starts_with($id, 'rc_')) {
+                // Format: rc_{serverId}_{webAppId}
+                $parts = explode('_', $id);
+                if (count($parts) >= 3) {
+                    $runCloudItems[] = [
+                        'id' => $id,
+                        'server_id' => (int) $parts[1],
+                        'web_app_id' => (int) $parts[2],
+                    ];
+                }
+            }
+        }
+
+        $processedIds = [];
+        $skipped = [];
+
+        // 1. Process DB deployments
+        if (! empty($dbIds)) {
+            $dbResult = $this->lifecycleService->bulkDelete($dbIds);
+            $processedIds = array_merge($processedIds, $dbResult['processed_ids'] ?? []);
+            $skipped = array_merge($skipped, $dbResult['skipped'] ?? []);
+        }
+
+        // 2. Process RunCloud-only apps
+        foreach ($runCloudItems as $rcItem) {
+            try {
+                $this->runCloudService->deleteWebApplication(
+                    $rcItem['server_id'],
+                    $rcItem['web_app_id']
+                );
+                $processedIds[] = $rcItem['id'];
+            } catch (\Throwable $e) {
+                $skipped[] = [
+                    'id' => $rcItem['id'],
+                    'reason' => 'RunCloud error: '.$e->getMessage(),
+                ];
+            }
+        }
+
         return response()->json([
             'message' => 'Bulk deletion completed.',
-            'data' => $this->lifecycleService->bulkDelete($request->validated('ids')),
+            'data' => [
+                'processed_ids' => $processedIds,
+                'skipped' => $skipped,
+            ],
         ]);
     }
 
