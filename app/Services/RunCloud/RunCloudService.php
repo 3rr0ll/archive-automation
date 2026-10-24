@@ -41,6 +41,8 @@ class RunCloudService
      */
     public function createEmptyWebApplication(string $domain, ?int $serverId = null, ?string $serverIp = null): array
     {
+        $phpVersion = $this->webAppService->defaultPhpVersion();
+
         // 1. Resolve Server ID: Use passed ID -> DB Server model -> EnvironmentVariable -> Config
         $serverModel = null;
         if ($serverId) {
@@ -90,13 +92,13 @@ class RunCloudService
             'server_id' => $server,
             'domain' => $domain,
             'web_app_name' => $webAppName,
-            'php_version' => self::DEFAULT_PHP_VERSION,
+            'php_version' => $phpVersion,
         ]);
 
         // 3. Resolve system user "runcloud" ID (Check EnvironmentVariable model / cache first to save 1 API call)
         $systemUserId = $this->serverService->getRunCloudSystemUserId($server);
 
-        // 4. Create the Custom/Empty Web Application on PHP 8.1
+        // 4. Create the Custom/Empty Web Application with the configured PHP version
         $createResponse = $this->webAppService->attemptCreateCustomWebApp($server, $webAppName, $domain, $systemUserId);
 
         if (! $createResponse['success']) {
@@ -177,7 +179,7 @@ class RunCloudService
             'web_app_id' => $appId,
             'web_app_name' => $webAppName,
             'domain' => $domain,
-            'php_version' => self::DEFAULT_PHP_VERSION,
+            'php_version' => $phpVersion,
         ]);
 
         return [
@@ -186,7 +188,7 @@ class RunCloudService
             'web_app_id' => $appId,
             'web_app_name' => $webAppName,
             'domain' => $domain,
-            'php_version' => '8.1',
+            'php_version' => $phpVersion,
             'public_path' => '/public_html',
             'www_enabled' => true,
             'preferred_domain' => 'unset (none)',

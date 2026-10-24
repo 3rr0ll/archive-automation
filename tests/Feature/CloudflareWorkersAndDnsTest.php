@@ -45,6 +45,24 @@ class CloudflareWorkersAndDnsTest extends TestCase
         ])->assertStatus(401);
     }
 
+    public function test_runcloud_php_version_can_be_configured_in_environment_variable_model(): void
+    {
+        EnvironmentVariable::create([
+            'key' => 'RUNCLOUD_DEFAULT_PHP_VERSION',
+            'value' => 'php84rc',
+            'type' => 'config',
+            'environments' => 'Production',
+        ]);
+
+        $payload = app(RunCloudService::class)->customWebAppPayload(
+            'example',
+            'example.com',
+            123,
+        );
+
+        $this->assertSame('php84rc', $payload['phpVersion']);
+    }
+
     public function test_change_workers_for_www_version(): void
     {
         Http::fake([

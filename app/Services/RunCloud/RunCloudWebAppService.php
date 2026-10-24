@@ -3,6 +3,7 @@
 namespace App\Services\RunCloud;
 
 use Exception;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -15,6 +16,21 @@ class RunCloudWebAppService
     public function __construct(
         protected RunCloudClient $client
     ) {}
+
+    /**
+     * Resolve the PHP version from the EnvironmentVariable model, then config/.env.
+     */
+    public function defaultPhpVersion(): string
+    {
+        $version = $this->client->getEnvValue(
+            'RUNCLOUD_DEFAULT_PHP_VERSION',
+            Config::get('services.runcloud.default_php_version', self::DEFAULT_PHP_VERSION),
+        );
+
+        return is_string($version) && trim($version) !== ''
+            ? trim($version)
+            : self::DEFAULT_PHP_VERSION;
+    }
 
     /**
      * Rule 1: Generate RunCloud Web Application Name.
@@ -241,7 +257,7 @@ class RunCloudWebAppService
     }
 
     /**
-     * Create the Empty/Custom Web Application with PHP 8.1 and public path /public_html.
+     * Create the Empty/Custom Web Application with the configured PHP version and public path /public_html.
      */
     public function createCustomWebApp(int $serverId, string $webAppName, string $domain, int $systemUserId): array
     {
@@ -270,7 +286,7 @@ class RunCloudWebAppService
             'redirection' => 'none',
             'user' => $systemUserId,
             'publicPath' => '/public_html',
-            'phpVersion' => self::DEFAULT_PHP_VERSION,
+            'phpVersion' => $this->defaultPhpVersion(),
             'stack' => 'hybrid',
             'stackMode' => 'production',
             'clickjackingProtection' => true,
