@@ -13,6 +13,7 @@ import { usersPage } from './components/users.js';
 import { deploymentLogsPage } from './components/deployment-logs.js';
 import { deploymentFilesPage } from './components/deployment-files.js';
 import { googleSearchConsolePage } from './components/google-search-console.js';
+import { bulkDeletePage } from './components/bulk-delete.js';
 
 window.Alpine = Alpine;
 
@@ -28,6 +29,7 @@ Alpine.data('usersPage', usersPage);
 Alpine.data('deploymentLogsPage', deploymentLogsPage);
 Alpine.data('deploymentFilesPage', deploymentFilesPage);
 Alpine.data('googleSearchConsolePage', googleSearchConsolePage);
+Alpine.data('bulkDeletePage', bulkDeletePage);
 
 Alpine.store('theme', {
     mode: localStorage.getItem('theme') || localStorage.getItem('ide_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),

@@ -48,6 +48,10 @@ export async function deleteDeployment(id) {
     return res;
 }
 
+export async function bulkSearchDeployments(domains) {
+    return api.post('/deployments/bulk-search', { domains });
+}
+
 export async function bulkDeleteDeployments(ids) {
     const res = await api.post('/deployments/bulk-delete', { ids });
     clientCache.invalidate('deployments*');

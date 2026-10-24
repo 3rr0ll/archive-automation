@@ -242,6 +242,11 @@ class RunCloudService
         return $this->webAppService->resolveWebApplication($serverId, $domain, $appName);
     }
 
+    public function findWebApplicationByDomain(int $serverId, string $domain): ?array
+    {
+        return $this->webAppService->findWebApplicationByDomain($serverId, $domain);
+    }
+
     public function deleteWebApplication(int $serverId, int $webAppId): void
     {
         $this->webAppService->deleteWebApplication($serverId, $webAppId);

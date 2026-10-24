@@ -241,8 +241,8 @@ class GoogleSearchConsoleController extends Controller
             return response()->json([
                 'success' => true,
                 'auth_url' => $authUrl,
-                'redirect_uri' => config('services.google_search_console.redirect_uri'),
-                'client_id' => config('services.google_search_console.client_id'),
+                'redirect_uri' => $this->searchConsoleService->getRedirectUri(),
+                'client_id' => $this->searchConsoleService->getClientId(),
                 'scopes' => [
                     'https://www.googleapis.com/auth/webmasters',
                     'https://www.googleapis.com/auth/siteverification',
@@ -324,8 +324,8 @@ class GoogleSearchConsoleController extends Controller
             'success' => true,
             'is_enabled' => $this->searchConsoleService->isEnabled(),
             'oauth_configured' => $this->searchConsoleService->hasOAuthConfiguration(),
-            'client_id' => config('services.google_search_console.client_id'),
-            'redirect_uri' => config('services.google_search_console.redirect_uri'),
+            'client_id' => $this->searchConsoleService->getClientId(),
+            'redirect_uri' => $this->searchConsoleService->getRedirectUri(),
             'timeout' => (int) config('services.google_search_console.timeout', 30),
             'active_account' => $activeAccount ? [
                 'id' => $activeAccount->id,

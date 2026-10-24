@@ -177,31 +177,31 @@
 
                                     <!-- Archive File Upload Input -->
                                     <div x-show="form.source_type === 'upload'" class="space-y-2">
-                                        <label class="block text-xs font-medium text-zinc-700">Upload ZIP Archive</label>
-                                        <div class="border-2 border-dashed border-zinc-200 rounded-lg p-5 text-center hover:border-zinc-300 transition bg-zinc-50/50">
+                                        <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Upload ZIP Archive</label>
+                                        <div class="border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-5 text-center hover:border-zinc-300 dark:hover:border-zinc-700 transition bg-zinc-50/50 dark:bg-zinc-900/50">
                                             <input type="file" 
                                                    id="archive-file-input" 
                                                    accept=".zip" 
                                                    @change="handleFileUpload($event)" 
                                                    class="hidden">
                                             <label for="archive-file-input" class="cursor-pointer flex flex-col items-center">
-                                                <x-lucide-folder-archive class="size-8 text-zinc-400 mb-2" />
-                                                <span class="text-xs font-semibold text-zinc-800" x-text="form.archiveFile ? form.archiveFile.name : 'Choose a ZIP file'"></span>
-                                                <span class="text-[11px] text-zinc-400 mt-1" x-show="!form.archiveFile">Maximum size: 512 MB (.zip)</span>
-                                                <span class="text-[11px] text-zinc-500 mt-1" x-show="form.archiveFile" x-text="`${(form.archiveFile?.size / 1024 / 1024).toFixed(2)} MB`"></span>
+                                                <x-lucide-folder-archive class="size-8 text-zinc-400 dark:text-zinc-500 mb-2" />
+                                                <span class="text-xs font-semibold text-zinc-800 dark:text-zinc-200" x-text="form.archiveFile ? form.archiveFile.name : 'Choose a ZIP file'"></span>
+                                                <span class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1" x-show="!form.archiveFile">Maximum size: 512 MB (.zip)</span>
+                                                <span class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1" x-show="form.archiveFile" x-text="`${(form.archiveFile?.size / 1024 / 1024).toFixed(2)} MB`"></span>
                                             </label>
                                             <template x-if="form.archiveFile">
-                                                <button type="button" @click="form.archiveFile = null; $el.closest('div').querySelector('input').value = ''" class="mt-2 text-xs text-red-600 hover:underline">Remove file</button>
+                                                <button type="button" @click="form.archiveFile = null; $el.closest('div').querySelector('input').value = ''" class="mt-2 text-xs text-red-600 dark:text-red-400 hover:underline">Remove file</button>
                                             </template>
                                             <div x-show="isSubmitting && uploadProgress > 0" class="mt-3">
-                                                <div class="h-1.5 overflow-hidden rounded-full bg-zinc-200">
-                                                    <div class="h-full bg-zinc-900 transition-all" :style="`width: ${uploadProgress}%`"></div>
+                                                <div class="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                                                    <div class="h-full bg-zinc-900 dark:bg-zinc-100 transition-all" :style="`width: ${uploadProgress}%`"></div>
                                                 </div>
-                                                <p class="mt-1 text-[11px] text-zinc-500" x-text="`Uploading ZIP: ${uploadProgress}%`"></p>
+                                                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" x-text="`Uploading ZIP: ${uploadProgress}%`"></p>
                                             </div>
                                         </div>
                                         <template x-if="errors.archive">
-                                            <p class="text-xs text-red-500 mt-1" x-text="errors.archive[0]"></p>
+                                            <p class="text-xs text-red-500 dark:text-red-400 mt-1" x-text="errors.archive[0]"></p>
                                         </template>
                                     </div>
                                 </div>
@@ -227,8 +227,7 @@
                             <button type="submit" 
                                     form="deployment-form" 
                                     :disabled="isSubmitting" 
-                                    class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none disabled:opacity-50 transition cursor-pointer">
-                                <x-lucide-rocket x-show="!isSubmitting" class="size-3.5" />
+                                    class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 focus:outline-none disabled:opacity-50 transition cursor-pointer">
                                 <span x-show="!isSubmitting">Deploy Domain</span>
                                 <span x-show="isSubmitting" class="flex items-center gap-1.5">
                                     <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
