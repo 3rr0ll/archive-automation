@@ -154,13 +154,23 @@ export function dashboardOverview(
         },
 
         // Active / Queue deployments (pending, processing)
+        // Processing items first (most active), then pending items in FIFO order (earliest first in line)
         get queueItems() {
-            return this.deployments.filter(d => d.status === 'pending' || d.status === 'processing');
+            return this.deployments
+                .filter(d => d.status === 'pending' || d.status === 'processing')
+                .sort((a, b) => {
+                    if (a.status === 'processing' && b.status !== 'processing') return -1;
+                    if (b.status === 'processing' && a.status !== 'processing') return 1;
+                    // For items in the same status, order FIFO (oldest queued first)
+                    const dateA = new Date(a.created_at || 0).getTime();
+                    const dateB = new Date(b.created_at || 0).getTime();
+                    return dateA - dateB;
+                });
         },
 
-        // Active deployment that is first in line of the queue
+        // Active deployment: Currently processing deployment first, otherwise earliest pending in queue
         get activeQueueDeployment() {
-            return this.queueItems.length > 0 ? this.queueItems[0] : null;
+            return this.queueItems.find(d => d.status === 'processing') || this.queueItems[0] || null;
         },
 
         // Successful / Completed deployments
@@ -169,7 +179,7 @@ export function dashboardOverview(
         },
 
         // Deployments to display in the main list/grid:
-        // Completed deployments plus the first-in-line queue deployment (if matches search filter)
+        // Completed deployments plus the active/processing queue deployment (if matches search filter)
         get displayedDeployments() {
             const list = [...this.successfulDeployments];
             const active = this.activeQueueDeployment;
