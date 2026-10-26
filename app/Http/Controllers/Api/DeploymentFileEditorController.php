@@ -217,116 +217,14 @@ class DeploymentFileEditorController extends Controller
     }
 
     /**
-     * Request a ZIP archive to be prepared in the background via queue.
+     * Download the workspace directory directly as a streamed archive.
      */
-    public function requestZip(Deployment $deployment): JsonResponse
+    public function downloadZip(Deployment $deployment)
     {
-        $token = bin2hex(random_bytes(16));
-        $cacheKey = "deployment_zip:{$token}";
-
-        \Illuminate\Support\Facades\Cache::put($cacheKey, [
-            'status' => 'pending',
-            'deployment_id' => $deployment->id,
-        ], now()->addMinutes(30));
-
-        \App\Jobs\PrepareDeploymentZip::dispatch($deployment, $token);
-
-        return response()->json([
-            'success' => true,
-            'token' => $token,
-        ]);
-    }
-
-    /**
-     * Check status of the requested ZIP preparation.
-     */
-    public function zipStatus(Deployment $deployment, Request $request): JsonResponse
-    {
-        $token = (string) $request->query('token');
-        if (blank($token)) {
-            return response()->json(['status' => 'not_found'], 404);
-        }
-
-        $cacheKey = "deployment_zip:{$token}";
-        $data = \Illuminate\Support\Facades\Cache::get($cacheKey);
-
-        if (! $data) {
-            return response()->json(['status' => 'not_found'], 404);
-        }
-
-        return response()->json($data);
-    }
-
-    /**
-     * Download the prepared ZIP archive.
-     */
-    public function downloadZip(Deployment $deployment, Request $request)
-    {
-        $token = (string) $request->query('token');
-
-        if (filled($token)) {
-            $cacheKey = "deployment_zip:{$token}";
-            $info = \Illuminate\Support\Facades\Cache::get($cacheKey);
-
-            if (! $info || ($info['status'] ?? null) !== 'ready') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Archive is not ready or has expired.',
-                ], 404);
-            }
-
-            // Immediately release session lock before streaming file
-            if (session()->isStarted()) {
-                session()->save();
-            }
-
-            // Invalidate cache token so it's not reused
-            \Illuminate\Support\Facades\Cache::forget($cacheKey);
-
-            // If the worker stored the archive locally in storage
-            if (! empty($info['local_path']) && file_exists($info['local_path'])) {
-                return response()->download(
-                    $info['local_path'],
-                    $info['filename'],
-                    [
-                        'Content-Type' => $info['content_type'],
-                        'Cache-Control' => 'no-cache, no-store, must-revalidate',
-                        'Pragma' => 'no-cache',
-                        'Expires' => '0',
-                    ]
-                )->deleteFileAfterSend(true);
-            }
-
-            // Fallback: stream from remote SFTP if local path is not present
-            return response()->streamDownload(function () use ($info) {
-                @set_time_limit(600);
-
-                $this->sftpFileService->streamRemoteFile(
-                    $info['host'],
-                    $info['path'],
-                    function (string $chunk) {
-                        echo $chunk;
-                        if (function_exists('ob_flush')) {
-                            @ob_flush();
-                        }
-                        flush();
-                    },
-                    true // Delete remote temporary file when done
-                );
-            }, $info['filename'], [
-                'Content-Type' => $info['content_type'],
-                'Content-Length' => (string) $info['size'],
-                'Content-Disposition' => 'attachment; filename="' . $info['filename'] . '"',
-                'Cache-Control' => 'no-cache, no-store, must-revalidate',
-                'Pragma' => 'no-cache',
-                'Expires' => '0',
-            ]);
-        }
-
-        // Direct fallback: synchronous execution if no token was passed
         $deployment->load('server');
         $target = $this->resolveDeploymentTarget($deployment);
 
+        // Immediately release session lock before streaming file
         if (session()->isStarted()) {
             session()->save();
         }

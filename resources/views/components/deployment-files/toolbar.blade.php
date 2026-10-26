@@ -73,7 +73,7 @@
             <template x-if="!downloadingZip">
                 <x-lucide-download class="size-3.5 text-zinc-400" />
             </template>
-            <span class="hidden sm:inline" x-text="downloadingZip ? 'Preparing ZIP...' : 'Download ZIP'"></span>
+            <span class="hidden sm:inline" x-text="downloadingZip ? 'Downloading ZIP...' : 'Download ZIP'"></span>
             <span class="sm:hidden" x-text="downloadingZip ? '...' : 'ZIP'"></span>
         </button>
 

@@ -57,8 +57,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/deployments/{deployment}/files/read', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'readFile']);
     Route::post('/deployments/{deployment}/files/write', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'writeFile']);
     Route::post('/deployments/{deployment}/files/create', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'createFile']);
-    Route::post('/deployments/{deployment}/files/request-zip', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'requestZip']);
-    Route::get('/deployments/{deployment}/files/zip-status', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'zipStatus']);
 });
 
 // Admin API Routes (Requires Admin Role)
