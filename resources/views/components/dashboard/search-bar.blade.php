@@ -6,17 +6,17 @@
         <input type="text" 
                x-model.debounce.300ms="searchQuery" 
                @input="currentPage = 1"
-               class="block w-full h-9 pl-10 pr-3 text-sm text-zinc-900 border border-zinc-200 rounded-md bg-white focus:ring-zinc-900 focus:border-zinc-900 transition placeholder:text-zinc-400" 
+               class="block w-full h-9 pl-10 pr-3 text-sm text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-[#18181b] focus:ring-zinc-900 dark:focus:ring-zinc-100 focus:border-zinc-900 dark:focus:border-zinc-100 transition placeholder:text-zinc-400 dark:placeholder:text-zinc-500" 
                placeholder="Search Domains...">
     </div>
     
     <div class="flex items-center gap-2.5 shrink-0 justify-between sm:justify-end">
         <!-- View Toggle Grid / List -->
-        <div class="h-9 flex items-center p-0.5 border border-zinc-200 rounded-md bg-white">
-            <button type="button" @click="$store.domainView.set('grid')" :class="$store.domainView.mode === 'grid' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'" class="h-full px-2.5 flex items-center justify-center rounded transition focus:outline-none" title="Grid view">
+        <div class="h-9 flex items-center p-0.5 border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-[#18181b]">
+            <button type="button" @click="$store.domainView.set('grid')" :class="$store.domainView.mode === 'grid' ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'" class="h-full px-2.5 flex items-center justify-center rounded transition focus:outline-none cursor-pointer" title="Grid view">
                 <x-lucide-layout-grid class="size-4" />
             </button>
-            <button type="button" @click="$store.domainView.set('list')" :class="$store.domainView.mode === 'list' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'" class="h-full px-2.5 flex items-center justify-center rounded transition focus:outline-none" title="List view">
+            <button type="button" @click="$store.domainView.set('list')" :class="$store.domainView.mode === 'list' ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'" class="h-full px-2.5 flex items-center justify-center rounded transition focus:outline-none cursor-pointer" title="List view">
                 <x-lucide-list class="size-4" />
             </button>
         </div>
