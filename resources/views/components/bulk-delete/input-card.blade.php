@@ -29,8 +29,8 @@
         <button type="button"
                 @click="searchDomains()"
                 :disabled="isSearching || isDeleting || parsedInputDomains.length === 0"
-                class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent dark:border-zinc-700/80 text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:opacity-50 focus:outline-none transition-colors shadow-sm cursor-pointer shrink-0">
-            <span x-show="isSearching" class="animate-spin inline-block size-3.5 border-2 border-current border-t-transparent rounded-full mr-1"></span>
+                class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent dark:border-zinc-700/80 text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none transition-colors shadow-sm cursor-pointer shrink-0">
+            <span x-show="isSearching" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-1"></span>
             <x-lucide-search x-show="!isSearching" class="size-4" />
             <span x-text="isSearching ? 'Searching...' : 'Search Domains'"></span>
         </button>
