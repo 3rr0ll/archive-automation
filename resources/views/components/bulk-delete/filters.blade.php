@@ -30,7 +30,7 @@
                 <template x-for="st in ['all', 'completed', 'runcloud', 'pending', 'processing', 'failed']" :key="st">
                     <button type="button"
                             @click="statusFilter = st; currentPage = 1; open = false;"
-                            class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer capitalize"
+                            class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer capitalize transition-colors"
                             :class="statusFilter === st ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''"
                             role="menuitem">
                         <span x-text="st === 'all' ? 'All Statuses' : st"></span>
@@ -56,28 +56,28 @@
                  role="menu">
                 <button type="button"
                         @click="sortBy = 'domain'; open = false;"
-                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                         :class="sortBy === 'domain' ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''">
                     <span>Domain Name</span>
                     <x-lucide-check x-show="sortBy === 'domain'" class="size-3.5 text-zinc-900 dark:text-zinc-100" />
                 </button>
                 <button type="button"
                         @click="sortBy = 'newest'; open = false;"
-                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                         :class="sortBy === 'newest' ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''">
                     <span>Newest First</span>
                     <x-lucide-check x-show="sortBy === 'newest'" class="size-3.5 text-zinc-900 dark:text-zinc-100" />
                 </button>
                 <button type="button"
                         @click="sortBy = 'oldest'; open = false;"
-                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                         :class="sortBy === 'oldest' ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''">
                     <span>Oldest First</span>
                     <x-lucide-check x-show="sortBy === 'oldest'" class="size-3.5 text-zinc-900 dark:text-zinc-100" />
                 </button>
                 <button type="button"
                         @click="sortBy = 'status'; open = false;"
-                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                        class="flex items-center justify-between w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                         :class="sortBy === 'status' ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''">
                     <span>Status</span>
                     <x-lucide-check x-show="sortBy === 'status'" class="size-3.5 text-zinc-900 dark:text-zinc-100" />

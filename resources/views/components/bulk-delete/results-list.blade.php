@@ -5,7 +5,7 @@
             <input type="checkbox"
                    :checked="allFoundSelected"
                    @change="toggleSelectAll()"
-                   class="rounded border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4">
+                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4">
             <span>Select All (<span x-text="selectedIds.length"></span> of <span x-text="filteredFound.length"></span> selected)</span>
         </label>
 
@@ -44,7 +44,7 @@
                                :disabled="item.status === 'processing'"
                                :checked="selectedIds.includes(item.id)"
                                @change="toggleSelection(item.id)"
-                               class="rounded border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4 disabled:opacity-40 shrink-0">
+                               class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4 disabled:opacity-40 shrink-0">
 
                         <!-- Initial Avatar -->
                         <div class="size-9 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-bold text-xs shrink-0"
@@ -124,7 +124,7 @@
                                  role="menu">
                                 <template x-if="item.source !== 'runcloud'">
                                     <a :href="`/deployments/${item.hash || item.id}/logs`"
-                                       class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                                       class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                                        role="menuitem">
                                         <x-lucide-file-text class="size-4 text-zinc-400 dark:text-zinc-500" />
                                         <span>View Logs</span>
@@ -133,7 +133,7 @@
                                 <a :href="`https://${item.domain}`"
                                    target="_blank"
                                    rel="noopener"
-                                   class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 cursor-pointer"
+                                   class="flex items-center gap-2 w-full text-left px-4 py-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                                    role="menuitem">
                                     <x-lucide-external-link class="size-4 text-zinc-400 dark:text-zinc-500" />
                                     <span>Visit Site</span>
@@ -143,7 +143,7 @@
                                         <div class="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
                                         <button type="button"
                                                 @click="confirmDeleteSingle(item); open = false;"
-                                                class="flex items-center gap-2 w-full text-left px-4 py-2 text-red-600 dark:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                                                class="flex items-center gap-2 w-full text-left px-4 py-2 text-red-600 dark:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-950/30 cursor-pointer transition-colors"
                                                 role="menuitem">
                                             <x-lucide-trash-2 class="size-4 text-red-500 dark:text-rose-400" />
                                             <span>Delete</span>
