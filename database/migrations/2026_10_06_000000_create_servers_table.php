@@ -13,7 +13,7 @@ return new class extends Migration
             $table->unsignedBigInteger('server_id')->unique();
             $table->string('name');
             $table->string('ip_address')->nullable();
-            $table->boolean('is_active')->default(true)->index();
+            $table->boolean('is_active')->default(false)->index();
             $table->timestamps();
         });
     }

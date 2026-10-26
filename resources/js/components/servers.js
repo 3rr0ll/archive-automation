@@ -89,10 +89,13 @@ export function serversPage(initialServers = []) {
                 const response = await toggleServerActive(item.id, targetStatus);
                 const updated = response?.data || response;
 
-                const idx = this.items.findIndex(i => i.id === item.id);
-                if (idx !== -1) {
-                    this.items[idx].is_active = updated.is_active !== undefined ? updated.is_active : targetStatus;
-                }
+                const updatedStatus = updated.is_active !== undefined ? updated.is_active : targetStatus;
+                this.items = this.items.map(server => ({
+                    ...server,
+                    is_active: server.id === item.id
+                        ? updatedStatus
+                        : (updatedStatus ? false : server.is_active),
+                }));
                 window.toast?.success(`Server marked as ${targetStatus ? 'Active' : 'Inactive'}.`);
             } catch (error) {
                 console.error('Failed to update server status:', error);

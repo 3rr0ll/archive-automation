@@ -68,13 +68,42 @@ class ServerApiTest extends TestCase
             'server_id' => 12345,
             'name' => 'RUNCLOUD PRODUCTION',
             'ip_address' => '1.2.3.4',
-            'is_active' => true,
+            'is_active' => false,
         ]);
 
         $this->assertDatabaseHas('servers', [
             'server_id' => 67890,
             'name' => 'RUNCLOUD STAGING',
             'ip_address' => '5.6.7.8',
+            'is_active' => false,
+        ]);
+    }
+
+    public function test_sync_preserves_the_status_of_an_existing_server(): void
+    {
+        Server::factory()->create([
+            'server_id' => 12345,
+            'name' => 'OLD NAME',
+            'is_active' => true,
+        ]);
+
+        \Illuminate\Support\Facades\Http::fake([
+            'https://manage.runcloud.io/api/v3/servers' => \Illuminate\Support\Facades\Http::response([
+                'data' => [[
+                    'id' => 12345,
+                    'name' => 'UPDATED NAME',
+                    'ipAddress' => '1.2.3.4',
+                ]],
+            ], 200),
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/servers/sync')
+            ->assertOk();
+
+        $this->assertDatabaseHas('servers', [
+            'server_id' => 12345,
+            'name' => 'UPDATED NAME',
             'is_active' => true,
         ]);
     }
@@ -111,6 +140,23 @@ class ServerApiTest extends TestCase
             'id' => $server->id,
             'is_active' => true,
         ]);
+    }
+
+    public function test_activating_a_server_deactivates_the_previously_active_server(): void
+    {
+        $previouslyActive = Server::factory()->create(['is_active' => true]);
+        $server = Server::factory()->create(['is_active' => false]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->patchJson("/api/servers/{$server->id}/toggle-active", [
+                'is_active' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true);
+
+        $this->assertFalse($previouslyActive->fresh()->is_active);
+        $this->assertTrue($server->fresh()->is_active);
+        $this->assertSame(1, Server::query()->where('is_active', true)->count());
     }
 
     public function test_direct_create_or_delete_routes_are_not_available(): void

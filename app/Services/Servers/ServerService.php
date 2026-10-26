@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Services\RunCloud\RunCloudService;
 use Exception;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ServerService
 {
@@ -38,7 +39,8 @@ class ServerService
 
     /**
      * Sync servers from RunCloud API into local database.
-     * Updates or creates records using server_id, keeping existing is_active flag.
+     * Updates or creates records using server_id, keeping the status of existing
+     * servers and leaving newly discovered servers inactive.
      *
      * @return Collection<int, Server>
      * @throws Exception
@@ -68,7 +70,7 @@ class ServerService
                     'server_id' => $serverId,
                     'name' => $name,
                     'ip_address' => $ipAddress,
-                    'is_active' => true,
+                    'is_active' => false,
                 ]);
             }
         }
@@ -85,12 +87,23 @@ class ServerService
      */
     public function toggleActive(Server $server, ?bool $isActive = null): Server
     {
-        $newStatus = $isActive !== null ? $isActive : ! $server->is_active;
+        return DB::transaction(function () use ($server, $isActive): Server {
+            $servers = Server::query()->lockForUpdate()->get();
+            $currentServer = $servers->firstWhere('id', $server->getKey());
+            $newStatus = $isActive ?? ! $currentServer->is_active;
 
-        $server->update([
-            'is_active' => $newStatus,
-        ]);
+            if ($newStatus) {
+                Server::query()
+                    ->whereKeyNot($currentServer->getKey())
+                    ->where('is_active', true)
+                    ->update(['is_active' => false]);
+            }
 
-        return $server->fresh();
+            $currentServer->update([
+                'is_active' => $newStatus,
+            ]);
+
+            return $currentServer->fresh();
+        });
     }
 }
