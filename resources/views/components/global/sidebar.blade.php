@@ -38,9 +38,10 @@
                     <span class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Platform</span>
                 </li>
                 <li>
-                    <a href="/dashboard" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                        <x-lucide-layout-dashboard class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Dashboard</span>
+                    @php $isActive = request()->is('dashboard*'); @endphp
+                    <a href="/dashboard" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                        <x-lucide-layout-dashboard class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span class="truncate">Dashboard</span>
                     </a>
                 </li>
 
@@ -48,35 +49,40 @@
                     <span class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Settings</span>
                 </li>
                 <li>
-                    <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                        <x-lucide-terminal class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Environment Variables</span>
+                    @php $isActive = request()->is('environment-variables*'); @endphp
+                    <a href="/environment-variables" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                        <x-lucide-terminal class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span class="truncate">Environment Variables</span>
                     </a>
                 </li>
                 @if(auth()->user()?->isAdmin())
                     <li>
-                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                            <x-lucide-search class="size-4.5 shrink-0" />
-                            <span class="text-sm font-medium truncate">Google Search Console</span>
+                        @php $isActive = request()->is('google-search-console*'); @endphp
+                        <a href="/google-search-console" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                            <x-lucide-search class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span class="truncate">Google Search Console</span>
                         </a>
                     </li>
                 @endif
                 <li>
-                    <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                        <x-lucide-server class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Servers</span>
+                    @php $isActive = request()->is('servers*'); @endphp
+                    <a href="/servers" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                        <x-lucide-server class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span class="truncate">Servers</span>
                     </a>
                 </li>
                 <li>
-                    <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                        <x-lucide-users class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Users</span>
+                    @php $isActive = request()->is('users*'); @endphp
+                    <a href="/users" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                        <x-lucide-users class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span class="truncate">Users</span>
                     </a>
                 </li>
                 <li>
-                    <a href="/bulk-delete" class="group flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-                        <x-lucide-trash-2 class="size-4.5 shrink-0" />
-                        <span class="text-sm font-medium truncate">Bulk Delete</span>
+                    @php $isActive = request()->is('bulk-delete*'); @endphp
+                    <a href="/bulk-delete" class="group flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}">
+                        <x-lucide-trash-2 class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span class="truncate">Bulk Delete</span>
                     </a>
                 </li>
             </ul>
@@ -100,12 +106,13 @@
                     <span class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Platform</span>
                 </li>
                 <li>
+                    @php $isActive = request()->is('dashboard*'); @endphp
                     <a href="/dashboard"
                        :title="$store.sidebar?.collapsed ? 'Dashboard' : ''"
-                       class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                       class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                        :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                        <x-lucide-layout-dashboard class="size-4.5 shrink-0" />
-                        <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Dashboard</span>
+                        <x-lucide-layout-dashboard class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                        <span x-show="!$store.sidebar?.collapsed" class="truncate">Dashboard</span>
                     </a>
                 </li>
                 @if(auth()->user()?->isAdmin())
@@ -114,48 +121,53 @@
                     </li>
                     <li class="my-2 border-t border-zinc-200 dark:border-zinc-800/80" x-show="$store.sidebar?.collapsed" style="display: none;"></li>
                     <li>
+                        @php $isActive = request()->is('environment-variables*'); @endphp
                         <a href="/environment-variables"
                            :title="$store.sidebar?.collapsed ? 'Environment Variables' : ''"
-                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                            <x-lucide-terminal class="size-4.5 shrink-0" />
-                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Environment Variables</span>
+                            <x-lucide-terminal class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span x-show="!$store.sidebar?.collapsed" class="truncate">Environment Variables</span>
                         </a>
                     </li>
                     <li>
+                        @php $isActive = request()->is('google-search-console*'); @endphp
                         <a href="/google-search-console"
                            :title="$store.sidebar?.collapsed ? 'Google Search Console' : ''"
-                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                            <x-lucide-search class="size-4.5 shrink-0" />
-                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Google Search Console</span>
+                            <x-lucide-search class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span x-show="!$store.sidebar?.collapsed" class="truncate">Google Search Console</span>
                         </a>
                     </li>
                     <li>
+                        @php $isActive = request()->is('servers*'); @endphp
                         <a href="/servers"
                            :title="$store.sidebar?.collapsed ? 'Servers' : ''"
-                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                            <x-lucide-server class="size-4.5 shrink-0" />
-                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Servers</span>
+                            <x-lucide-server class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span x-show="!$store.sidebar?.collapsed" class="truncate">Servers</span>
                         </a>
                     </li>
                     <li>
+                        @php $isActive = request()->is('users*'); @endphp
                         <a href="/users"
                            :title="$store.sidebar?.collapsed ? 'Users' : ''"
-                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                            <x-lucide-users class="size-4.5 shrink-0" />
-                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Users</span>
+                            <x-lucide-users class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span x-show="!$store.sidebar?.collapsed" class="truncate">Users</span>
                         </a>
                     </li>
                     <li>
+                        @php $isActive = request()->is('bulk-delete*'); @endphp
                         <a href="/bulk-delete"
                            :title="$store.sidebar?.collapsed ? 'Bulk Delete' : ''"
-                           class="group flex items-center rounded-md transition-colors text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                           class="group flex items-center rounded-md font-medium text-sm transition-colors {{ $isActive ? 'bg-zinc-200/75 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60' }}"
                            :class="$store.sidebar?.collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'">
-                            <x-lucide-trash-2 class="size-4.5 shrink-0" />
-                            <span x-show="!$store.sidebar?.collapsed" class="text-sm font-medium truncate">Bulk Delete</span>
+                            <x-lucide-trash-2 class="size-4.5 shrink-0 {{ $isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100' }}" />
+                            <span x-show="!$store.sidebar?.collapsed" class="truncate">Bulk Delete</span>
                         </a>
                     </li>
                 @endif
