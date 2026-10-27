@@ -25,6 +25,30 @@
               class="block w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121214] p-3 text-sm font-mono text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 focus:border-zinc-900 dark:focus:border-zinc-100 transition-colors disabled:opacity-50"
               placeholder="example1.com&#10;example2.com&#10;.example3.org"></textarea>
 
+    <div x-show="servers.length > 0" x-cloak class="mt-4">
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">Servers to Search</span>
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">
+                (<span x-text="selectedServerIds.length"></span> of <span x-text="servers.length"></span> selected, fewer servers = faster search)
+            </span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <template x-for="server in servers" :key="server.server_id">
+                <button type="button"
+                        @click="toggleServer(server.server_id)"
+                        :disabled="isSearching || isDeleting"
+                        :aria-pressed="isServerSelected(server.server_id)"
+                        :class="isServerSelected(server.server_id)
+                            ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                            : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121214] text-zinc-500 dark:text-zinc-400 line-through'"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-md transition-colors cursor-pointer disabled:opacity-50">
+                    <x-lucide-server class="size-3.5" />
+                    <span x-text="server.name"></span>
+                </button>
+            </template>
+        </div>
+    </div>
+
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 mt-3.5">
         <button type="button"
                 @click="searchDomains()"
@@ -32,7 +56,7 @@
                 class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent dark:border-zinc-700/80 text-sm font-medium rounded-lg text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 focus:outline-none transition-colors shadow-sm cursor-pointer shrink-0">
             <span x-show="isSearching" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-1"></span>
             <x-lucide-search x-show="!isSearching" class="size-4" />
-            <span x-text="isSearching ? 'Searching...' : 'Search Domains'"></span>
+            <span x-text="isSearching ? `Searching... ${searchProgress.checked}/${searchProgress.total}` : 'Search Domains'"></span>
         </button>
     </div>
 </div>

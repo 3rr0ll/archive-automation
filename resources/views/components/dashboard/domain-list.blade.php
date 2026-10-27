@@ -9,7 +9,7 @@
                 <input type="checkbox"
                        :checked="allVisibleDeploymentsSelected"
                        @change="toggleVisibleDeploymentSelection()"
-                       class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500">
+                       class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-zinc-500">
                 <span>Select page</span>
             </label>
             <button type="button"
@@ -60,7 +60,7 @@
                                    type="checkbox"
                                    :checked="selectedDeploymentIds.includes(item.id)"
                                    @click.stop="toggleDeploymentSelection(item.id)"
-                                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500"
+                                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-zinc-500"
                                    title="Select deployment">
                             <!-- In Progress Badge for active first in line -->
                             <template x-if="isItemActive(item)">
@@ -136,7 +136,7 @@
                                    type="checkbox"
                                    :checked="selectedDeploymentIds.includes(item.id)"
                                    @click.stop="toggleDeploymentSelection(item.id)"
-                                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500"
+                                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-zinc-500"
                                    title="Select deployment">
                             <template x-if="isItemActive(item)">
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700">

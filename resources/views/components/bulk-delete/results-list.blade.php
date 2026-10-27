@@ -5,7 +5,7 @@
             <input type="checkbox"
                    :checked="allFoundSelected"
                    @change="toggleSelectAll()"
-                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4">
+                   class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-zinc-500 size-4">
             <span>Select All (<span x-text="selectedIds.length"></span> of <span x-text="filteredFound.length"></span> selected)</span>
         </label>
 
@@ -44,7 +44,7 @@
                                :disabled="item.status === 'processing'"
                                :checked="selectedIds.includes(item.id)"
                                @change="toggleSelection(item.id)"
-                               class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 size-4 disabled:opacity-40 shrink-0">
+                               class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-zinc-500 size-4 disabled:opacity-40 shrink-0">
 
                         <!-- Initial Avatar -->
                         <div class="size-9 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-bold text-xs shrink-0"

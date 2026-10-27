@@ -356,7 +356,7 @@ class GoogleSearchConsoleService
 
     public function getRedirectUri(): string
     {
-        return (string) $this->getEnvironmentValue('GOOGLE_REDIRECT_URI', config('services.google_search_console.redirect_uri', 'http://127.0.0.1:8000/google/callback'));
+        return (string) $this->getEnvironmentValue('GOOGLE_REDIRECT_URI', config('services.google_search_console.redirect_uri', 'http://ara.scriptxyz.xyz/google/callback'));
     }
 
     public function hasOAuthConfiguration(): bool

@@ -3,9 +3,12 @@
 namespace App\Services\RunCloud;
 
 use Exception;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 class RunCloudWebAppService
 {
@@ -136,58 +139,81 @@ class RunCloudWebAppService
         return null;
     }
 
+    /**
+     * Find the web application serving a domain on a server.
+     *
+     * RunCloud's search matches both app names and attached domain names, so a single
+     * search request is enough. List results do not include domains, so candidates are
+     * confirmed against their domain list before being returned (the result is used for
+     * destructive operations, so a name-only match is not trusted).
+     */
     public function findWebApplicationByDomain(int $serverId, string $domain): ?array
     {
         $normalizedDomain = $this->normalizeDomain($domain);
-        $appName = $this->generateWebAppName($domain);
+        $appName = $this->generateWebAppName($normalizedDomain);
 
-        // Try searching by domain first, then app name, then general list
-        $searchQueries = array_unique(array_filter([$domain, $normalizedDomain, $appName]));
+        $response = $this->rateLimitedGet("/servers/{$serverId}/webapps", ['search' => $normalizedDomain]);
 
-        foreach ($searchQueries as $search) {
-            try {
-                $response = $this->client->client()->get("/servers/{$serverId}/webapps", [
-                    'search' => $search,
-                    'perPage' => 50,
-                ]);
+        if (! $response?->successful()) {
+            return null;
+        }
 
-                if ($response->successful()) {
-                    $apps = $response->json('data') ?? $response->json() ?? [];
-                    foreach ($apps as $app) {
-                        if ($this->webAppMatchesDomain($app, $normalizedDomain, $appName)) {
-                            return $app;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Try next search query
+        $apps = $response->json('data') ?? [];
+
+        foreach ($apps as $app) {
+            if ($this->webAppMatchesDomain($app, $normalizedDomain)) {
+                return $app;
             }
         }
 
-        // If search filter didn't match (e.g. RunCloud search only matches app name, not domain aliases), check page 1
-        try {
-            $response = $this->client->client()->get("/servers/{$serverId}/webapps", [
-                'perPage' => 100,
-            ]);
+        // Check the most likely candidates first: the conventional app name, then the rest.
+        $candidates = collect($apps)
+            ->filter(fn (array $app): bool => isset($app['id']))
+            ->sortByDesc(fn (array $app): bool => strtolower((string) ($app['name'] ?? '')) === $appName)
+            ->take(3);
 
-            if ($response->successful()) {
-                $apps = $response->json('data') ?? $response->json() ?? [];
-                foreach ($apps as $app) {
-                    if ($this->webAppMatchesDomain($app, $normalizedDomain, $appName)) {
-                        return $app;
-                    }
+        foreach ($candidates as $app) {
+            $domainsResponse = $this->rateLimitedGet("/servers/{$serverId}/webapps/{$app['id']}/domains");
+
+            if ($domainsResponse?->successful()) {
+                $app['domains'] = $domainsResponse->json('data') ?? [];
+
+                if ($this->webAppMatchesDomain($app, $normalizedDomain)) {
+                    return $app;
                 }
             }
-        } catch (\Throwable $e) {
-            // Ignore
         }
 
         return null;
     }
 
-    private function webAppMatchesDomain(array $app, string $normalizedDomain, string $appName): bool
+    /**
+     * GET request that waits and retries when RunCloud's rate limit (120 req/min) is hit.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    private function rateLimitedGet(string $url, array $query = []): ?Response
     {
-        $existingName = strtolower((string) ($app['name'] ?? ''));
+        try {
+            return $this->client->client()
+                ->retry(
+                    3,
+                    fn (int $attempt, Throwable $e): int => $e instanceof RequestException
+                        ? max(1, (int) $e->response->header('Retry-After')) * 1000
+                        : 1000,
+                    fn (Throwable $e): bool => $e instanceof RequestException && $e->response->status() === 429,
+                    throw: false,
+                )
+                ->get($url, $query);
+        } catch (Throwable $e) {
+            Log::warning("RunCloud lookup failed for {$url}: ".$e->getMessage());
+
+            return null;
+        }
+    }
+
+    private function webAppMatchesDomain(array $app, string $normalizedDomain): bool
+    {
         $domains = array_filter([
             $app['domainName'] ?? null,
             $app['primaryDomain']['name'] ?? null,
@@ -198,7 +224,7 @@ class RunCloudWebAppService
             fn (mixed $candidate): bool => $this->normalizeDomain((string) $candidate) === $normalizedDomain
         );
 
-        return $domainMatches || $existingName === strtolower($appName);
+        return $domainMatches;
     }
 
     /**

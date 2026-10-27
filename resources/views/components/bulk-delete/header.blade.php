@@ -9,11 +9,11 @@
         <button type="button"
                 x-show="hasSearched && foundDeployments.length > 0"
                 @click="confirmDeleteSelected()"
-                :disabled="selectedIds.length === 0 || isDeleting"
+                :disabled="selectedIds.length === 0 || isDeleting || isSearching"
                 class="inline-flex items-center justify-center gap-2 px-4 py-2 border border-transparent dark:border-zinc-700/80 text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 dark:bg-rose-600 dark:hover:bg-rose-700 disabled:opacity-50 focus:outline-none transition-colors shadow-sm cursor-pointer">
             <span x-show="isDeleting" class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full mr-1"></span>
             <x-lucide-trash-2 x-show="!isDeleting" class="size-4" />
-            <span x-text="isDeleting ? 'Deleting' : `Delete Selected (${selectedIds.length})`"></span>
+            <span x-text="isDeleting ? (deleteProgress ? `Deleting ${deleteProgress.done + deleteProgress.failed}/${deleteProgress.total}` : 'Deleting') : `Delete Selected (${selectedIds.length})`"></span>
         </button>
     </div>
 </div>

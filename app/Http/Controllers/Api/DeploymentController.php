@@ -167,6 +167,8 @@ class DeploymentController extends Controller
         $validated = $request->validate([
             'domains' => ['required', 'array', 'min:1', 'max:500'],
             'domains.*' => ['required', 'string', 'max:255'],
+            'server_ids' => ['sometimes', 'array'],
+            'server_ids.*' => ['integer'],
         ]);
 
         $rawDomains = collect($validated['domains'])
@@ -187,6 +189,7 @@ class DeploymentController extends Controller
         // 1. Query deployments matching the exact domain (case-insensitive) in local database
         $deployments = Deployment::query()
             ->whereIn('domain', $rawDomains->all())
+            ->when(array_key_exists('server_ids', $validated), fn ($query) => $query->whereIn('server_id', $validated['server_ids']))
             ->with(['user:id,name,email', 'server'])
             ->orderBy('domain')
             ->orderByDesc('id')
@@ -226,6 +229,12 @@ class DeploymentController extends Controller
                 // If live RunCloud server listing fails, proceed with database servers
             }
 
+            // Limit the RunCloud lookup to the servers chosen on the page, when given.
+            if (array_key_exists('server_ids', $validated)) {
+                $selectedIds = array_map('intval', $validated['server_ids']);
+                $serversById = $serversById->filter(fn ($server) => in_array((int) $server->server_id, $selectedIds, true));
+            }
+
             $servers = $serversById->values();
 
             foreach ($missingFromDb as $domain) {
@@ -243,6 +252,9 @@ class DeploymentController extends Controller
                         if ($app) {
                             $matchedApp = $app;
                             $matchedServer = $server;
+
+                            // Domains in one batch usually live on the same server, so check it first next time.
+                            $servers = $servers->reject(fn ($s) => $s === $server)->prepend($server)->values();
                             break;
                         }
                     } catch (\Throwable $e) {

@@ -14,14 +14,14 @@
         <x-bulk-delete.input-card />
 
         <!-- Skeleton Loading State when searching -->
-        <div x-show="isSearching" x-cloak>
+        <div x-show="isSearching && foundDeployments.length === 0" x-cloak>
             <x-skeleton.bulk-delete-results-skeleton />
         </div>
 
         <x-bulk-delete.summary-banner />
 
         <!-- Search Results Section -->
-        <div x-show="hasSearched && !isSearching" x-cloak class="space-y-6">
+        <div x-show="hasSearched && (!isSearching || foundDeployments.length > 0)" x-cloak class="space-y-6">
             <x-bulk-delete.filters />
 
             <x-bulk-delete.results-list />

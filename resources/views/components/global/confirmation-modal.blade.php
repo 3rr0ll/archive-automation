@@ -8,6 +8,7 @@
     cancelText: 'Cancel',
     type: 'danger', // 'danger' | 'primary'
     isProcessing: false,
+    progress: null, // { done, total, failed, label } while a long-running confirm reports progress
     onConfirm: null,
     onCancel: null,
 
@@ -38,7 +39,17 @@
         this.onConfirm = typeof options.onConfirm === 'function' ? options.onConfirm : null;
         this.onCancel = typeof options.onCancel === 'function' ? options.onCancel : null;
         this.isProcessing = false;
+        this.progress = null;
         this.open = true;
+    },
+
+    setProgress(progress) {
+        this.progress = progress ? { done: 0, total: 0, failed: 0, label: 'processed', ...progress } : null;
+    },
+
+    get progressPercent() {
+        if (!this.progress || !this.progress.total) return 0;
+        return Math.round(((this.progress.done + this.progress.failed) / this.progress.total) * 100);
     },
 
     close() {
@@ -111,6 +122,30 @@ aria-modal="true"
                     </div>
                 </template>
 
+                <!-- Progress (shown while a long-running confirm reports it) -->
+                <template x-if="progress">
+                    <div class="space-y-2">
+                        <div class="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-300"
+                                 :class="type === 'danger' ? 'bg-[#DC2626] dark:bg-rose-600' : 'bg-zinc-900 dark:bg-zinc-100'"
+                                 :style="`width: ${progressPercent}%`"></div>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                            <span>
+                                <span class="font-semibold text-zinc-900 dark:text-zinc-100" x-text="progress.done"></span>
+                                <span x-text="progress.label"></span>
+                                <template x-if="progress.failed > 0">
+                                    <span>· <span class="font-semibold text-red-600 dark:text-rose-400" x-text="progress.failed"></span> failed</span>
+                                </template>
+                            </span>
+                            <span>
+                                <span class="font-semibold text-zinc-900 dark:text-zinc-100" x-text="Math.max(0, progress.total - progress.done - progress.failed)"></span>
+                                remaining of <span x-text="progress.total"></span>
+                            </span>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Footer Actions: Cancel on the left, Action on the right -->
                 <div class="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
                     <button type="button"
@@ -135,7 +170,7 @@ aria-modal="true"
                         </template>
                         <span x-show="isProcessing" class="inline-flex items-center gap-2">
                             <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-                            <span>Processing</span>
+                            <span x-text="progress ? `Processing ${progress.done + progress.failed}/${progress.total}` : 'Processing'"></span>
                         </span>
                     </button>
                 </div>

@@ -48,8 +48,12 @@ export async function deleteDeployment(id) {
     return res;
 }
 
-export async function bulkSearchDeployments(domains) {
-    return api.post('/deployments/bulk-search', { domains });
+export async function bulkSearchDeployments(domains, serverIds = null) {
+    const payload = { domains };
+    if (Array.isArray(serverIds)) {
+        payload.server_ids = serverIds;
+    }
+    return api.post('/deployments/bulk-search', payload);
 }
 
 export async function bulkDeleteDeployments(ids) {
