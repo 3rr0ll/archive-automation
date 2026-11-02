@@ -1,4 +1,4 @@
-import { createEnvironmentVariable, updateEnvironmentVariable, deleteEnvironmentVariable } from '../services/env-service.js';
+import { createEnvironmentVariable, updateEnvironmentVariable, deleteEnvironmentVariable, revealEnvironmentVariable } from '../services/env-service.js';
 
 export function environmentVariablesPage(initialVariables = []) {
     return {
@@ -197,8 +197,27 @@ export function environmentVariablesPage(initialVariables = []) {
                 type: item.type || 'config',
                 environments: item.environments || 'All Environments',
                 isSaving: false,
+                isRevealing: item.type === 'secret',
                 errors: {},
             };
+
+            // Secrets are not sent with the page, so fetch the current value on demand
+            if (item.type === 'secret') {
+                revealEnvironmentVariable(item.id)
+                    .then(data => {
+                        if (this.editingId === item.id && this.editForm.value === '') {
+                            this.editForm.value = data?.value ?? '';
+                        }
+                    })
+                    .catch(error => {
+                        window.toast?.error(error.message || 'Failed to load secret value');
+                    })
+                    .finally(() => {
+                        if (this.editingId === item.id) {
+                            this.editForm.isRevealing = false;
+                        }
+                    });
+            }
         },
 
         cancelEdit() {

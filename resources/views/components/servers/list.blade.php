@@ -38,6 +38,26 @@
                                     <span class="text-zinc-400 dark:text-zinc-500 font-sans font-medium text-[11px]">IP:</span>
                                     <span class="text-zinc-700 dark:text-zinc-300" x-text="item.ip_address"></span>
                                 </span>
+                                <template x-if="item.storage && !item.storage.error">
+                                    <span class="flex items-center gap-3">
+                                        <span class="text-zinc-300 dark:text-zinc-700">•</span>
+                                        <span class="flex items-center gap-1.5" :title="`${formatBytes(item.storage.available)} free`">
+                                            <span class="text-zinc-400 dark:text-zinc-500 font-sans font-medium text-[11px]">Storage:</span>
+                                            <span class="w-16 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                                                <span class="block h-full rounded-full"
+                                                      :class="item.storage.percent >= 90 ? 'bg-red-500' : (item.storage.percent >= 75 ? 'bg-amber-500' : 'bg-emerald-500')"
+                                                      :style="`width: ${item.storage.percent}%`"></span>
+                                            </span>
+                                            <span class="text-zinc-700 dark:text-zinc-300" x-text="`${formatBytes(item.storage.used)} / ${formatBytes(item.storage.total)} (${item.storage.percent}%)`"></span>
+                                        </span>
+                                    </span>
+                                </template>
+                                <template x-if="item.storage && item.storage.error">
+                                    <span class="flex items-center gap-3">
+                                        <span class="text-zinc-300 dark:text-zinc-700">•</span>
+                                        <span class="font-sans text-[11px] font-medium text-red-500 dark:text-red-400" :title="item.storage.error">Storage unavailable</span>
+                                    </span>
+                                </template>
                             </div>
                         </div>
                     </div>

@@ -40,7 +40,7 @@
                                             <div class="pr-2">
                                                 <div class="text-sm font-semibold text-blue-600">Secret</div>
                                                 <p class="text-[12px] text-blue-600/90 leading-relaxed mt-1">
-                                                    You can't reveal this value after saving. Use for passwords, API keys, and tokens.
+                                                    Encrypted at rest and hidden from the list. Use for passwords, API keys, and tokens.
                                                 </p>
                                             </div>
                                             <!-- Custom radio dot -->

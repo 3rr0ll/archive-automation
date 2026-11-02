@@ -129,12 +129,19 @@ class RunCloudServerService
             ?? $this->client->getEnvValue('RUNCLOUD_SYSTEM_USER_ID')
             ?? Config::get('services.runcloud.user_id');
 
-        if (! empty($configuredUserId)) {
+        $configuredUserId = is_string($configuredUserId) ? trim($configuredUserId) : $configuredUserId;
+
+        if (is_numeric($configuredUserId) && (int) $configuredUserId > 0) {
             return (int) $configuredUserId;
         }
 
+        // A non-numeric value is treated as the system user's username (e.g. "runcloud")
+        $username = is_string($configuredUserId) && $configuredUserId !== ''
+            ? strtolower($configuredUserId)
+            : 'runcloud';
+
         // 2. Cache the result if fetched from API so it only ever calls once across all deployments
-        return $this->client->cache()->rememberRunCloudSystemUserId($serverId, function () use ($serverId): int {
+        return $this->client->cache()->rememberRunCloudSystemUserId($serverId, function () use ($serverId, $username): int {
             $response = $this->client->client()->get("/servers/{$serverId}/users");
 
             if (! $response->successful()) {
@@ -144,12 +151,12 @@ class RunCloudServerService
             $users = $response->json('data') ?? $response->json() ?? [];
 
             foreach ($users as $user) {
-                if (strtolower($user['username'] ?? '') === 'runcloud') {
+                if (strtolower($user['username'] ?? '') === $username) {
                     return (int) $user['id'];
                 }
             }
 
-            throw new Exception("RunCloud system user 'runcloud' was not found on server {$serverId}.");
+            throw new Exception("RunCloud system user '{$username}' was not found on server {$serverId}.");
         });
     }
 }

@@ -61,6 +61,11 @@ class EnvironmentVariableController extends Controller
         return response()->json($environmentVariable);
     }
 
+    public function reveal(EnvironmentVariable $environmentVariable)
+    {
+        return response()->json(['value' => $environmentVariable->value]);
+    }
+
     public function update(Request $request, EnvironmentVariable $environmentVariable)
     {
         $validated = $request->validate([

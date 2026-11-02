@@ -28,6 +28,12 @@ class GoogleSearchConsoleService
 
     private const VERIFY_DELAY_SECONDS = 30;
 
+    private const SITEMAP_INITIAL_DELAY_SECONDS = 15;
+
+    private const SITEMAP_ATTEMPTS = 6;
+
+    private const SITEMAP_DELAY_SECONDS = 30;
+
     private ?GoogleClient $client = null;
 
     public function __construct(
@@ -139,8 +145,30 @@ class GoogleSearchConsoleService
         $sitemapUrl = $sitemapUrl !== '' ? $sitemapUrl : "https://{$normalizedDomain}/sitemap.xml";
 
         $searchConsole = new SearchConsole($this->client());
-        $this->call('submit sitemap', $normalizedDomain,
-            fn () => $searchConsole->sitemaps->submit($property, $sitemapUrl));
+
+        // A newly added property returns 403 until Google applies the owner permission, so retry.
+        for ($attempt = 1; ; $attempt++) {
+            $startedAt = microtime(true);
+            try {
+                $searchConsole->sitemaps->submit($property, $sitemapUrl);
+                $this->recordUsage('submit sitemap', 200, true, $startedAt);
+                break;
+            } catch (GoogleServiceException $exception) {
+                $this->recordUsage('submit sitemap', (int) $exception->getCode(), false, $startedAt);
+                if ((int) $exception->getCode() !== 403 || $attempt >= self::SITEMAP_ATTEMPTS) {
+                    $this->fail('submit sitemap', $normalizedDomain, $exception);
+                }
+                Log::info('Sitemap submission not yet permitted, retrying.', [
+                    'domain' => $normalizedDomain,
+                    'attempt' => $attempt,
+                ]);
+                sleep(self::SITEMAP_DELAY_SECONDS);
+            } catch (Throwable $exception) {
+                $this->recordUsage('submit sitemap', 0, false, $startedAt);
+
+                throw $exception;
+            }
+        }
 
         Log::info('Sitemap submitted to Google Search Console.', [
             'domain' => $normalizedDomain,
@@ -290,6 +318,9 @@ class GoogleSearchConsoleService
         } else {
             $this->addProperty($normalizedDomain);
         }
+
+        // Give Google time to apply the new property's owner permission before submitting.
+        sleep(self::SITEMAP_INITIAL_DELAY_SECONDS);
 
         $sitemap = $this->submitSitemap($normalizedDomain, $sitemapUrl);
 

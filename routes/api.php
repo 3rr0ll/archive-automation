@@ -96,6 +96,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
     Route::put('/users/{user}/password', [UserController::class, 'resetPassword']);
 
+    Route::get('/environment-variables/{environmentVariable}/reveal', [EnvironmentVariableController::class, 'reveal'])
+        ->name('environment-variables.reveal');
     Route::apiResource('environment-variables', EnvironmentVariableController::class);
 
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');

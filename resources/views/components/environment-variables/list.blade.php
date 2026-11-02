@@ -110,11 +110,12 @@
                     <div>
                         <label class="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">Value</label>
                         <textarea rows="3" 
-                                  x-model="editForm.value" 
-                                  :placeholder="editForm.type === 'secret' ? 'Enter a new secret value to replace it (existing secret is hidden)' : 'Enter value'" 
+                                  x-model="editForm.value"
+                                  :disabled="editForm.isRevealing"
+                                  :placeholder="editForm.isRevealing ? 'Loading current value...' : (editForm.type === 'secret' ? 'Enter a new secret value (leave blank to keep existing)' : 'Enter value')"
                                   class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 font-mono focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none focus:ring-0 transition resize-y"></textarea>
                         <template x-if="editForm.type === 'secret'">
-                            <p class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">Secret values are encrypted and cannot be viewed. Leave blank to keep existing value, or enter a new value to update.</p>
+                            <p class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">Secret values are encrypted at rest and only loaded when editing. Leave blank to keep existing value, or enter a new value to update.</p>
                         </template>
                         <template x-if="editForm.errors.value">
                             <p class="text-xs text-red-500 mt-1" x-text="editForm.errors.value[0]"></p>
@@ -131,7 +132,7 @@
                                 <div class="pr-2">
                                     <div class="text-sm font-semibold" :class="editForm.type === 'secret' ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-700 dark:text-zinc-300'">Secret</div>
                                     <p class="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mt-0.5">
-                                        You can't reveal this value after saving. Use for passwords, API keys, and tokens.
+                                        Encrypted at rest and hidden from the list. Use for passwords, API keys, and tokens.
                                     </p>
                                 </div>
                                 <div class="mt-0.5 shrink-0 size-4 rounded-full border flex items-center justify-center"

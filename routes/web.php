@@ -98,6 +98,32 @@ Route::get('/google/callback', [\App\Http\Controllers\Web\GoogleSearchConsoleOAu
 
         Route::get('/servers', function () {
             $servers = \App\Models\Server::orderBy('created_at', 'desc')->get();
+
+            // Disk usage for each server via SSH, cached so the page doesn't reconnect on every load.
+            config(['services.sftp.timeout' => 10]);
+            $factory = app(\App\Services\Sftp\SftpConnectionFactory::class);
+            $command = <<<'CMD'
+df -B1 --output=size,used,avail,pcent / | tail -1 | awk '{gsub("%","",$4); printf "{\"total\":%s,\"used\":%s,\"available\":%s,\"percent\":%s}\n",$1,$2,$3,$4}'
+CMD;
+
+            $servers->each(function ($server) use ($factory, $command) {
+                $server->storage = \Illuminate\Support\Facades\Cache::remember(
+                    "server-storage:{$server->server_id}",
+                    now()->addMinutes(10),
+                    function () use ($factory, $command, $server) {
+                        try {
+                            $ssh = $factory->connectSsh($server->ip_address);
+                            $result = json_decode(trim($ssh->exec($command)), true);
+                            $ssh->disconnect();
+
+                            return is_array($result) ? $result : ['error' => 'Unexpected response'];
+                        } catch (\Throwable $e) {
+                            return ['error' => $e->getMessage()];
+                        }
+                    }
+                );
+            });
+
             return view('pages.servers', compact('servers'));
         })->name('servers');
 
