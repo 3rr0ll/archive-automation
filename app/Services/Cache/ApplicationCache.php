@@ -112,6 +112,35 @@ class ApplicationCache
         );
     }
 
+    /**
+     * @return array{apps: array<string, array<string, mixed>>, next_page: int, total_pages: ?int, complete: bool}|null
+     */
+    public function runCloudWebAppIndex(int $serverId): ?array
+    {
+        return Cache::get($this->runCloudKey("webapp-index:{$serverId}"));
+    }
+
+    /**
+     * Kept for hours because a full listing costs one request per 20 apps. A stale copy is
+     * safe: every match is confirmed against RunCloud before it is returned.
+     *
+     * @param  array{apps: array<string, array<string, mixed>>, next_page: int, total_pages: ?int, complete: bool}  $index
+     */
+    public function putRunCloudWebAppIndex(int $serverId, array $index): void
+    {
+        Cache::put($this->runCloudKey("webapp-index:{$serverId}"), $index, now()->addHours(12));
+    }
+
+    public function markRunCloudRateLimited(int $seconds): void
+    {
+        Cache::put($this->runCloudKey('rate-limited'), true, now()->addSeconds($seconds));
+    }
+
+    public function isRunCloudRateLimited(): bool
+    {
+        return Cache::has($this->runCloudKey('rate-limited'));
+    }
+
     public function invalidateRunCloud(): void
     {
         $this->bumpVersion(self::RUNCLOUD_VERSION_KEY);

@@ -103,6 +103,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::get('/deployments', [DeploymentController::class, 'adminIndex'])->name('deployments.index');
     Route::get('/api-usage', [ApiUsageController::class, 'index'])->name('api-usage.index');
     Route::post('/deployments/bulk-search', [DeploymentController::class, 'bulkSearchDomains'])->name('deployments.bulk-search');
+    Route::post('/deployments/bulk-search/index', [DeploymentController::class, 'bulkSearchIndex'])->name('deployments.bulk-search-index');
     Route::post('/deployments/bulk-cancel', [DeploymentController::class, 'bulkCancel'])->name('deployments.bulk-cancel');
     Route::post('/deployments/bulk-retry', [DeploymentController::class, 'bulkRetry'])->name('deployments.bulk-retry');
     Route::post('/deployments/bulk-delete', [DeploymentController::class, 'bulkDestroy'])->name('deployments.bulk-delete');

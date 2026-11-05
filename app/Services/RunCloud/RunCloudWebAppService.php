@@ -7,7 +7,9 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class RunCloudWebAppService
@@ -15,6 +17,20 @@ class RunCloudWebAppService
     public const DEFAULT_PHP_VERSION = 'php81rc';
 
     private const DEFAULT_DISABLED_FUNCTIONS = 'getmyuid,passthru,leak,listen,diskfreespace,tmpfile,link,ignore_user_abort,shell_exec,dl,set_time_limit,exec,system,highlight_file,source,show_source,fpassthru,virtual,posix_ctermid,posix_getcwd,posix_getegid,posix_geteuid,posix_getgid,posix_getgrgid,posix_getgrnam,posix_getgroups,posix_getlogin,posix_getpgid,posix_getpgrp,posix_getpid,posix,_getppid,posix_getpwuid,posix_getrlimit,posix_getsid,posix_getuid,posix_isatty,posix_kill,posix_mkfifo,posix_setegid,posix_seteuid,posix_setgid,posix_setpgid,posix_setsid,posix_setuid,posix_times,posix_ttyname,posix_uname,proc_open,proc_close,proc_nice,proc_terminate,escapeshellcmd,ini_alter,popen,pcntl_exec,socket_accept,socket_bind,socket_clear_error,socket_close,socket_connect,symlink,posix_geteuid,ini_alter,socket_listen,socket_create_listen,socket_read,socket_create_pair,stream_socket_server';
+
+    /**
+     * Minimum gap between lookups and deletes, about 55 requests a minute. RunCloud reports a
+     * limit of 120, but under load it has only accepted about 60 a minute.
+     */
+    private const MIN_REQUEST_INTERVAL_SECONDS = 1.1;
+
+    /**
+     * Longest Retry-After worth waiting for inside a web request. RunCloud can ask for several
+     * minutes, which would outlast the proxy timeout.
+     */
+    private const MAX_RETRY_WAIT_SECONDS = 15;
+
+    private float $lastRequestAt = 0.0;
 
     public function __construct(
         protected RunCloudClient $client
@@ -140,12 +156,90 @@ class RunCloudWebAppService
     }
 
     /**
+     * Load up to $maxPages more pages of a server's web apps into the cached index.
+     *
+     * RunCloud always returns 20 apps per page, so a listing can take many requests. Progress
+     * is cached after every call, so a large server is loaded across several short requests
+     * and a failed page can be resumed.
+     *
+     * @return array{complete: bool, failed: bool, fetched_pages: int, loaded_pages: int, total_pages: ?int}
+     */
+    public function buildWebAppIndex(int $serverId, int $maxPages): array
+    {
+        $cache = $this->client->cache();
+        $index = $cache->runCloudWebAppIndex($serverId)
+            ?? ['apps' => [], 'next_page' => 1, 'total_pages' => null, 'complete' => false];
+        $fetchedPages = 0;
+        $failed = false;
+
+        while (! $index['complete'] && $fetchedPages < $maxPages) {
+            $response = $this->rateLimitedGet("/servers/{$serverId}/webapps", ['page' => $index['next_page']]);
+
+            if (! $response?->successful()) {
+                $failed = true;
+                break;
+            }
+
+            foreach ($response->json('data') ?? [] as $app) {
+                if (isset($app['id'], $app['name'])) {
+                    $index['apps'][strtolower((string) $app['name'])] = [
+                        'id' => $app['id'],
+                        'name' => $app['name'],
+                        'created_at' => $app['created_at'] ?? null,
+                    ];
+                }
+            }
+
+            $index['total_pages'] = max(1, (int) $response->json('meta.pagination.total_pages'));
+            $index['complete'] = $index['next_page'] >= $index['total_pages'];
+            $index['next_page']++;
+            $fetchedPages++;
+        }
+
+        if ($fetchedPages > 0) {
+            $cache->putRunCloudWebAppIndex($serverId, $index);
+        }
+
+        return [
+            'complete' => $index['complete'],
+            'failed' => $failed,
+            'fetched_pages' => $fetchedPages,
+            'loaded_pages' => $index['next_page'] - 1,
+            'total_pages' => $index['total_pages'],
+        ];
+    }
+
+    /**
+     * Find a domain's web application, using the cached index when the server has a complete one.
+     *
+     * With an index, a domain whose conventional app name is not listed costs no request, and a
+     * name match costs one. Apps with an unconventional name are only found by a deep search.
+     *
+     * @throws RuntimeException when RunCloud could not answer, so the domain's state is unknown
+     */
+    public function locateWebApplication(int $serverId, string $domain, bool $deep = false): ?array
+    {
+        $index = $deep ? null : $this->client->cache()->runCloudWebAppIndex($serverId);
+
+        if (! ($index['complete'] ?? false)) {
+            return $this->findWebApplicationByDomain($serverId, $domain);
+        }
+
+        $normalizedDomain = $this->normalizeDomain($domain);
+        $app = $index['apps'][$this->generateWebAppName($normalizedDomain)] ?? null;
+
+        return $app === null ? null : $this->confirmWebAppDomain($serverId, $app, $normalizedDomain);
+    }
+
+    /**
      * Find the web application serving a domain on a server.
      *
      * RunCloud's search matches both app names and attached domain names, so a single
      * search request is enough. List results do not include domains, so candidates are
      * confirmed against their domain list before being returned (the result is used for
      * destructive operations, so a name-only match is not trusted).
+     *
+     * @throws RuntimeException when RunCloud could not answer, so the domain's state is unknown
      */
     public function findWebApplicationByDomain(int $serverId, string $domain): ?array
     {
@@ -155,7 +249,7 @@ class RunCloudWebAppService
         $response = $this->rateLimitedGet("/servers/{$serverId}/webapps", ['search' => $normalizedDomain]);
 
         if (! $response?->successful()) {
-            return null;
+            throw new RuntimeException("RunCloud search failed on server {$serverId}.");
         }
 
         $apps = $response->json('data') ?? [];
@@ -172,28 +266,68 @@ class RunCloudWebAppService
             ->sortByDesc(fn (array $app): bool => strtolower((string) ($app['name'] ?? '')) === $appName)
             ->take(3);
 
+        $lookupError = null;
+
         foreach ($candidates as $app) {
-            $domainsResponse = $this->rateLimitedGet("/servers/{$serverId}/webapps/{$app['id']}/domains");
+            try {
+                $confirmed = $this->confirmWebAppDomain($serverId, $app, $normalizedDomain);
+            } catch (RuntimeException $exception) {
+                $lookupError = $exception;
 
-            if ($domainsResponse?->successful()) {
-                $app['domains'] = $domainsResponse->json('data') ?? [];
-
-                if ($this->webAppMatchesDomain($app, $normalizedDomain)) {
-                    return $app;
-                }
+                continue;
             }
+
+            if ($confirmed !== null) {
+                return $confirmed;
+            }
+        }
+
+        if ($lookupError !== null) {
+            throw $lookupError;
         }
 
         return null;
     }
 
     /**
+     * Return the app with its domains if the domain is attached to it. A 404 means the app
+     * was removed since it was listed.
+     *
+     * @throws RuntimeException when RunCloud could not answer
+     */
+    private function confirmWebAppDomain(int $serverId, array $app, string $normalizedDomain): ?array
+    {
+        $response = $this->rateLimitedGet("/servers/{$serverId}/webapps/{$app['id']}/domains");
+
+        if ($response?->status() === 404) {
+            return null;
+        }
+
+        if (! $response?->successful()) {
+            throw new RuntimeException("RunCloud domain lookup failed for app {$app['id']}.");
+        }
+
+        $app['domains'] = $response->json('data') ?? [];
+
+        return $this->webAppMatchesDomain($app, $normalizedDomain) ? $app : null;
+    }
+
+    /**
      * GET request that waits and retries when RunCloud's rate limit (120 req/min) is hit.
+     *
+     * A long Retry-After is not waited out: lookups stop until it passes, and return null so
+     * callers report them as failed.
      *
      * @param  array<string, mixed>  $query
      */
     private function rateLimitedGet(string $url, array $query = []): ?Response
     {
+        if ($this->client->cache()->isRunCloudRateLimited()) {
+            return null;
+        }
+
+        $this->pace();
+
         try {
             return $this->client->client()
                 ->retry(
@@ -201,7 +335,9 @@ class RunCloudWebAppService
                     fn (int $attempt, Throwable $e): int => $e instanceof RequestException
                         ? max(1, (int) $e->response->header('Retry-After')) * 1000
                         : 1000,
-                    fn (Throwable $e): bool => $e instanceof RequestException && $e->response->status() === 429,
+                    fn (Throwable $e): bool => $e instanceof RequestException
+                        && $e->response->status() === 429
+                        && $this->shouldWaitForRateLimit($e->response),
                     throw: false,
                 )
                 ->get($url, $query);
@@ -210,6 +346,30 @@ class RunCloudWebAppService
 
             return null;
         }
+    }
+
+    private function shouldWaitForRateLimit(Response $response): bool
+    {
+        $retryAfter = (int) $response->header('Retry-After');
+
+        if ($retryAfter <= self::MAX_RETRY_WAIT_SECONDS) {
+            return true;
+        }
+
+        $this->client->cache()->markRunCloudRateLimited($retryAfter);
+
+        return false;
+    }
+
+    private function pace(): void
+    {
+        $wait = $this->lastRequestAt + self::MIN_REQUEST_INTERVAL_SECONDS - microtime(true);
+
+        if ($wait > 0) {
+            Sleep::usleep((int) ($wait * 1_000_000));
+        }
+
+        $this->lastRequestAt = microtime(true);
     }
 
     private function webAppMatchesDomain(array $app, string $normalizedDomain): bool
@@ -232,6 +392,8 @@ class RunCloudWebAppService
      */
     public function deleteWebApplication(int $serverId, int $webAppId): void
     {
+        $this->pace();
+
         $response = $this->client->client()->delete("/servers/{$serverId}/webapps/{$webAppId}");
 
         if ($response->status() === 404) {

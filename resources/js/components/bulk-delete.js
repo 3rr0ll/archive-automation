@@ -1,9 +1,11 @@
-import { bulkSearchDeployments, bulkDeleteDeployments } from '../services/deployment-service.js';
+import { bulkSearchDeployments, bulkDeleteDeployments, buildBulkSearchIndex } from '../services/deployment-service.js';
 
 import { getServers } from '../services/server-service.js';
 
 const SEARCH_CHUNK_SIZE = 5;
 const DELETE_CHUNK_SIZE = 5;
+// Listing every app costs about 150 requests, which only pays off for larger lists.
+const INDEX_MIN_DOMAINS = 40;
 const EXCLUDED_SERVERS_KEY = 'bulk-delete:excluded-servers';
 
 function loadExcludedServerIds() {
@@ -24,6 +26,7 @@ export function bulkDeletePage() {
         hasSearched: false,
         foundDeployments: [],
         missingDomains: [],
+        failedDomains: [],
         selectedIds: [],
         searchQuery: '',
         statusFilter: 'all',
@@ -32,6 +35,7 @@ export function bulkDeletePage() {
         perPage: 10,
         deletionSummary: null,
         searchProgress: { checked: 0, total: 0 },
+        indexProgress: null,
         deleteProgress: null,
         servers: [],
         excludedServerIds: loadExcludedServerIds(),
@@ -149,6 +153,7 @@ export function bulkDeletePage() {
             this.hasSearched = false;
             this.foundDeployments = [];
             this.missingDomains = [];
+            this.failedDomains = [];
             this.selectedIds = [];
             this.searchQuery = '';
             this.statusFilter = 'all';
@@ -180,48 +185,115 @@ export function bulkDeletePage() {
             this.deletionSummary = null;
             this.foundDeployments = [];
             this.missingDomains = [];
+            this.failedDomains = [];
             this.selectedIds = [];
             this.currentPage = 1;
             this.searchProgress = { checked: 0, total: domains.length };
             this.hasSearched = true;
 
-            // RunCloud lookups are slow and rate limited, so search in small chunks to stay
-            // under the proxy timeout and show results as they arrive.
-            let failedChunks = 0;
             try {
-                for (let i = 0; i < domains.length; i += SEARCH_CHUNK_SIZE) {
-                    const chunk = domains.slice(i, i + SEARCH_CHUNK_SIZE);
-                    try {
-                        const response = await bulkSearchDeployments(chunk, serverIds);
-                        const data = response?.data || {};
-                        const found = Array.isArray(data.found) ? data.found : [];
-                        const missing = Array.isArray(data.missing) ? data.missing : [];
+                if (serverIds && domains.length >= INDEX_MIN_DOMAINS) {
+                    await this.loadServerIndex(serverIds);
+                }
 
-                        this.foundDeployments = [...this.foundDeployments, ...found];
-                        this.missingDomains = [...this.missingDomains, ...missing];
+                await this.lookupDomains(domains, serverIds, false);
+            } finally {
+                this.isSearching = false;
+                this.indexProgress = null;
+            }
+        },
 
-                        // Auto-select found deployments that are not processing
-                        this.selectedIds = [
-                            ...this.selectedIds,
-                            ...found.filter(d => d.status !== 'processing').map(d => d.id),
-                        ];
-                    } catch (err) {
-                        console.error(err);
-                        failedChunks++;
-                        this.missingDomains = [...this.missingDomains, ...chunk];
+        // Load the servers' app lists. If this stops early, the search falls back to searching
+        // RunCloud directly for the servers that are not fully loaded.
+        async loadServerIndex(serverIds) {
+            this.indexProgress = { loaded: 0, total: 0 };
+
+            try {
+                while (true) {
+                    const response = await buildBulkSearchIndex(serverIds);
+                    const data = response?.data || {};
+                    this.indexProgress = { loaded: data.loaded_pages || 0, total: data.total_pages || 0 };
+
+                    if (data.complete || data.failed) {
+                        return;
                     }
-                    this.searchProgress.checked = Math.min(i + chunk.length, domains.length);
                 }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                this.indexProgress = null;
+            }
+        },
 
-                if (failedChunks > 0) {
-                    window.toast?.error(`Search failed for ${failedChunks} batch(es); those domains are listed as missing. Try searching them again.`);
-                }
+        // RunCloud lookups are slow and rate limited, so search in small chunks to stay
+        // under the proxy timeout and show results as they arrive.
+        async lookupDomains(domains, serverIds, deep) {
+            let failedChunks = 0;
 
-                if (this.foundDeployments.length === 0) {
-                    window.toast?.info('No matching deployments found for the entered domains.');
-                } else {
-                    window.toast?.success(`Found ${this.foundDeployments.length} matching deployment(s).`);
+            for (let i = 0; i < domains.length; i += SEARCH_CHUNK_SIZE) {
+                const chunk = domains.slice(i, i + SEARCH_CHUNK_SIZE);
+                try {
+                    const response = await bulkSearchDeployments(chunk, serverIds, deep);
+                    const data = response?.data || {};
+                    const found = Array.isArray(data.found) ? data.found : [];
+                    const missing = Array.isArray(data.missing) ? data.missing : [];
+                    const failed = Array.isArray(data.failed) ? data.failed : [];
+
+                    this.foundDeployments = [...this.foundDeployments, ...found];
+                    this.missingDomains = [...this.missingDomains, ...missing];
+                    this.failedDomains = [...this.failedDomains, ...failed];
+
+                    // Auto-select found deployments that are not processing
+                    this.selectedIds = [
+                        ...this.selectedIds,
+                        ...found.filter(d => d.status !== 'processing').map(d => d.id),
+                    ];
+                } catch (err) {
+                    console.error(err);
+                    failedChunks++;
+                    this.failedDomains = [...this.failedDomains, ...chunk];
                 }
+                this.searchProgress.checked = Math.min(i + chunk.length, domains.length);
+            }
+
+            if (failedChunks > 0 || this.failedDomains.length > 0) {
+                window.toast?.error(`${this.failedDomains.length} domain(s) could not be checked. They are listed under Check Failed.`);
+            }
+
+            if (this.foundDeployments.length === 0) {
+                window.toast?.info('No matching deployments found for the entered domains.');
+            } else {
+                window.toast?.success(`Found ${this.foundDeployments.length} matching deployment(s).`);
+            }
+        },
+
+        get deepCheckDomains() {
+            return [...this.missingDomains, ...this.failedDomains];
+        },
+
+        get deepCheckMinRequests() {
+            return this.deepCheckDomains.length * Math.max(this.selectedServerIds.length, 1);
+        },
+
+        // Search RunCloud directly, which also finds apps whose name differs from the domain.
+        async deepCheck() {
+            const domains = this.deepCheckDomains;
+            if (domains.length === 0) return;
+
+            const serverIds = this.servers.length > 0 ? this.selectedServerIds : null;
+
+            if (serverIds && serverIds.length === 0) {
+                window.toast?.warning('Select at least 1 server to search.');
+                return;
+            }
+
+            this.isSearching = true;
+            this.missingDomains = [];
+            this.failedDomains = [];
+            this.searchProgress = { checked: 0, total: domains.length };
+
+            try {
+                await this.lookupDomains(domains, serverIds, true);
             } finally {
                 this.isSearching = false;
             }

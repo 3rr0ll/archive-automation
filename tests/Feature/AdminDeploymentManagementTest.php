@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 class AdminDeploymentManagementTest extends TestCase
@@ -293,6 +294,184 @@ class AdminDeploymentManagementTest extends TestCase
             ->json('data');
 
         $this->assertEquals(['rc_999_888'], $deleteResponse['processed_ids']);
+    }
+
+    private function fakeIndexedServer(array $domainResponses = []): void
+    {
+        Sleep::fake();
+
+        Server::create(['server_id' => 999, 'name' => 'Primary', 'ip_address' => '1.2.3.4', 'is_active' => true]);
+
+        Http::fake([
+            ...$domainResponses,
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?page=1' => Http::response([
+                'data' => [['id' => 1, 'name' => 'first-site', 'created_at' => '2026-01-01T00:00:00.000000Z']],
+                'meta' => ['pagination' => ['total_pages' => 2]],
+            ]),
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?page=2' => Http::response([
+                'data' => [['id' => 2, 'name' => 'second-site']],
+                'meta' => ['pagination' => ['total_pages' => 2]],
+            ]),
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search/index', ['server_ids' => [999]])
+            ->assertOk()
+            ->assertJsonPath('data.complete', true)
+            ->assertJsonPath('data.loaded_pages', 2)
+            ->assertJsonPath('data.total_pages', 2);
+    }
+
+    public function test_indexed_search_only_spends_requests_on_name_matches(): void
+    {
+        $this->fakeIndexedServer([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps/2/domains' => Http::response([
+                'data' => [['name' => 'second-site.com']],
+            ]),
+        ]);
+
+        $data = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', [
+                'domains' => ['second-site.com', 'unlisted.com'],
+                'server_ids' => [999],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame('rc_999_2', $data['found'][0]['id']);
+        $this->assertSame(['unlisted.com'], $data['missing']);
+        $this->assertSame([], $data['failed']);
+        Http::assertSentCount(4); // the server list, two index pages, and one confirmation
+    }
+
+    public function test_indexed_search_does_not_trust_a_name_match_alone(): void
+    {
+        $this->fakeIndexedServer([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps/2/domains' => Http::response([
+                'data' => [['name' => 'second-site.com']],
+            ]),
+        ]);
+
+        $data = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', ['domains' => ['second-site.org'], 'server_ids' => [999]])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame([], $data['found']);
+        $this->assertSame(['second-site.org'], $data['missing']);
+    }
+
+    public function test_indexed_app_that_was_removed_is_reported_as_missing(): void
+    {
+        $this->fakeIndexedServer([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps/1/domains' => Http::response([], 404),
+        ]);
+
+        $data = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', ['domains' => ['first-site.com'], 'server_ids' => [999]])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(['first-site.com'], $data['missing']);
+        $this->assertSame([], $data['failed']);
+    }
+
+    public function test_deep_search_bypasses_the_index(): void
+    {
+        $this->fakeIndexedServer([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?search=alias-domain.com' => Http::response([
+                'data' => [['id' => 7, 'name' => 'custom-name']],
+            ]),
+            'https://manage.runcloud.io/api/v3/servers/999/webapps/7/domains' => Http::response([
+                'data' => [['name' => 'alias-domain.com']],
+            ]),
+        ]);
+
+        $search = fn (bool $deep) => $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', [
+                'domains' => ['alias-domain.com'],
+                'server_ids' => [999],
+                'deep' => $deep,
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(['alias-domain.com'], $search(false)['missing']);
+        $this->assertSame('rc_999_7', $search(true)['found'][0]['id']);
+    }
+
+    public function test_failed_lookup_is_reported_as_failed_not_missing(): void
+    {
+        Sleep::fake();
+
+        Server::create(['server_id' => 999, 'name' => 'Primary', 'ip_address' => '1.2.3.4', 'is_active' => true]);
+
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps*' => Http::response([], 500),
+        ]);
+
+        $data = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', ['domains' => ['unknown.com'], 'server_ids' => [999]])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame([], $data['missing']);
+        $this->assertSame(['unknown.com'], $data['failed']);
+    }
+
+    public function test_long_rate_limit_fails_fast_and_pauses_further_lookups(): void
+    {
+        Sleep::fake();
+
+        Server::create(['server_id' => 999, 'name' => 'Primary', 'ip_address' => '1.2.3.4', 'is_active' => true]);
+
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps*' => Http::response([], 429, ['Retry-After' => '300']),
+        ]);
+
+        $data = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', [
+                'domains' => ['first.com', 'second.com'],
+                'server_ids' => [999],
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(['first.com', 'second.com'], $data['failed']);
+        $this->assertSame([], $data['missing']);
+
+        Http::assertSentCount(2); // the server list and a single rate-limited search
+        Sleep::assertNeverSlept();
+    }
+
+    public function test_index_build_failure_keeps_progress_and_search_falls_back(): void
+    {
+        Sleep::fake();
+
+        Server::create(['server_id' => 999, 'name' => 'Primary', 'ip_address' => '1.2.3.4', 'is_active' => true]);
+
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?page=1' => Http::response([
+                'data' => [['id' => 1, 'name' => 'first-site']],
+                'meta' => ['pagination' => ['total_pages' => 2]],
+            ]),
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?page=2' => Http::response([], 500),
+            'https://manage.runcloud.io/api/v3/servers/999/webapps?search=other.com' => Http::response(['data' => []]),
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search/index', ['server_ids' => [999]])
+            ->assertOk()
+            ->assertJsonPath('data.complete', false)
+            ->assertJsonPath('data.failed', true)
+            ->assertJsonPath('data.loaded_pages', 1);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/deployments/bulk-search', ['domains' => ['other.com'], 'server_ids' => [999]])
+            ->assertOk()
+            ->assertJsonPath('data.missing', ['other.com']);
+
+        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'search=other.com'));
     }
 
     public function test_admin_can_access_bulk_delete_page(): void

@@ -21,6 +21,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class DeploymentController extends Controller
 {
+    /** Keeps each index request well under the proxy timeout (about 1.1s per page). */
+    private const INDEX_PAGES_PER_REQUEST = 15;
+
     public function __construct(
         private DeploymentLifecycleService $lifecycleService,
         private DeploymentStatisticsService $statisticsService,
@@ -162,6 +165,44 @@ class DeploymentController extends Controller
         ], 202);
     }
 
+    /**
+     * Load more of the selected servers' web app lists. The page calls this until complete.
+     */
+    public function bulkSearchIndex(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'server_ids' => ['required', 'array', 'min:1'],
+            'server_ids.*' => ['integer'],
+        ]);
+
+        $remainingPages = self::INDEX_PAGES_PER_REQUEST;
+        $complete = true;
+        $failed = false;
+        $loadedPages = 0;
+        $totalPages = 0;
+
+        foreach (array_unique($validated['server_ids']) as $serverId) {
+            $progress = $failed
+                ? $this->runCloudService->buildWebAppIndex((int) $serverId, 0)
+                : $this->runCloudService->buildWebAppIndex((int) $serverId, $remainingPages);
+
+            $remainingPages -= $progress['fetched_pages'];
+            $complete = $complete && $progress['complete'];
+            $failed = $failed || $progress['failed'];
+            $loadedPages += $progress['loaded_pages'];
+            $totalPages += $progress['total_pages'] ?? 0;
+        }
+
+        return response()->json([
+            'data' => [
+                'complete' => $complete,
+                'failed' => $failed,
+                'loaded_pages' => $loadedPages,
+                'total_pages' => $totalPages,
+            ],
+        ]);
+    }
+
     public function bulkSearchDomains(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -169,7 +210,10 @@ class DeploymentController extends Controller
             'domains.*' => ['required', 'string', 'max:255'],
             'server_ids' => ['sometimes', 'array'],
             'server_ids.*' => ['integer'],
+            'deep' => ['sometimes', 'boolean'],
         ]);
+
+        $deep = (bool) ($validated['deep'] ?? false);
 
         $rawDomains = collect($validated['domains'])
             ->map(fn ($domain) => strtolower(trim((string) $domain)))
@@ -182,6 +226,7 @@ class DeploymentController extends Controller
                 'data' => [
                     'found' => [],
                     'missing' => [],
+                    'failed' => [],
                 ],
             ]);
         }
@@ -207,6 +252,7 @@ class DeploymentController extends Controller
         // 2. For domains not found in database, check RunCloud servers
         $runCloudFound = collect();
         $stillMissing = collect();
+        $lookupFailed = collect();
 
         if ($missingFromDb->isNotEmpty()) {
             // Check all servers registered in database as well as live RunCloud servers
@@ -241,12 +287,14 @@ class DeploymentController extends Controller
                 $appName = $this->runCloudService->generateWebAppName($domain);
                 $matchedApp = null;
                 $matchedServer = null;
+                $hadLookupError = false;
 
                 foreach ($servers as $server) {
                     try {
-                        $app = $this->runCloudService->findWebApplicationByDomain(
+                        $app = $this->runCloudService->locateWebApplication(
                             (int) $server->server_id,
-                            $domain
+                            $domain,
+                            $deep,
                         );
 
                         if ($app) {
@@ -258,7 +306,8 @@ class DeploymentController extends Controller
                             break;
                         }
                     } catch (\Throwable $e) {
-                        // Continue to next server if one fails
+                        // Keep checking the other servers, but this one's answer is unknown.
+                        $hadLookupError = true;
                     }
                 }
 
@@ -288,6 +337,8 @@ class DeploymentController extends Controller
                         'created_at' => $matchedApp['created_at'] ?? now()->toIso8601String(),
                         'updated_at' => $matchedApp['updated_at'] ?? now()->toIso8601String(),
                     ]);
+                } elseif ($hadLookupError) {
+                    $lookupFailed->push($domain);
                 } else {
                     $stillMissing->push($domain);
                 }
@@ -300,6 +351,7 @@ class DeploymentController extends Controller
             'data' => [
                 'found' => $allFound,
                 'missing' => $stillMissing->values(),
+                'failed' => $lookupFailed->values(),
             ],
         ]);
     }

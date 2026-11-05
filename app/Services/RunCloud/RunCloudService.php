@@ -249,6 +249,19 @@ class RunCloudService
         return $this->webAppService->findWebApplicationByDomain($serverId, $domain);
     }
 
+    /**
+     * @return array{complete: bool, failed: bool, fetched_pages: int, loaded_pages: int, total_pages: ?int}
+     */
+    public function buildWebAppIndex(int $serverId, int $maxPages): array
+    {
+        return $this->webAppService->buildWebAppIndex($serverId, $maxPages);
+    }
+
+    public function locateWebApplication(int $serverId, string $domain, bool $deep = false): ?array
+    {
+        return $this->webAppService->locateWebApplication($serverId, $domain, $deep);
+    }
+
     public function deleteWebApplication(int $serverId, int $webAppId): void
     {
         $this->webAppService->deleteWebApplication($serverId, $webAppId);
