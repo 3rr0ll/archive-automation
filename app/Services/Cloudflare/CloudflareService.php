@@ -2,8 +2,6 @@
 
 namespace App\Services\Cloudflare;
 
-use Exception;
-
 /**
  * Unified Cloudflare facade/coordinator.
  * Delegates worker operations to CloudflareWorkerService,
@@ -12,8 +10,11 @@ use Exception;
 class CloudflareService
 {
     public const WORKER_WWW_MAIN = CloudflareWorkerService::WORKER_WWW_MAIN;
+
     public const WORKER_WWW_REDIRECT = CloudflareWorkerService::WORKER_WWW_REDIRECT;
+
     public const WORKER_ROOT_MAIN = CloudflareWorkerService::WORKER_ROOT_MAIN;
+
     public const WORKER_ROOT_REDIRECT = CloudflareWorkerService::WORKER_ROOT_REDIRECT;
 
     public function __construct(

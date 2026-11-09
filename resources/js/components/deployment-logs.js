@@ -3,6 +3,10 @@
 import {
     fetchDeployment,
     fetchDeploymentLogs,
+    fetchDeploymentSubdomainFolders,
+    fetchDeploymentSubdomainHtaccessStatus,
+    previewDeploymentSubdomainHtaccess,
+    applyDeploymentSubdomainHtaccess,
     retryDeployment,
     cancelDeployment,
     deleteDeployment,
@@ -22,6 +26,23 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
         isCancelling: false,
         isDeleting: false,
         autoScroll: true,
+        subdomainFolders: [],
+        allSubdomainFolders: [],
+        selectedSubdomainFolders: [],
+        configuredSubdomains: [],
+        htaccessStatusLoaded: false,
+        isLoadingSubdomainFolders: false,
+        isApplyingHtaccess: false,
+        isPreviewingHtaccess: false,
+        showHtaccessPreview: false,
+        htaccessPreviewData: null,
+        htaccessFeedback: null,
+        subdomainFoldersMeta: {
+            current_page: 1,
+            last_page: 1,
+            per_page: 10,
+            total: 0,
+        },
 
         async init() {
             await this.loadData();
@@ -47,11 +68,13 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             try {
                 const [deploymentRes, logsRes] = await Promise.all([
                     fetchDeployment(this.deploymentId),
-                    fetchDeploymentLogs(this.deploymentId, { per_page: 100, sort_direction: 'asc' })
+                    fetchDeploymentLogs(this.deploymentId, { per_page: 100, sort_direction: 'asc' }),
                 ]);
 
                 this.deployment = deploymentRes.data || deploymentRes;
                 this.logs = logsRes.data || logsRes || [];
+
+                await this.loadSubdomainFolders(this.subdomainFoldersMeta.current_page || 1);
 
                 if (this.autoScroll) {
                     this.$nextTick(() => {
@@ -70,8 +93,185 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             }
         },
 
+        async loadSubdomainFolders(page = 1) {
+            this.isLoadingSubdomainFolders = true;
+            try {
+                const response = await fetchDeploymentSubdomainFolders(this.deploymentId, {
+                    page,
+                    per_page: this.subdomainFoldersMeta.per_page || 10,
+                });
+
+                this.subdomainFolders = response.data || [];
+                this.allSubdomainFolders = response.all_folders || [];
+                this.subdomainFoldersMeta = {
+                    current_page: response.meta?.current_page ?? page,
+                    last_page: response.meta?.last_page ?? 1,
+                    per_page: response.meta?.per_page ?? 10,
+                    total: response.meta?.total ?? 0,
+                };
+
+                if (this.subdomainFoldersMeta.total > 0 && !this.htaccessStatusLoaded) {
+                    await this.loadHtaccessStatus();
+                }
+            } catch (error) {
+                console.error('Failed to load subdomain folders:', error);
+                if (window.toast) {
+                    window.toast.error(error.message || 'Failed to load subdomain folders.');
+                }
+            } finally {
+                this.isLoadingSubdomainFolders = false;
+            }
+        },
+
+        async loadHtaccessStatus() {
+            try {
+                const res = await fetchDeploymentSubdomainHtaccessStatus(this.deploymentId);
+                if (res?.data) {
+                    this.configuredSubdomains = res.data.configured_subdomains || [];
+                    this.htaccessStatusLoaded = true;
+
+                    // If user has not modified selection yet, pre-check subdomains currently in .htaccess
+                    if (this.selectedSubdomainFolders.length === 0 && this.configuredSubdomains.length > 0) {
+                        this.selectedSubdomainFolders = [...this.configuredSubdomains];
+                    }
+                }
+            } catch (e) {
+                // Ignore silent status check errors
+                console.warn('Could not inspect .htaccess:', e);
+            }
+        },
+
+        getSubdomainLabel(folderName) {
+            if (!folderName) return '';
+            const name = String(typeof folderName === 'object' ? folderName.name : folderName).trim().toLowerCase();
+            return name.endsWith('-sub') ? name.slice(0, -4) : name;
+        },
+
+        isFolderSelected(folder) {
+            const label = this.getSubdomainLabel(folder);
+            return this.selectedSubdomainFolders.includes(label);
+        },
+
+        toggleFolder(folder) {
+            const label = this.getSubdomainLabel(folder);
+            if (this.selectedSubdomainFolders.includes(label)) {
+                this.selectedSubdomainFolders = this.selectedSubdomainFolders.filter(item => item !== label);
+            } else {
+                this.selectedSubdomainFolders.push(label);
+            }
+        },
+
+        get availableSubdomainLabels() {
+            const list = this.allSubdomainFolders && this.allSubdomainFolders.length > 0
+                ? this.allSubdomainFolders
+                : this.subdomainFolders.map(f => f.name);
+            return Array.from(new Set(list.map(f => this.getSubdomainLabel(f)))).filter(Boolean);
+        },
+
+        get isAllSubdomainsSelected() {
+            const all = this.availableSubdomainLabels;
+            return all.length > 0 && all.every(label => this.selectedSubdomainFolders.includes(label));
+        },
+
+        get isSubdomainsIndeterminate() {
+            const all = this.availableSubdomainLabels;
+            const count = all.filter(label => this.selectedSubdomainFolders.includes(label)).length;
+            return count > 0 && count < all.length;
+        },
+
+        toggleSelectAll() {
+            if (this.isAllSubdomainsSelected) {
+                this.selectedSubdomainFolders = [];
+            } else {
+                this.selectedSubdomainFolders = [...this.availableSubdomainLabels];
+            }
+        },
+
+        isConfiguredInHtaccess(folder) {
+            const label = this.getSubdomainLabel(folder);
+            return this.configuredSubdomains.includes(label);
+        },
+
+        async previewHtaccessRules() {
+            if (this.selectedSubdomainFolders.length === 0) return;
+            this.isPreviewingHtaccess = true;
+            try {
+                const res = await previewDeploymentSubdomainHtaccess(this.deploymentId, this.selectedSubdomainFolders);
+                this.htaccessPreviewData = res.data;
+                this.showHtaccessPreview = true;
+            } catch (error) {
+                console.error('Failed to preview .htaccess rules:', error);
+                if (window.toast) {
+                    window.toast.error(error.message || 'Failed to generate .htaccess preview.');
+                }
+            } finally {
+                this.isPreviewingHtaccess = false;
+            }
+        },
+
+        async applyHtaccessRules() {
+            if (this.selectedSubdomainFolders.length === 0 || this.isApplyingHtaccess) return;
+            this.isApplyingHtaccess = true;
+            this.htaccessFeedback = null;
+            try {
+                const res = await applyDeploymentSubdomainHtaccess(this.deploymentId, this.selectedSubdomainFolders);
+                const data = res.data || {};
+                this.configuredSubdomains = data.configured_subdomains || [...this.selectedSubdomainFolders];
+                this.htaccessFeedback = {
+                    type: 'success',
+                    message: res.message || 'Subdomain routing rules applied successfully.',
+                    added: data.added || [],
+                    updated: data.updated || [],
+                    removed: data.removed || [],
+                    backup_file: data.backup_file || '',
+                    notice: data.notice || null,
+                    runcloud: data.runcloud || null,
+                };
+                this.showHtaccessPreview = false;
+                if (window.toast) {
+                    window.toast.success(res.message || 'Subdomain routing rules applied.');
+                }
+                // Reload logs to display the new configuring_subdomain_htaccess step
+                await this.loadData(false);
+            } catch (error) {
+                console.error('Failed to apply .htaccess rules:', error);
+                this.htaccessFeedback = {
+                    type: 'error',
+                    message: error.message || 'Failed to apply .htaccess rules.',
+                };
+                if (window.toast) {
+                    window.toast.error(error.message || 'Failed to apply .htaccess rules.');
+                }
+            } finally {
+                this.isApplyingHtaccess = false;
+            }
+        },
+
+        async goToSubdomainFoldersPage(page) {
+            if (page < 1 || page > this.subdomainFoldersMeta.last_page || this.isLoadingSubdomainFolders) {
+                return;
+            }
+
+            await this.loadSubdomainFolders(page);
+        },
+
+        get subdomainFoldersFrom() {
+            if (this.subdomainFoldersMeta.total === 0) {
+                return 0;
+            }
+
+            return ((this.subdomainFoldersMeta.current_page - 1) * this.subdomainFoldersMeta.per_page) + 1;
+        },
+
+        get subdomainFoldersTo() {
+            return Math.min(
+                this.subdomainFoldersMeta.current_page * this.subdomainFoldersMeta.per_page,
+                this.subdomainFoldersMeta.total,
+            );
+        },
+
         get filteredLogs() {
-            let list = [...this.logs];
+            let list = this.logs.filter(l => l.step_name !== 'detecting_subdomains');
 
             if (this.statusFilter !== 'all') {
                 list = list.filter(l => l.status === this.statusFilter);
@@ -79,7 +279,7 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
 
             if (this.searchQuery.trim() !== '') {
                 const q = this.searchQuery.toLowerCase().trim();
-                list = list.filter(l => 
+                list = list.filter(l =>
                     (l.message && l.message.toLowerCase().includes(q)) ||
                     (l.step_name && l.step_name.toLowerCase().includes(q))
                 );

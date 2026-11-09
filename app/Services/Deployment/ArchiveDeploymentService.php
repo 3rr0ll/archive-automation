@@ -386,5 +386,35 @@ class ArchiveDeploymentService
                 $result['entries_extracted'],
             ),
         ]);
+
+        $this->logDetectedSubdomainFolders($deployment, $result['subdomain_folders'] ?? []);
+    }
+
+    /** @param list<string> $subdomainFolders */
+    private function logDetectedSubdomainFolders(Deployment $deployment, array $subdomainFolders): void
+    {
+        if ($subdomainFolders === []) {
+            return;
+        }
+
+        $alreadyLogged = $deployment->logs()
+            ->where('step_name', 'detecting_subdomains')
+            ->exists();
+
+        if ($alreadyLogged) {
+            return;
+        }
+
+        foreach ($subdomainFolders as $folderName) {
+            if (! is_string($folderName) || $folderName === '') {
+                continue;
+            }
+
+            $deployment->logs()->create([
+                'step_name' => 'detecting_subdomains',
+                'status' => 'warning',
+                'message' => $folderName,
+            ]);
+        }
     }
 }

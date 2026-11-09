@@ -106,6 +106,50 @@ class AdminDeploymentManagementTest extends TestCase
             ->assertJsonPath('data.0.message', 'Latest error.');
     }
 
+    public function test_deployment_logs_exclude_detected_subdomain_folders_by_default(): void
+    {
+        $deployment = $this->deployment();
+        $deployment->logs()->create(['step_name' => 'download', 'status' => 'success', 'message' => 'Downloaded.']);
+        $deployment->logs()->create(['step_name' => 'detecting_subdomains', 'status' => 'warning', 'message' => 'blog-sub']);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/deployments/{$deployment->id}/logs")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.step_name', 'download');
+    }
+
+    public function test_admin_can_paginate_detected_subdomain_folders(): void
+    {
+        $deployment = $this->deployment();
+        $deployment->logs()->create(['step_name' => 'download', 'status' => 'success', 'message' => 'Downloaded.']);
+
+        foreach (['alpha-sub', 'beta-sub', 'gamma-sub'] as $folder) {
+            $deployment->logs()->create([
+                'step_name' => 'detecting_subdomains',
+                'status' => 'warning',
+                'message' => $folder,
+            ]);
+        }
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/deployments/{$deployment->id}/subdomain-folders?per_page=2&page=1")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 2)
+            ->assertJsonPath('data.0.name', 'alpha-sub')
+            ->assertJsonPath('data.1.name', 'beta-sub');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/deployments/{$deployment->id}/subdomain-folders?per_page=2&page=2")
+            ->assertOk()
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'gamma-sub');
+    }
+
     public function test_admin_can_bulk_cancel_eligible_deployments(): void
     {
         $pending = $this->deployment(['status' => 'pending']);

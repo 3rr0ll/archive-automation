@@ -19,10 +19,6 @@ class RunCloudSslService
      * 1. Enable Advanced SSL & AutoSSL on the web application.
      * 2. Deploy Let's Encrypt certificate to the domain using dns-01 via Cloudflare externalApi.
      *
-     * @param  int  $serverId
-     * @param  int  $appId
-     * @param  string  $domain
-     * @param  int|null  $domainId
      * @return array<string, mixed>
      *
      * @throws Exception

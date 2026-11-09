@@ -2,6 +2,7 @@
 
 namespace App\Services\GoogleSearchConsole;
 
+use App\Models\EnvironmentVariable;
 use App\Models\GoogleSearchConsoleAccount;
 use App\Models\User;
 use App\Services\ApiUsage\ApiUsageRecorder;
@@ -190,7 +191,7 @@ class GoogleSearchConsoleService
 
         $validTypes = ['URL_UPDATED', 'URL_DELETED'];
         if (! in_array($type, $validTypes, true)) {
-            throw new RuntimeException("Invalid indexing type '{$type}'. Allowed types: " . implode(', ', $validTypes));
+            throw new RuntimeException("Invalid indexing type '{$type}'. Allowed types: ".implode(', ', $validTypes));
         }
 
         $url = trim($url);
@@ -359,7 +360,7 @@ class GoogleSearchConsoleService
     public function getEnvironmentValue(string $key, mixed $fallback = null): mixed
     {
         try {
-            $variable = \App\Models\EnvironmentVariable::query()
+            $variable = EnvironmentVariable::query()
                 ->where('key', $key)
                 ->latest('updated_at')
                 ->latest('id')
@@ -368,7 +369,7 @@ class GoogleSearchConsoleService
             if ($variable !== null && filled($variable->value)) {
                 return $variable->value;
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // DB may not be reachable or table not migrated yet
         }
 
@@ -398,6 +399,7 @@ class GoogleSearchConsoleService
     public function hasOAuthEnvFallback(): bool
     {
         $refreshToken = $this->getEnvironmentValue('GOOGLE_REFRESH_TOKEN', config('services.google_search_console.refresh_token'));
+
         return $this->hasOAuthConfiguration() && filled($refreshToken);
     }
 
@@ -422,8 +424,7 @@ class GoogleSearchConsoleService
         string $code,
         ?int $userId = null,
         ?string $state = null,
-    ): GoogleSearchConsoleAccount
-    {
+    ): GoogleSearchConsoleAccount {
         $userId ??= $this->userIdFromOAuthState($state);
         if ($userId === null) {
             throw new RuntimeException('The Google OAuth session expired. Start the connection again while signed in.');
@@ -433,7 +434,7 @@ class GoogleSearchConsoleService
         $token = $client->fetchAccessTokenWithAuthCode($code);
 
         if (isset($token['error'])) {
-            throw new RuntimeException('Google authorization failed: ' . ($token['error_description'] ?? $token['error']));
+            throw new RuntimeException('Google authorization failed: '.($token['error_description'] ?? $token['error']));
         }
 
         $client->setAccessToken($token);
@@ -496,7 +497,7 @@ class GoogleSearchConsoleService
         $token = $client->fetchAccessTokenWithRefreshToken($refreshToken);
 
         if (isset($token['error'])) {
-            throw new RuntimeException('Failed to exchange refresh token: ' . ($token['error_description'] ?? $token['error']));
+            throw new RuntimeException('Failed to exchange refresh token: '.($token['error_description'] ?? $token['error']));
         }
 
         $token['refresh_token'] = $refreshToken;

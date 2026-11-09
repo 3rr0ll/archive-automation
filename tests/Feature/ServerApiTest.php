@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class ServerApiTest extends TestCase
@@ -40,8 +40,8 @@ class ServerApiTest extends TestCase
 
     public function test_admin_can_sync_servers_from_runcloud(): void
     {
-        \Illuminate\Support\Facades\Http::fake([
-            'https://manage.runcloud.io/api/v3/servers' => \Illuminate\Support\Facades\Http::response([
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers' => Http::response([
                 'data' => [
                     [
                         'id' => 12345,
@@ -87,8 +87,8 @@ class ServerApiTest extends TestCase
             'is_active' => true,
         ]);
 
-        \Illuminate\Support\Facades\Http::fake([
-            'https://manage.runcloud.io/api/v3/servers' => \Illuminate\Support\Facades\Http::response([
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers' => Http::response([
                 'data' => [[
                     'id' => 12345,
                     'name' => 'UPDATED NAME',

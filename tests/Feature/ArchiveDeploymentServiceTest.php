@@ -128,6 +128,65 @@ class ArchiveDeploymentServiceTest extends TestCase
         );
     }
 
+    public function test_it_logs_each_detected_subdomain_folder_after_extraction(): void
+    {
+        Storage::fake('local');
+        Server::factory()->create([
+            'server_id' => 123,
+            'ip_address' => '192.0.2.10',
+        ]);
+        $deployment = $this->deployment(['id' => 1]);
+        $archiveService = Mockery::mock(InternetArchiveService::class);
+        $archiveService->shouldReceive('downloadArchiveFromUrl')
+            ->once()
+            ->andReturnUsing(function (string $url, string $destination): bool {
+                if (! is_dir(dirname($destination))) {
+                    mkdir(dirname($destination), 0755, true);
+                }
+                file_put_contents($destination, 'zip contents');
+
+                return true;
+            });
+        $runCloudService = Mockery::mock(RunCloudService::class);
+        $runCloudService->shouldReceive('createEmptyWebApplication')
+            ->once()
+            ->andReturn(['success' => true, 'web_app_id' => 501, 'web_app_name' => 'example']);
+        $cloudflareWorkerService = Mockery::mock(CloudflareWorkerService::class);
+        $cloudflareWorkerService->shouldReceive('changeWorkers')->once()->andReturn(['routes' => []]);
+        $sftpArchiveService = Mockery::mock(SftpArchiveService::class);
+        $sftpArchiveService->shouldReceive('uploadAndExtract')->once()->andReturn([
+            'entries_extracted' => 5,
+            'archive_deleted' => true,
+            'archive_uploaded' => true,
+            'deleted_index_files' => [],
+            'subdomain_folders' => ['blog-sub', 'shop-sub'],
+        ]);
+
+        $this->createService(
+            $archiveService,
+            $runCloudService,
+            $cloudflareWorkerService,
+            $sftpArchiveService,
+        )->deploy($deployment);
+
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'detecting_subdomains',
+            'status' => 'warning',
+            'message' => 'blog-sub',
+        ]);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'detecting_subdomains',
+            'status' => 'warning',
+            'message' => 'shop-sub',
+        ]);
+        $this->assertSame(
+            2,
+            $deployment->logs()->where('step_name', 'detecting_subdomains')->count(),
+        );
+    }
+
     public function test_it_records_the_provider_failure_message_for_the_frontend(): void
     {
         Storage::fake('local');

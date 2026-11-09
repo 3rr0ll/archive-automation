@@ -20,7 +20,10 @@
         </div>
 
         <!-- Build Logs Terminal Feed & Filters Container (Fills remaining viewport space) -->
-        <x-build-logs.terminal />
+        <div class="flex-1 min-h-0 flex flex-col space-y-4">
+            <x-build-logs.terminal />
+            <x-build-logs.subdomain-folders />
+        </div>
     </div>
 </div>
 @endsection

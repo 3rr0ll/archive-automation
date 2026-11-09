@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\EnvironmentVariable;
 use App\Services\EnvironmentVariable\EnvironmentVariableService;
+use Illuminate\Http\Request;
 
 class EnvironmentVariableController extends Controller
 {
@@ -24,8 +24,10 @@ class EnvironmentVariableController extends Controller
             } else {
                 $env->makeVisible('value');
             }
+
             return $env;
         });
+
         return response()->json($variables);
     }
 
@@ -36,7 +38,7 @@ class EnvironmentVariableController extends Controller
             'value' => 'required|string',
             'type' => 'required|string|in:secret,config',
             'environments' => 'nullable|string',
-            'note' => 'nullable|string'
+            'note' => 'nullable|string',
         ]);
 
         $env = $this->service->create($validated, auth()->id());
@@ -58,6 +60,7 @@ class EnvironmentVariableController extends Controller
         } else {
             $environmentVariable->makeVisible('value');
         }
+
         return response()->json($environmentVariable);
     }
 
@@ -69,7 +72,7 @@ class EnvironmentVariableController extends Controller
     public function update(Request $request, EnvironmentVariable $environmentVariable)
     {
         $validated = $request->validate([
-            'key' => 'required|string|max:255|unique:environment_variables,key,' . $environmentVariable->id,
+            'key' => 'required|string|max:255|unique:environment_variables,key,'.$environmentVariable->id,
             'value' => 'nullable|string',
             'type' => 'required|string|in:secret,config',
             'environments' => 'nullable|string',
@@ -79,7 +82,7 @@ class EnvironmentVariableController extends Controller
         // If secret and value is empty/not provided, preserve existing value
         if ($environmentVariable->type === 'secret' && ($validated['value'] === null || $validated['value'] === '')) {
             unset($validated['value']);
-        } elseif (!isset($validated['value'])) {
+        } elseif (! isset($validated['value'])) {
             $validated['value'] = '';
         }
 
@@ -98,6 +101,7 @@ class EnvironmentVariableController extends Controller
     public function destroy(EnvironmentVariable $environmentVariable)
     {
         $this->service->delete($environmentVariable);
+
         return response()->json(['success' => true]);
     }
 }

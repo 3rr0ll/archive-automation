@@ -3,9 +3,11 @@
 use App\Http\Controllers\Api\ApiUsageController;
 use App\Http\Controllers\Api\ArchiveController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\ChunkedArchiveUploadController;
+use App\Http\Controllers\Api\CloudflareController;
 use App\Http\Controllers\Api\DeploymentController;
+use App\Http\Controllers\Api\DeploymentFileEditorController;
+use App\Http\Controllers\Api\DeploymentSubdomainHtaccessController;
 use App\Http\Controllers\Api\EnvironmentVariableController;
 use App\Http\Controllers\Api\GoogleSearchConsoleAccountController;
 use App\Http\Controllers\Api\GoogleSearchConsoleController;
@@ -26,7 +28,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
-
 
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
 
@@ -51,12 +52,19 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/deployments/statistics', [DeploymentController::class, 'statistics'])->middleware('admin')->name('deployments.statistics');
     Route::get('/deployments/{deployment}', [DeploymentController::class, 'adminShow'])->name('deployments.show');
     Route::get('/deployments/{deployment}/logs', [DeploymentController::class, 'logs'])->name('deployments.logs');
+    Route::get('/deployments/{deployment}/subdomain-folders', [DeploymentController::class, 'subdomainFolders'])->name('deployments.subdomain-folders');
+    Route::get('/deployments/{deployment}/subdomain-htaccess', [DeploymentSubdomainHtaccessController::class, 'status'])->name('deployments.subdomain-htaccess.status');
+    Route::post('/deployments/{deployment}/subdomain-htaccess/preview', [DeploymentSubdomainHtaccessController::class, 'preview'])->name('deployments.subdomain-htaccess.preview');
+    Route::post('/deployments/{deployment}/subdomain-htaccess/apply', [DeploymentSubdomainHtaccessController::class, 'apply'])->name('deployments.subdomain-htaccess.apply');
+    Route::get('/deployments/{deployment}/subdomain-htaccess', [DeploymentSubdomainHtaccessController::class, 'status'])->name('deployments.subdomain-htaccess.status');
+    Route::post('/deployments/{deployment}/subdomain-htaccess/preview', [DeploymentSubdomainHtaccessController::class, 'preview'])->name('deployments.subdomain-htaccess.preview');
+    Route::post('/deployments/{deployment}/subdomain-htaccess/apply', [DeploymentSubdomainHtaccessController::class, 'apply'])->name('deployments.subdomain-htaccess.apply');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
     Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
-    Route::get('/deployments/{deployment}/files/tree', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'listDirectory']);
-    Route::get('/deployments/{deployment}/files/read', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'readFile']);
-    Route::post('/deployments/{deployment}/files/write', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'writeFile']);
-    Route::post('/deployments/{deployment}/files/create', [\App\Http\Controllers\Api\DeploymentFileEditorController::class, 'createFile']);
+    Route::get('/deployments/{deployment}/files/tree', [DeploymentFileEditorController::class, 'listDirectory']);
+    Route::get('/deployments/{deployment}/files/read', [DeploymentFileEditorController::class, 'readFile']);
+    Route::post('/deployments/{deployment}/files/write', [DeploymentFileEditorController::class, 'writeFile']);
+    Route::post('/deployments/{deployment}/files/create', [DeploymentFileEditorController::class, 'createFile']);
 });
 
 // Admin API Routes (Requires Admin Role)
