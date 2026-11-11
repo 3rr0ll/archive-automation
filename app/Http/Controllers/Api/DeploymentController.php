@@ -437,12 +437,15 @@ class DeploymentController extends Controller
     {
         $deployment = $this->lifecycleService->submit($request->user(), $request->validated());
         $isUpload = $deployment->archive_source === 'upload';
+        $isRedirect = $deployment->deployment_type === 'redirect';
 
         return response()->json([
             'data' => new DeploymentResource($deployment->load('server')),
-            'message' => $isUpload
-                ? 'Uploaded ZIP accepted and recovery queued.'
-                : 'Recovery accepted and waiting for the Wayback ZIP.',
+            'message' => $isRedirect
+                ? 'Redirect deployment queued (Cloudflare + Search Console).'
+                : ($isUpload
+                    ? 'Uploaded ZIP accepted and recovery queued.'
+                    : 'Recovery accepted and waiting for the Wayback ZIP.'),
         ], 202);
     }
 

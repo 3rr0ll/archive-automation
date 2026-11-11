@@ -36,12 +36,14 @@ export function dashboardOverview(
 
         // Drawer Form state
         form: {
+            deployment_type: 'full',
             domain: '',
             server_id: '',
             version: 'non-www',
             source_type: 'url',
             archive_url: '',
             archiveFile: null,
+            has_sitemap: true,
         },
         serverDropdownOpen: false,
         get selectedServer() {
@@ -329,6 +331,19 @@ export function dashboardOverview(
             if (deployment.status === 'failed') return 100;
 
             const step = deployment.current_step || '';
+            const isRedirect = deployment.deployment_type === 'redirect' || deployment.archive_source === 'redirect';
+            if (isRedirect) {
+                switch (step) {
+                    case 'configuring_cloudflare_workers':
+                        return 45;
+                    case 'registering_search_console':
+                    case 'submitting_to_google_search_console':
+                        return 85;
+                    default:
+                        return deployment.status === 'processing' ? 30 : 10;
+                }
+            }
+
             switch (step) {
                 case 'downloading_archive':
                 case 'preparing_archive':
@@ -413,12 +428,14 @@ export function dashboardOverview(
                 : (this.servers.length > 0 ? this.servers[0].server_id : '');
 
             this.form = {
+                deployment_type: 'full',
                 domain: '',
                 server_id: defaultServerId,
                 version: 'non-www',
                 source_type: 'url',
                 archive_url: '',
                 archiveFile: null,
+                has_sitemap: true,
             };
         },
 
@@ -454,6 +471,43 @@ export function dashboardOverview(
                 console.warn('[submitDeployment] Validation failed: domain is required');
                 this.errors = { domain: ['Domain is required.'] };
                 this.isSubmitting = false;
+                return;
+            }
+
+            // Redirect-only mode: skips server provisioning and archive uploads
+            if (this.form.deployment_type === 'redirect') {
+                try {
+                    const payload = {
+                        deployment_type: 'redirect',
+                        domain: this.form.domain.trim(),
+                        version: this.form.version,
+                        has_sitemap: Boolean(this.form.has_sitemap),
+                    };
+
+                    console.log('[submitDeployment] Sending POST /api/deployments redirect payload:', payload);
+                    const response = await createDeployment(payload);
+                    console.log('[submitDeployment] Received redirect response:', response);
+
+                    const created = response.data || response;
+                    if (created && created.id) {
+                        this.deployments.unshift(created);
+                    } else {
+                        await this.loadDeployments(false);
+                    }
+
+                    this.closeModal();
+                    window.toast?.success('Redirect deployment queued successfully.');
+                } catch (error) {
+                    console.error('Redirect deployment error:', error);
+                    if (error.status === 422 && error.errors) {
+                        this.errors = error.errors;
+                    } else {
+                        this.errors = { general: error.message || 'Failed to trigger redirect deployment.' };
+                    }
+                    window.toast?.error(error.message || 'Failed to start redirect deployment.');
+                } finally {
+                    this.isSubmitting = false;
+                }
                 return;
             }
 

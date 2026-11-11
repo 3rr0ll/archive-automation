@@ -47,6 +47,10 @@ class ArchiveDeploymentService
         }
 
         try {
+            if (($deployment->deployment_type ?? 'full') === 'redirect' || $deployment->archive_source === 'redirect') {
+                return $this->performRedirectDeployment($deployment);
+            }
+
             $version = $deployment->version instanceof \BackedEnum
                 ? $deployment->version->value
                 : (string) $deployment->version;
@@ -261,6 +265,90 @@ class ArchiveDeploymentService
         }
     }
 
+    private function performRedirectDeployment(Deployment $deployment): Deployment
+    {
+        $version = $deployment->version instanceof \BackedEnum
+            ? $deployment->version->value
+            : (string) $deployment->version;
+
+        $this->transition($deployment, 'configuring_cloudflare_workers', 'Assigning Cloudflare redirect Worker routes.', DeploymentStatus::Processing);
+
+        // Configure Cloudflare Worker redirect routes:
+        // If version is www: both www and non-www route to CLOUDFLARE_WORKER_WWW_REDIRECT
+        // If version is non-www: both non-www and www route to CLOUDFLARE_WORKER_ROOT_REDIRECT
+        $this->cloudflareWorkerService->changeRedirectOnlyWorkers($deployment->domain, $version);
+
+        $deployment->logs()->create([
+            'step_name' => 'configuring_cloudflare_workers',
+            'status' => 'success',
+            'message' => sprintf(
+                'Cloudflare Worker redirect routes configured for %s version.',
+                $version
+            ),
+        ]);
+
+        $deployment->refresh();
+        if ($deployment->status === DeploymentStatus::Cancelled) {
+            return $deployment;
+        }
+
+        if ($this->searchConsoleService->isEnabled()) {
+            $hasSitemap = (bool) ($deployment->has_sitemap ?? true);
+            $this->transition(
+                $deployment,
+                'registering_search_console',
+                $hasSitemap
+                    ? 'Verifying the domain and submitting its sitemap to Google Search Console.'
+                    : 'Verifying the domain with Google Search Console (sitemap skipped).'
+            );
+
+            try {
+                $sitemapHost = $version === 'www'
+                    ? 'www.'.$deployment->domain
+                    : $deployment->domain;
+
+                $this->searchConsoleService->registerDomain(
+                    domain: $deployment->domain,
+                    sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
+                    verifyOwnership: true,
+                    requestIndexing: true,
+                    submitSitemap: $hasSitemap,
+                );
+
+                $deployment->logs()->create([
+                    'step_name' => 'registering_search_console',
+                    'status' => 'success',
+                    'message' => $hasSitemap
+                        ? 'Google Search Console registration and sitemap submission completed.'
+                        : 'Google Search Console registration completed (sitemap submission skipped).',
+                ]);
+            } catch (Throwable $exception) {
+                Log::warning('Google Search Console registration failed for redirect deployment.', [
+                    'deployment_id' => $deployment->id,
+                    'domain' => $deployment->domain,
+                    'error' => $exception->getMessage(),
+                ]);
+                $deployment->logs()->create([
+                    'step_name' => 'registering_search_console',
+                    'status' => 'error',
+                    'message' => 'Google Search Console registration failed: '.$exception->getMessage(),
+                ]);
+            }
+        }
+
+        $deployment->update([
+            'status' => DeploymentStatus::Completed,
+            'current_step' => 'completed',
+        ]);
+        $deployment->logs()->create([
+            'step_name' => 'completed',
+            'status' => 'success',
+            'message' => 'Redirect deployment completed successfully (RunCloud skipped, Cloudflare and Search Console configured).',
+        ]);
+
+        return $deployment->refresh();
+    }
+
     private function failureMessage(Throwable $exception): string
     {
         $message = trim($exception->getMessage());
@@ -293,6 +381,7 @@ class ArchiveDeploymentService
                 sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
                 verifyOwnership: true,
                 requestIndexing: true,
+                submitSitemap: (bool) ($deployment->has_sitemap ?? true),
             );
             $deployment->logs()->create([
                 'step_name' => 'registering_search_console',

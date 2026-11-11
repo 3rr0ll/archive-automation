@@ -308,6 +308,7 @@ class GoogleSearchConsoleService
         string $sitemapUrl = '',
         bool $verifyOwnership = true,
         bool $requestIndexing = true,
+        bool $submitSitemap = true,
     ): array {
         $normalizedDomain = $this->normalizeDomain($domain);
         $sitemapUrl = $sitemapUrl !== '' ? $sitemapUrl : "https://{$normalizedDomain}/sitemap.xml";
@@ -319,10 +320,13 @@ class GoogleSearchConsoleService
             $this->addProperty($normalizedDomain);
         }
 
-        // Give Google time to apply the new property's owner permission before submitting.
-        sleep(self::SITEMAP_INITIAL_DELAY_SECONDS);
+        $sitemap = null;
+        if ($submitSitemap) {
+            // Give Google time to apply the new property's owner permission before submitting.
+            sleep(self::SITEMAP_INITIAL_DELAY_SECONDS);
 
-        $sitemap = $this->submitSitemap($normalizedDomain, $sitemapUrl);
+            $sitemap = $this->submitSitemap($normalizedDomain, $sitemapUrl);
+        }
 
         $indexingResult = null;
         if ($requestIndexing) {
