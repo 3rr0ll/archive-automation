@@ -334,6 +334,14 @@ class DeploymentSubdomainHtaccessTest extends TestCase
 
                 return Http::response([], 400);
             },
+            'https://manage.runcloud.io/api/v3/servers/10/webapps/77/ssl/advanced' => Http::response(['success' => true], 200),
+            'https://manage.runcloud.io/api/v3/servers/10/webapps/77/domains/999/ssl' => function (Request $request) {
+                $this->assertSame('letsencrypt', $request['provider']);
+                $this->assertSame('dns-01', $request['authorizationMethod']);
+                $this->assertFalse($request['enableHttp']);
+
+                return Http::response(['data' => ['id' => 555, 'status' => 'success']], 200);
+            },
         ]);
 
         $response = $this->actingAs($user, 'sanctum')
@@ -358,6 +366,12 @@ class DeploymentSubdomainHtaccessTest extends TestCase
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
             'step_name' => 'configuring_subdomain_runcloud',
+            'status' => 'success',
+        ]);
+
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'configuring_subdomain_ssl',
             'status' => 'success',
         ]);
     }

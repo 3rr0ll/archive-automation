@@ -7,6 +7,7 @@ use App\Http\Requests\DeploymentSubdomainHtaccessApplyRequest;
 use App\Http\Requests\DeploymentSubdomainHtaccessPreviewRequest;
 use App\Models\Deployment;
 use App\Services\Deployment\SubdomainHtaccessService;
+use App\Services\RunCloud\RunCloudSslService;
 use App\Services\RunCloud\RunCloudWebAppService;
 use App\Services\Sftp\SftpFileService;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +19,7 @@ class DeploymentSubdomainHtaccessController extends Controller
     public function __construct(
         private SubdomainHtaccessService $subdomainHtaccessService,
         private RunCloudWebAppService $runCloudWebAppService,
+        private RunCloudSslService $runCloudSslService,
         private SftpFileService $sftpFileService,
     ) {}
 
@@ -162,6 +164,45 @@ class DeploymentSubdomainHtaccessController extends Controller
                         'status' => count($runCloudResult['failed']) > 0 ? 'warning' : 'success',
                         'message' => $runCloudSummary,
                     ]);
+
+                    // Configure SSL for each added subdomain alias (Let's Encrypt dns-01 via Cloudflare externalApi + Server Side HTTPS Redirection)
+                    $sslConfigured = 0;
+                    $sslFailed = 0;
+                    foreach ($runCloudResult['added'] as &$addedSubdomain) {
+                        $subdomainName = $addedSubdomain['subdomain'];
+                        $domainId = $addedSubdomain['id'] ?? null;
+
+                        try {
+                            $this->runCloudSslService->configureAdvancedSsl(
+                                $serverId,
+                                $appId,
+                                $subdomainName,
+                                $domainId,
+                            );
+                            $addedSubdomain['ssl'] = 'configured';
+                            $sslConfigured++;
+                        } catch (Throwable $sslEx) {
+                            Log::warning("RunCloud Advanced SSL failed for subdomain [{$subdomainName}]: {$sslEx->getMessage()}");
+                            $addedSubdomain['ssl'] = 'failed';
+                            $addedSubdomain['ssl_error'] = $sslEx->getMessage();
+                            $sslFailed++;
+                        }
+                    }
+                    unset($addedSubdomain);
+
+                    if (count($runCloudResult['added']) > 0) {
+                        $sslSummary = sprintf(
+                            "Let's Encrypt SSL (dns-01): %d configured, %d failed.",
+                            $sslConfigured,
+                            $sslFailed,
+                        );
+
+                        $deployment->logs()->create([
+                            'step_name' => 'configuring_subdomain_ssl',
+                            'status' => $sslFailed > 0 ? 'warning' : 'success',
+                            'message' => $sslSummary,
+                        ]);
+                    }
                 } else {
                     $runCloudResult = [
                         'added' => [],

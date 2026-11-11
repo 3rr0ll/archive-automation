@@ -119,6 +119,12 @@
                                 <template x-for="item in (htaccessFeedback.runcloud.added || [])" :key="item.subdomain">
                                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-mono">
                                         <strong>+ RunCloud:</strong> <span x-text="item.subdomain"></span>
+                                        <template x-if="item.ssl === 'configured'">
+                                            <span class="ml-1 text-[10px] text-emerald-700 dark:text-emerald-300 font-sans font-medium bg-emerald-200/70 dark:bg-emerald-850 px-1 py-0.2 rounded">SSL Active</span>
+                                        </template>
+                                        <template x-if="item.ssl === 'failed'">
+                                            <span class="ml-1 text-[10px] text-rose-700 dark:text-rose-300 font-sans font-medium bg-rose-200/70 dark:bg-rose-850 px-1 py-0.2 rounded" :title="item.ssl_error">SSL Failed</span>
+                                        </template>
                                     </span>
                                 </template>
 
@@ -341,11 +347,11 @@
                 <!-- RunCloud Subdomain Aliases -->
                 <div class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/40 p-3">
                     <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-semibold text-zinc-900 dark:text-zinc-100">RunCloud Subdomain Aliases</span>
-                        <span class="text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-medium">Cloudflare Proxied • DNS Integration</span>
+                        <span class="text-xs font-semibold text-zinc-900 dark:text-zinc-100">RunCloud Subdomain Aliases & SSL</span>
+                        <span class="text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-medium">Cloudflare Proxied • Let's Encrypt (dns-01)</span>
                     </div>
                     <p class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-2">
-                        Will be added as aliases in RunCloud after .htaccess is applied:
+                        Will be added as aliases in RunCloud with Let's Encrypt SSL deployed after .htaccess is applied:
                     </p>
                     <div class="flex items-center flex-wrap gap-1.5">
                         <template x-for="label in selectedSubdomainFolders" :key="label">
