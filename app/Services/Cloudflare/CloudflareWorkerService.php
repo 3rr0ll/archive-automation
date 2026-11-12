@@ -240,6 +240,140 @@ class CloudflareWorkerService
     }
 
     /**
+     * Change Cloudflare Worker routes for redirect-only deployment:
+     * - www version:
+     *     both www.domain.com/* and domain.com/* -> CLOUDFLARE_WORKER_WWW_REDIRECT
+     * - nonwww version:
+     *     both domain.com/* and www.domain.com/* -> CLOUDFLARE_WORKER_ROOT_REDIRECT
+     *
+     * @param  string  $domain  The domain name
+     * @param  string|null  $version  'www' or 'nonwww' (optional; inferred if omitted)
+     * @return array<string, mixed>
+     *
+     * @throws Exception
+     */
+    public function changeRedirectOnlyWorkers(string $domain, ?string $version = null): array
+    {
+        $normalized = $this->client->normalizeDomain($domain);
+        $rootDomain = $this->client->getRootDomain($normalized);
+
+        // Normalize version choice
+        $versionClean = strtolower(trim((string) $version));
+        if ($versionClean === '') {
+            $versionClean = str_starts_with($normalized, 'www.') ? 'www' : 'nonwww';
+        } elseif (in_array($versionClean, ['root', 'non-www', 'non_www'], true)) {
+            $versionClean = 'nonwww';
+        }
+
+        if ($versionClean === 'www') {
+            $redirectWorker = $this->getWorkerWwwRedirect();
+            $targetRoutes = [
+                [
+                    'pattern' => "www.{$rootDomain}/*",
+                    'script' => $redirectWorker,
+                ],
+                [
+                    'pattern' => "{$rootDomain}/*",
+                    'script' => $redirectWorker,
+                ],
+            ];
+        } else {
+            $redirectWorker = $this->getWorkerRootRedirect();
+            $targetRoutes = [
+                [
+                    'pattern' => "{$rootDomain}/*",
+                    'script' => $redirectWorker,
+                ],
+                [
+                    'pattern' => "www.{$rootDomain}/*",
+                    'script' => $redirectWorker,
+                ],
+            ];
+        }
+
+        $zoneId = $this->client->getZoneId($rootDomain);
+        $existingRoutes = $this->getWorkerRoutes($zoneId);
+
+        $results = [];
+
+        foreach ($targetRoutes as $target) {
+            $pattern = $target['pattern'];
+            $script = $target['script'];
+
+            // Find all matching routes for this pattern
+            $matches = array_values(array_filter(
+                $existingRoutes,
+                fn (array $route) => strtolower($route['pattern'] ?? '') === strtolower($pattern)
+            ));
+
+            if (! empty($matches)) {
+                $primary = $matches[0];
+                $primaryId = $primary['id'] ?? '';
+
+                if (($primary['script'] ?? '') === $script) {
+                    $results[] = [
+                        'id' => $primaryId,
+                        'pattern' => $pattern,
+                        'script' => $script,
+                        'action' => 'unchanged',
+                    ];
+                } else {
+                    $updated = $this->updateWorkerRoute($zoneId, $primaryId, $pattern, $script);
+                    $results[] = [
+                        'id' => $updated['id'] ?? $primaryId,
+                        'pattern' => $pattern,
+                        'script' => $script,
+                        'action' => 'updated',
+                    ];
+                }
+
+                // Delete any duplicate routes matching the same pattern
+                for ($i = 1; $i < count($matches); $i++) {
+                    if (! empty($matches[$i]['id'])) {
+                        $this->deleteWorkerRoute($zoneId, (string) $matches[$i]['id']);
+                    }
+                }
+            } else {
+                $created = $this->createWorkerRoute($zoneId, $pattern, $script);
+                $results[] = [
+                    'id' => $created['id'] ?? null,
+                    'pattern' => $pattern,
+                    'script' => $script,
+                    'action' => 'created',
+                ];
+            }
+        }
+
+        // Purge cache after assigning worker routes so changes take effect immediately
+        $cachePurged = false;
+        try {
+            $this->client->purgeCache($zoneId, true);
+            $cachePurged = true;
+            Log::info("Cloudflare cache purged successfully for zone {$zoneId} after assigning redirect worker routes.");
+        } catch (Exception $e) {
+            Log::warning("Failed to purge cache for zone {$zoneId} after assigning redirect worker routes: ".$e->getMessage());
+        }
+
+        Log::info('Cloudflare redirect worker routes updated successfully', [
+            'domain' => $domain,
+            'root_domain' => $rootDomain,
+            'version' => $versionClean,
+            'zone_id' => $zoneId,
+            'routes' => $results,
+            'cache_purged' => $cachePurged,
+        ]);
+
+        return [
+            'domain' => $domain,
+            'root_domain' => $rootDomain,
+            'version' => $versionClean,
+            'zone_id' => $zoneId,
+            'routes' => $results,
+            'cache_purged' => $cachePurged,
+        ];
+    }
+
+    /**
      * Purge all cache for a domain.
      *
      * @return array<string, mixed>

@@ -24,14 +24,16 @@ class DeploymentResource extends JsonResource
                 'email' => $this->user->email,
             ]),
             'server_id' => $this->server_id,
-            'server' => $this->whenLoaded('server', fn (): array => [
+            'server' => $this->whenLoaded('server', fn (): ?array => $this->server ? [
                 'id' => $this->server->id,
                 'server_id' => $this->server->server_id,
                 'name' => $this->server->name,
                 'ip_address' => $this->server->ip_address,
-            ]),
+            ] : null),
             'domain' => $this->domain,
             'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
+            'deployment_type' => $this->deployment_type ?? 'full',
+            'has_sitemap' => (bool) ($this->has_sitemap ?? true),
             'archive_source' => $this->archive_source,
             'archive_original_name' => $this->archive_original_name,
             'archive_status' => $this->archive_status instanceof \BackedEnum ? $this->archive_status->value : $this->archive_status,

@@ -27,9 +27,14 @@ class StoreDeploymentRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isRedirect = $this->input('deployment_type') === 'redirect';
+
         return [
+            'deployment_type' => ['nullable', 'string', Rule::in(['full', 'redirect'])],
+            'has_sitemap' => ['nullable', 'boolean'],
             'server_id' => [
-                'required',
+                Rule::requiredIf(! $isRedirect),
+                'nullable',
                 'integer',
                 Rule::exists('servers', 'server_id')->where(
                     fn (Builder $query): Builder => $query->where('is_active', true)
@@ -39,7 +44,7 @@ class StoreDeploymentRequest extends FormRequest
             'version' => ['required', Rule::enum(DomainVersion::class)],
             'archive_url' => [
                 'nullable',
-                Rule::prohibitedIf(fn (): bool => $this->hasFile('archive') || $this->filled('archive_upload_token')),
+                Rule::prohibitedIf(fn (): bool => $isRedirect || $this->hasFile('archive') || $this->filled('archive_upload_token')),
                 'string',
                 'url',
                 'starts_with:https://',
@@ -55,14 +60,14 @@ class StoreDeploymentRequest extends FormRequest
             ],
             'archive' => [
                 'nullable',
-                Rule::prohibitedIf(fn (): bool => $this->filled('archive_url') || $this->filled('archive_upload_token')),
+                Rule::prohibitedIf(fn (): bool => $isRedirect || $this->filled('archive_url') || $this->filled('archive_upload_token')),
                 'file',
                 'mimes:zip',
                 'max:'.config('archive.max_upload_kb'),
             ],
             'archive_upload_token' => [
                 'nullable',
-                Rule::prohibitedIf(fn (): bool => $this->filled('archive_url') || $this->hasFile('archive')),
+                Rule::prohibitedIf(fn (): bool => $isRedirect || $this->filled('archive_url') || $this->hasFile('archive')),
                 'uuid',
             ],
         ];

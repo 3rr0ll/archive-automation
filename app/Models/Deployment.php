@@ -22,6 +22,8 @@ class Deployment extends Model
         'runcloud_web_app_name',
         'domain',
         'version',
+        'deployment_type',
+        'has_sitemap',
         'archive_source',
         'archive_url',
         'archive_path',
@@ -42,6 +44,7 @@ class Deployment extends Model
             'archive_status' => ArchiveStatus::class,
             'status' => DeploymentStatus::class,
             'version' => DomainVersion::class,
+            'has_sitemap' => 'boolean',
             'runcloud_web_app_id' => 'integer',
         ];
     }

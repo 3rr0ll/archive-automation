@@ -81,8 +81,9 @@
 
                     <div class="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                         <div class="flex items-center gap-1.5 text-xs text-zinc-800 dark:text-zinc-300 font-medium min-w-0">
-                            <x-lucide-server class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
-                            <span class="truncate" x-text="item.server ? item.server.name : 'Unknown server'"></span>
+                            <x-lucide-arrow-right-left x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-indigo-500" />
+                            <x-lucide-server x-show="item.deployment_type !== 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+                            <span class="truncate" x-text="item.deployment_type === 'redirect' ? 'DNS Redirect' : (item.server ? item.server.name : 'Unknown server')"></span>
                             <span class="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono" x-show="item.version" x-text="`(${item.version})`"></span>
                         </div>
                         <span class="text-xs text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition flex items-center gap-1">
@@ -122,8 +123,9 @@
                     <div class="flex items-center gap-6 shrink-0" @click.stop>
                         <div class="hidden sm:block text-right">
                             <div class="flex items-center justify-end gap-1.5 text-xs text-zinc-800 dark:text-zinc-300 font-medium">
-                                <span class="truncate max-w-[200px]" x-text="item.server ? item.server.name : 'Server'"></span>
-                                <x-lucide-server class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+                                <span class="truncate max-w-[200px]" x-text="item.deployment_type === 'redirect' ? 'DNS Redirect' : (item.server ? item.server.name : 'Server')"></span>
+                                <x-lucide-arrow-right-left x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-indigo-500" />
+                                <x-lucide-server x-show="item.deployment_type !== 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
                             </div>
                             <div class="flex items-center justify-end gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                                 <span class="font-mono text-[10px]" x-show="item.version" x-text="item.version"></span>

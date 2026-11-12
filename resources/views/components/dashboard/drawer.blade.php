@@ -21,17 +21,41 @@
                      x-transition:leave-start="translate-x-0" 
                      x-transition:leave-end="translate-x-full" 
                      class="pointer-events-auto w-screen max-w-xl">
-                    <div class="flex h-full flex-col bg-white border-l border-zinc-200">
+                    <div class="flex h-full flex-col bg-white dark:bg-[#18181b] border-l border-zinc-200 dark:border-zinc-800 transition-colors">
                         <!-- Drawer Header -->
-                        <div class="px-6 py-5 flex items-center justify-between border-b border-zinc-100">
+                        <div class="px-6 py-5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
                             <div>
-                                <h2 class="text-base font-semibold text-zinc-900" id="slide-over-title">New Deployment</h2>
-                                <p class="text-xs text-zinc-500 mt-0.5">Deploy an archived website or custom ZIP onto your servers.</p>
+                                <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100" id="slide-over-title" x-text="form.deployment_type === 'redirect' ? 'New Redirect Deployment' : 'New Deployment'">New Deployment</h2>
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5" x-text="form.deployment_type === 'redirect' ? 'Automate Cloudflare Worker redirects & Google Search Console using old DNS.' : 'Deploy an archived website or custom ZIP onto your servers.'">Deploy an archived website or custom ZIP onto your servers.</p>
                             </div>
-                            <button type="button" @click="closeModal()" class="rounded-md text-zinc-400 hover:text-zinc-600 focus:outline-none transition p-1">
+                            <button type="button" @click="closeModal()" class="rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 focus:outline-none transition p-1 cursor-pointer">
                                 <span class="sr-only">Close panel</span>
                                 <x-lucide-x class="size-4.5" />
                             </button>
+                        </div>
+
+                        <!-- Tab Selector -->
+                        <div class="px-6 pt-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40">
+                            <div class="flex gap-6 -mb-px">
+                                <button type="button"
+                                        @click="form.deployment_type = 'full'"
+                                        class="pb-3 px-0.5 text-xs font-medium border-b-2 transition cursor-pointer flex items-center gap-2 focus:outline-none"
+                                        :class="form.deployment_type === 'full'
+                                            ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-semibold'
+                                            : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700'">
+                                    <x-lucide-server class="size-3.5" />
+                                    <span>Server Deployment</span>
+                                </button>
+                                <button type="button"
+                                        @click="form.deployment_type = 'redirect'"
+                                        class="pb-3 px-0.5 text-xs font-medium border-b-2 transition cursor-pointer flex items-center gap-2 focus:outline-none"
+                                        :class="form.deployment_type === 'redirect'
+                                            ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-semibold'
+                                            : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700'">
+                                    <x-lucide-arrow-right-left class="size-3.5" />
+                                    <span>Old DNS / Redirect</span>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Drawer Body -->
@@ -39,7 +63,7 @@
                             <form @submit.prevent="submitDeployment" id="deployment-form" class="space-y-6">
                                 <!-- Domain Field -->
                                 <div>
-                                    <label for="deployment-domain" class="block text-xs font-medium text-zinc-700 mb-1.5">
+                                    <label for="deployment-domain" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
                                         Domain Name <span class="text-red-500">*</span>
                                     </label>
                                     <input type="text" 
@@ -47,15 +71,15 @@
                                            x-model="form.domain" 
                                            placeholder="example.com" 
                                            required
-                                           class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0 sm:leading-6 transition font-mono">
+                                           class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none focus:ring-0 sm:leading-6 transition font-mono">
                                     <template x-if="errors.domain">
                                         <p class="text-xs text-red-500 mt-1" x-text="errors.domain[0]"></p>
                                     </template>
                                 </div>
 
-                                <!-- Server Selection -->
-                                <div>
-                                    <label class="block text-xs font-medium text-zinc-700 mb-1.5">
+                                <!-- Server Selection (Full Deployment only) -->
+                                <div x-show="form.deployment_type === 'full'">
+                                    <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
                                         Target Server <span class="text-red-500">*</span>
                                     </label>
                                     
@@ -64,40 +88,40 @@
                                         <button type="button" 
                                                 @click="serverDropdownOpen = !serverDropdownOpen" 
                                                 @click.away="serverDropdownOpen = false" 
-                                                class="flex items-center justify-between w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none transition cursor-pointer"
-                                                :class="serverDropdownOpen ? 'border-zinc-400 ring-1 ring-zinc-400/20' : ''">
+                                                class="flex items-center justify-between w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none transition cursor-pointer"
+                                                :class="serverDropdownOpen ? 'border-zinc-400 dark:border-zinc-600 ring-1 ring-zinc-400/20' : ''">
                                             <div class="flex items-center gap-2 min-w-0">
-                                                <x-lucide-server class="size-4 text-zinc-400 shrink-0" />
+                                                <x-lucide-server class="size-4 text-zinc-400 dark:text-zinc-500 shrink-0" />
                                                 <span class="truncate" x-show="selectedServer" x-text="selectedServer ? `${selectedServer.name} (${selectedServer.ip_address || 'No IP'})` : ''"></span>
-                                                <span class="text-zinc-400" x-show="!selectedServer">Select an active server</span>
+                                                <span class="text-zinc-400 dark:text-zinc-500" x-show="!selectedServer">Select an active server</span>
                                             </div>
-                                            <x-lucide-chevron-down class="size-4 text-zinc-400 shrink-0 transition-transform duration-200" ::class="serverDropdownOpen ? 'rotate-180' : ''" />
+                                            <x-lucide-chevron-down class="size-4 text-zinc-400 dark:text-zinc-500 shrink-0 transition-transform duration-200" ::class="serverDropdownOpen ? 'rotate-180' : ''" />
                                         </button>
 
                                         <!-- Dropdown Menu -->
                                         <div x-show="serverDropdownOpen" 
                                              x-transition.opacity
                                              style="display: none;" 
-                                             class="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md bg-white py-1 border border-zinc-200 shadow-lg text-sm focus:outline-none" 
+                                             class="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md bg-white dark:bg-[#18181b] py-1 border border-zinc-200 dark:border-zinc-800 shadow-lg text-sm focus:outline-none" 
                                              role="menu">
                                             <template x-for="server in servers" :key="server.server_id">
                                                 <button type="button" 
                                                         @click="form.server_id = server.server_id; serverDropdownOpen = false;" 
-                                                        class="block w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 cursor-pointer"
-                                                        :class="form.server_id == server.server_id ? 'bg-zinc-50 font-medium text-zinc-900' : ''"
+                                                        class="block w-full text-left px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                                                        :class="form.server_id == server.server_id ? 'bg-zinc-50 dark:bg-zinc-800/60 font-medium text-zinc-900 dark:text-zinc-100' : ''"
                                                         role="menuitem">
                                                     <span x-text="server.name"></span>
-                                                    <span class="text-xs text-zinc-400 font-mono ml-1" x-text="`(${server.ip_address || 'No IP'})`"></span>
+                                                    <span class="text-xs text-zinc-400 dark:text-zinc-500 font-mono ml-1" x-text="`(${server.ip_address || 'No IP'})`"></span>
                                                 </button>
                                             </template>
-                                            <div x-show="servers.length === 0" class="px-4 py-2 text-sm text-zinc-400 text-center">
+                                            <div x-show="servers.length === 0" class="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-500 text-center">
                                                 No active servers available.
                                             </div>
                                         </div>
                                     </div>
 
                                     <template x-if="servers.length === 0">
-                                        <p class="text-[11px] text-zinc-400 mt-1">No active servers available. Please add or sync a server first.</p>
+                                        <p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">No active servers available. Please add or sync a server first.</p>
                                     </template>
                                     <template x-if="errors.server_id">
                                         <p class="text-xs text-red-500 mt-1" x-text="errors.server_id[0]"></p>
@@ -106,33 +130,41 @@
 
                                 <!-- Domain Version (www vs non-www) Selection -->
                                 <div>
-                                    <label class="block text-xs font-medium text-zinc-700 mb-2">Domain Version</label>
+                                    <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-2">Domain Version</label>
                                     <div class="grid grid-cols-2 gap-3">
                                         <!-- Non-WWW Option -->
                                         <label class="relative flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all text-left"
-                                               :class="form.version === 'non-www' ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900' : 'border-zinc-200 hover:border-zinc-300 bg-white'">
+                                               :class="form.version === 'non-www'
+                                                   ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 ring-1 ring-zinc-900 dark:ring-zinc-100'
+                                                   : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-[#18181b]'">
                                             <input type="radio" name="domain_version" value="non-www" x-model="form.version" class="sr-only">
                                             <div>
-                                                <div class="text-xs font-semibold text-zinc-900 font-mono">non-www</div>
-                                                <div class="text-[11px] text-zinc-500 mt-0.5">example.com</div>
+                                                <div class="text-xs font-semibold text-zinc-900 dark:text-zinc-100 font-mono">non-www</div>
+                                                <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">example.com</div>
                                             </div>
                                             <div class="shrink-0 size-4 rounded-full border flex items-center justify-center"
-                                                 :class="form.version === 'non-www' ? 'border-zinc-900 bg-white' : 'border-zinc-300'">
-                                                <span x-show="form.version === 'non-www'" class="size-2 rounded-full bg-zinc-900"></span>
+                                                 :class="form.version === 'non-www'
+                                                     ? 'border-zinc-900 dark:border-zinc-100 bg-white dark:bg-zinc-900'
+                                                     : 'border-zinc-300 dark:border-zinc-700'">
+                                                <span x-show="form.version === 'non-www'" class="size-2 rounded-full bg-zinc-900 dark:bg-zinc-100"></span>
                                             </div>
                                         </label>
 
                                         <!-- WWW Option -->
                                         <label class="relative flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all text-left"
-                                               :class="form.version === 'www' ? 'border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900' : 'border-zinc-200 hover:border-zinc-300 bg-white'">
+                                               :class="form.version === 'www'
+                                                   ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50 ring-1 ring-zinc-900 dark:ring-zinc-100'
+                                                   : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-[#18181b]'">
                                             <input type="radio" name="domain_version" value="www" x-model="form.version" class="sr-only">
                                             <div>
-                                                <div class="text-xs font-semibold text-zinc-900 font-mono">www</div>
-                                                <div class="text-[11px] text-zinc-500 mt-0.5">www.example.com</div>
+                                                <div class="text-xs font-semibold text-zinc-900 dark:text-zinc-100 font-mono">www</div>
+                                                <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">www.example.com</div>
                                             </div>
                                             <div class="shrink-0 size-4 rounded-full border flex items-center justify-center"
-                                                 :class="form.version === 'www' ? 'border-zinc-900 bg-white' : 'border-zinc-300'">
-                                                <span x-show="form.version === 'www'" class="size-2 rounded-full bg-zinc-900"></span>
+                                                 :class="form.version === 'www'
+                                                     ? 'border-zinc-900 dark:border-zinc-100 bg-white dark:bg-zinc-900'
+                                                     : 'border-zinc-300 dark:border-zinc-700'">
+                                                <span x-show="form.version === 'www'" class="size-2 rounded-full bg-zinc-900 dark:bg-zinc-100"></span>
                                             </div>
                                         </label>
                                     </div>
@@ -141,20 +173,33 @@
                                     </template>
                                 </div>
 
-                                <!-- Archive Source Selection: Wayback URL vs Upload File -->
-                                <div>
-                                    <label class="block text-xs font-medium text-zinc-700 mb-2">Archive Source</label>
+                                <!-- Has Sitemap Checkbox (Redirect Mode) -->
+                                <div x-show="form.deployment_type === 'redirect'">
+                                    <label class="flex items-center gap-2.5 cursor-pointer select-none">
+                                        <input type="checkbox"
+                                               x-model="form.has_sitemap"
+                                               class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-0 cursor-pointer">
+                                        <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Submit sitemap to Google Search Console</span>
+                                    </label>
+                                    <p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1 pl-6">
+                                        Submits <span class="font-mono" x-text="`https://${form.version === 'www' ? 'www.' : ''}${form.domain.trim() || 'example.com'}/sitemap.xml`"></span> after verification.
+                                    </p>
+                                </div>
+
+                                <!-- Archive Source Selection: Wayback URL vs Upload File (Full Deployment only) -->
+                                <div x-show="form.deployment_type === 'full'">
+                                    <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-2">Archive Source</label>
                                     <div class="grid grid-cols-2 gap-3 mb-4">
                                         <button type="button" 
                                                 @click="form.source_type = 'url'" 
-                                                class="flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition"
+                                                class="flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition cursor-pointer"
                                                 :class="form.source_type === 'url' ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50 bg-white'">
                                             <x-lucide-globe class="size-3.5" />
                                             <span>Wayback URL</span>
                                         </button>
                                         <button type="button" 
                                                 @click="form.source_type = 'upload'" 
-                                                class="flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition"
+                                                class="flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition cursor-pointer"
                                                 :class="form.source_type === 'upload' ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50 bg-white'">
                                             <x-lucide-upload class="size-3.5" />
                                             <span>ZIP Archive</span>
@@ -163,13 +208,13 @@
 
                                     <!-- Archive URL Input -->
                                     <div x-show="form.source_type === 'url'" class="space-y-1.5">
-                                        <label for="archive-url" class="block text-xs font-medium text-zinc-700">Wayback Machine URL (optional)</label>
+                                        <label for="archive-url" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Wayback Machine URL (optional)</label>
                                         <input type="url" 
-                                               id="archive-url" 
-                                               x-model="form.archive_url" 
-                                               placeholder="https://web.archive.org/web/..." 
-                                               class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0 sm:leading-6 font-mono transition">
-                                        <p class="text-[11px] text-zinc-400">Leave blank to automatically locate the best snapshot on Wayback Machine.</p>
+                                                id="archive-url" 
+                                                x-model="form.archive_url" 
+                                                placeholder="https://web.archive.org/web/..." 
+                                                class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none focus:ring-0 sm:leading-6 font-mono transition">
+                                        <p class="text-[11px] text-zinc-400 dark:text-zinc-500">Leave blank to automatically locate the best snapshot on Wayback Machine.</p>
                                         <template x-if="errors.archive_url">
                                             <p class="text-xs text-red-500 mt-1" x-text="errors.archive_url[0]"></p>
                                         </template>
@@ -216,11 +261,11 @@
                         </div>
 
                         <!-- Drawer Footer -->
-                        <div class="px-6 py-4 border-t border-zinc-100 flex items-center justify-between bg-white">
+                        <div class="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-[#18181b]">
                             <button type="button" 
                                     @click="closeModal()" 
-                                    class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 hover:bg-zinc-100 transition border border-zinc-200 cursor-pointer">
-                                <x-lucide-x class="size-3.5 text-zinc-500" />
+                                    class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition border border-zinc-200 dark:border-zinc-700 cursor-pointer">
+                                <x-lucide-x class="size-3.5 text-zinc-500 dark:text-zinc-400" />
                                 <span>Cancel</span>
                             </button>
 
@@ -228,10 +273,10 @@
                                     form="deployment-form" 
                                     :disabled="isSubmitting" 
                                     class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 focus:outline-none disabled:opacity-50 transition cursor-pointer">
-                                <span x-show="!isSubmitting">Deploy Domain</span>
+                                <span x-show="!isSubmitting" x-text="form.deployment_type === 'redirect' ? 'Continue' : 'Deploy Domain'">Deploy Domain</span>
                                 <span x-show="isSubmitting" class="flex items-center gap-1.5">
                                     <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-                                    <span x-text="uploadProgress > 0 && uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Deploying'"></span>
+                                    <span x-text="uploadProgress > 0 && uploadProgress < 100 ? `Uploading ${uploadProgress}%` : (form.deployment_type === 'redirect' ? 'Deploying Redirect' : 'Deploying')"></span>
                                 </span>
                             </button>
                         </div>

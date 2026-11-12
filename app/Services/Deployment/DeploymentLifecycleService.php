@@ -28,29 +28,32 @@ class DeploymentLifecycleService
     ) {}
 
     /**
-     * @param  array{server_id: int, domain: string, version: string, archive_url?: string|null, archive?: UploadedFile|null, archive_upload_token?: string|null}  $data
+     * @param  array{server_id?: int|null, domain: string, version: string, deployment_type?: string|null, has_sitemap?: bool|null, archive_url?: string|null, archive?: UploadedFile|null, archive_upload_token?: string|null}  $data
      */
     public function submit(User $user, array $data): Deployment
     {
+        $isRedirect = ($data['deployment_type'] ?? null) === 'redirect';
         $upload = $data['archive'] ?? null;
         $uploadToken = $data['archive_upload_token'] ?? null;
         $isChunkedUpload = is_string($uploadToken) && $uploadToken !== '';
-        $isUpload = $upload instanceof UploadedFile || $isChunkedUpload;
+        $isUpload = ! $isRedirect && ($upload instanceof UploadedFile || $isChunkedUpload);
         $storedPath = null;
 
         try {
-            $deployment = DB::transaction(function () use ($user, $data, $upload, $uploadToken, $isChunkedUpload, $isUpload, &$storedPath): Deployment {
-                $step = $isUpload ? 'archive_ready' : 'waiting_for_archive';
+            $deployment = DB::transaction(function () use ($user, $data, $upload, $uploadToken, $isChunkedUpload, $isUpload, $isRedirect, &$storedPath): Deployment {
+                $step = $isRedirect ? 'queued' : ($isUpload ? 'archive_ready' : 'waiting_for_archive');
 
                 $deployment = Deployment::create([
                     'user_id' => $user->id,
-                    'server_id' => $data['server_id'],
+                    'server_id' => $isRedirect ? ($data['server_id'] ?? null) : $data['server_id'],
                     'domain' => $data['domain'],
                     'version' => $data['version'],
-                    'archive_source' => $isUpload ? 'upload' : 'url',
-                    'archive_url' => $isUpload ? null : ($data['archive_url'] ?? null),
+                    'deployment_type' => $isRedirect ? 'redirect' : 'full',
+                    'has_sitemap' => array_key_exists('has_sitemap', $data) ? (bool) $data['has_sitemap'] : true,
+                    'archive_source' => $isRedirect ? 'redirect' : ($isUpload ? 'upload' : 'url'),
+                    'archive_url' => $isUpload || $isRedirect ? null : ($data['archive_url'] ?? null),
                     'archive_original_name' => $upload instanceof UploadedFile ? $upload->getClientOriginalName() : null,
-                    'archive_status' => $isUpload ? ArchiveStatus::Ready : ArchiveStatus::Waiting,
+                    'archive_status' => $isRedirect ? ArchiveStatus::Ready : ($isUpload ? ArchiveStatus::Ready : ArchiveStatus::Waiting),
                     'status' => DeploymentStatus::Pending,
                     'current_step' => $step,
                 ]);
@@ -82,10 +85,12 @@ class DeploymentLifecycleService
 
                 $deployment->logs()->create([
                     'step_name' => $step,
-                    'status' => $isUpload ? 'success' : 'in_progress',
-                    'message' => $isUpload
-                        ? 'Uploaded ZIP stored privately. Recovery deployment queued.'
-                        : 'Recovery submitted. Waiting for the Wayback ZIP to become available.',
+                    'status' => ($isUpload || $isRedirect) ? 'success' : 'in_progress',
+                    'message' => $isRedirect
+                        ? 'Redirect deployment queued. Will configure Cloudflare redirects and Google Search Console (skipping RunCloud).'
+                        : ($isUpload
+                            ? 'Uploaded ZIP stored privately. Recovery deployment queued.'
+                            : 'Recovery submitted. Waiting for the Wayback ZIP to become available.'),
                 ]);
 
                 return $deployment;
@@ -102,7 +107,7 @@ class DeploymentLifecycleService
             $this->chunkedUploads->forget($user, $uploadToken);
         }
 
-        if ($isUpload) {
+        if ($isRedirect || $isUpload) {
             DeployArchivedWebsite::dispatch($deployment);
         } else {
             WaitForWaybackArchive::dispatch($deployment);
@@ -112,6 +117,7 @@ class DeploymentLifecycleService
             'user_id' => $user->id,
             'server_id' => $deployment->server_id,
             'domain' => $deployment->domain,
+            'deployment_type' => $deployment->deployment_type,
             'archive_source' => $deployment->archive_source,
         ]);
 
@@ -149,19 +155,23 @@ class DeploymentLifecycleService
             throw new DomainException('Only failed or cancelled deployments can be retried.');
         }
 
+        $isRedirect = ($deployment->deployment_type ?? null) === 'redirect' || $deployment->archive_source === 'redirect';
+
         $hasLocalArchive = filled($deployment->archive_path)
             && Storage::disk('local')->exists($deployment->archive_path)
             && Storage::disk('local')->size($deployment->archive_path) > 0;
 
-        $waitsForArchive = filled($deployment->archive_url) && ! $hasLocalArchive;
+        $waitsForArchive = ! $isRedirect && filled($deployment->archive_url) && ! $hasLocalArchive;
 
-        if ($deployment->archive_source === 'upload' && ! $hasLocalArchive) {
+        if (! $isRedirect && $deployment->archive_source === 'upload' && ! $hasLocalArchive) {
             throw new DomainException('The uploaded ZIP is no longer available. Upload it again before retrying.');
         }
 
-        $readyStep = ($deployment->archive_source === 'upload' || $hasLocalArchive) ? 'archive_ready' : 'queued';
+        $readyStep = $isRedirect
+            ? 'queued'
+            : (($deployment->archive_source === 'upload' || $hasLocalArchive) ? 'archive_ready' : 'queued');
 
-        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep, $hasLocalArchive): void {
+        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep, $hasLocalArchive, $isRedirect): void {
             $deployment->update([
                 'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : ArchiveStatus::Ready,
                 'status' => DeploymentStatus::Pending,
@@ -170,11 +180,13 @@ class DeploymentLifecycleService
             $deployment->logs()->create([
                 'step_name' => $waitsForArchive ? 'waiting_for_archive' : $readyStep,
                 'status' => 'in_progress',
-                'message' => $waitsForArchive
-                    ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
-                    : ($hasLocalArchive
-                        ? 'Deployment retry queued. Existing archive file is ready, resuming deployment.'
-                        : 'Deployment retry queued by an administrator.'),
+                'message' => $isRedirect
+                    ? 'Redirect deployment retry queued.'
+                    : ($waitsForArchive
+                        ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
+                        : ($hasLocalArchive
+                            ? 'Deployment retry queued. Existing archive file is ready, resuming deployment.'
+                            : 'Deployment retry queued by an administrator.')),
             ]);
         });
 
