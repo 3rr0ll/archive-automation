@@ -9,6 +9,7 @@ export function serversPage(initialServers = []) {
         statusFilter: 'all',
         sortBy: 'newest',
         togglingId: null,
+        storages: {},
 
         get filteredItems() {
             let list = [...this.items];
@@ -48,11 +49,25 @@ export function serversPage(initialServers = []) {
                 : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         },
 
-        formatBytes(bytes) {
-            if (!bytes) return '0 B';
-            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-            return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
+        formatBytes(b) {
+            return (b / 1024 ** 3).toFixed(1) + ' GB';
+        },
+
+        async loadStorage(id, refresh = false) {
+            if (this.storages[id]?.loading) return;
+            this.storages[id] = { loading: true };
+
+            try {
+                const response = await fetch(`/servers/${id}/storage${refresh ? '?refresh=1' : ''}`, {
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!response.ok) throw new Error('Unable to connect');
+
+                this.storages[id] = await response.json();
+            } catch (error) {
+                this.storages[id] = { error: 'Unable to connect' };
+            }
         },
 
         getInitial(item) {
