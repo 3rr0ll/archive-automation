@@ -37,7 +37,10 @@ class RunCloudSubdomainAliasTest extends TestCase
                     $this->assertFalse($request['www']);
                     $this->assertTrue($request['allowDnsIntegration']);
                     $this->assertTrue($request['setAsProxied']);
-                    $this->assertSame(42310, $request['externalApi']);
+                    $this->assertSame('cloudflare', $request['dnsProvider']);
+                    $this->assertSame(42310, $request['cfApiKeyId']);
+                    $this->assertTrue($request['updateCloudflare']);
+                    $this->assertSame('none', $request['redirection']);
 
                     return Http::response([
                         'data' => [
@@ -83,6 +86,7 @@ class RunCloudSubdomainAliasTest extends TestCase
         $this->assertCount(1, $result['skipped']);
         $this->assertSame('shop.example.com', $result['skipped'][0]['subdomain']);
         $this->assertSame('shop', $result['skipped'][0]['name']);
+        $this->assertSame(2, $result['skipped'][0]['id']);
         $this->assertStringContainsString('already attached', $result['skipped'][0]['reason']);
         $this->assertEmpty($result['failed']);
 

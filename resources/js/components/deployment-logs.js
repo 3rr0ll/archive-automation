@@ -47,12 +47,36 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
         async init() {
             await this.loadData();
 
-            // Set up polling while deployment is pending or processing
+            // Subdomain SSL can continue after the main deployment completes.
             this.pollInterval = setInterval(async () => {
-                if (this.deployment && (this.deployment.status === 'pending' || this.deployment.status === 'processing')) {
+                if (this.deployment && (this.deployment.status === 'pending' || this.deployment.status === 'processing' || this.hasPendingSubdomainSsl)) {
                     await this.loadData(false);
                 }
             }, 3000);
+        },
+
+        get hasPendingSubdomainSsl() {
+            const latestStatuses = new Map();
+            for (const log of this.logs) {
+                if (log.step_name !== 'configuring_subdomain_ssl') continue;
+                const domain = (log.message || '').split(':', 1)[0];
+                if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(domain)) {
+                    latestStatuses.set(domain, log.status);
+                }
+            }
+            return [...latestStatuses.values()].some(status => status === 'in_progress');
+        },
+
+        syncSubdomainSslFeedback() {
+            const runcloud = this.htaccessFeedback?.runcloud;
+            if (!runcloud) return;
+            for (const item of [...(runcloud.added || []), ...(runcloud.skipped || [])]) {
+                const log = [...this.logs].reverse().find(entry => entry.step_name === 'configuring_subdomain_ssl'
+                    && (entry.message || '').startsWith(`${item.subdomain}: `));
+                if (!log) continue;
+                item.ssl = { in_progress: 'queued', success: 'configured', error: 'failed' }[log.status] || item.ssl;
+                if (log.status === 'error') item.ssl_error = log.message;
+            }
         },
 
         destroy() {
@@ -68,11 +92,12 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             try {
                 const [deploymentRes, logsRes] = await Promise.all([
                     fetchDeployment(this.deploymentId),
-                    fetchDeploymentLogs(this.deploymentId, { per_page: 100, sort_direction: 'asc' }),
+                    fetchDeploymentLogs(this.deploymentId, { per_page: 100, sort_direction: 'desc' }),
                 ]);
 
                 this.deployment = deploymentRes.data || deploymentRes;
-                this.logs = logsRes.data || logsRes || [];
+                this.logs = [...(logsRes.data || logsRes || [])].reverse();
+                this.syncSubdomainSslFeedback();
 
                 await this.loadSubdomainFolders(this.subdomainFoldersMeta.current_page || 1);
 

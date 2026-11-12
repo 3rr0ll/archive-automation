@@ -632,20 +632,15 @@ class RunCloudWebAppService
 
         $payload = [
             'name' => $subdomain,
-            'domainName' => $subdomain,
             'type' => 'alias',
-            'domainType' => 'alias',
             'www' => false,
             'redirection' => 'none',
+            'dnsProvider' => 'cloudflare',
+            'cfApiKeyId' => $externalApiId,
+            'updateCloudflare' => true,
             'allowDnsIntegration' => true,
             'setAsProxied' => true,
-            'proxy' => true,
-            'proxied' => true,
         ];
-
-        if ($externalApiId) {
-            $payload['externalApi'] = $externalApiId;
-        }
 
         $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
 
@@ -654,25 +649,6 @@ class RunCloudWebAppService
                 $errorMsg = (string) ($response->json('message') ?? $response->body());
                 if (str_contains(strtolower($errorMsg), 'already') || str_contains(strtolower($errorMsg), 'taken')) {
                     throw new RuntimeException("Subdomain [{$subdomain}] already attached on RunCloud.");
-                }
-
-                // Fallback attempt without extra convenience aliases if rejected by strict validation
-                $fallbackPayload = [
-                    'name' => $subdomain,
-                    'type' => 'alias',
-                    'www' => false,
-                    'redirection' => 'none',
-                    'allowDnsIntegration' => true,
-                    'setAsProxied' => true,
-                ];
-
-                if ($externalApiId) {
-                    $fallbackPayload['externalApi'] = $externalApiId;
-                }
-
-                $fallback = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $fallbackPayload);
-                if ($fallback->successful()) {
-                    return $fallback->json('data') ?? $fallback->json() ?? [];
                 }
             }
 
@@ -688,7 +664,7 @@ class RunCloudWebAppService
      * @param  list<string>  $subdomainFolders
      * @return array{
      *     added: list<array{subdomain: string, name: string, id: ?int}>,
-     *     skipped: list<array{subdomain: string, name: string, reason: string}>,
+     *     skipped: list<array{subdomain: string, name: string, id: ?int, reason: string}>,
      *     failed: list<array{subdomain: string, name: string, error: string}>,
      * }
      */
@@ -715,10 +691,9 @@ class RunCloudWebAppService
 
         // 1. Fetch existing domains attached to this web application to avoid duplicates
         $existingDomains = $this->getWebAppDomains($serverId, $appId);
-        $existingNames = collect($existingDomains)
-            ->pluck('name')
-            ->filter(fn ($n) => is_string($n) && $n !== '')
-            ->map(fn (string $n) => strtolower(trim($n)))
+        $existingDomainIds = collect($existingDomains)
+            ->filter(fn (array $item) => is_string($item['name'] ?? null) && trim($item['name']) !== '')
+            ->mapWithKeys(fn (array $item) => [strtolower(trim($item['name'])) => isset($item['id']) ? (int) $item['id'] : null])
             ->all();
 
         // 2. Process each checked subfolder independently
@@ -749,10 +724,11 @@ class RunCloudWebAppService
             $fullSubdomain = "{$name}.{$cleanDomain}";
 
             // Skip subdomains that already exist in RunCloud
-            if (in_array(strtolower($fullSubdomain), $existingNames, true)) {
+            if (array_key_exists($fullSubdomain, $existingDomainIds)) {
                 $results['skipped'][] = [
                     'subdomain' => $fullSubdomain,
                     'name' => $name,
+                    'id' => $existingDomainIds[$fullSubdomain],
                     'reason' => 'Subdomain already attached in RunCloud.',
                 ];
 
@@ -771,7 +747,7 @@ class RunCloudWebAppService
                 ];
 
                 // Prevent duplicates within the same batch
-                $existingNames[] = strtolower($fullSubdomain);
+                $existingDomainIds[$fullSubdomain] = $domainId;
             } catch (Throwable $e) {
                 Log::warning("RunCloud failed to attach subdomain alias [{$fullSubdomain}]: {$e->getMessage()}");
 

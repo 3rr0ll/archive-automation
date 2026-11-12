@@ -118,7 +118,7 @@
                                 <!-- Added in RunCloud -->
                                 <template x-for="item in (htaccessFeedback.runcloud.added || [])" :key="item.subdomain">
                                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-mono">
-                                        <strong>+ RunCloud:</strong> <span x-text="item.subdomain"></span>
+                                        <strong>+ RunCloud:</strong> <span x-text="item.subdomain + (item.ssl === 'queued' ? ' (SSL pending)' : '')"></span>
                                         <template x-if="item.ssl === 'configured'">
                                             <span class="ml-1 text-[10px] text-emerald-700 dark:text-emerald-300 font-sans font-medium bg-emerald-200/70 dark:bg-emerald-850 px-1 py-0.2 rounded">SSL Active</span>
                                         </template>
@@ -132,7 +132,7 @@
                                 <template x-for="item in (htaccessFeedback.runcloud.skipped || [])" :key="item.subdomain">
                                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-mono"
                                           :title="item.reason">
-                                        <strong>↷ Skipped:</strong> <span x-text="item.subdomain"></span>
+                                        <strong>↷ Skipped:</strong> <span x-text="item.subdomain + (item.ssl === 'queued' ? ' (SSL pending)' : item.ssl === 'configured' ? ' (SSL active)' : item.ssl === 'failed' ? ' (SSL failed)' : '')"></span>
                                         <span class="text-[9px] opacity-75" x-text="`(${item.reason})`"></span>
                                     </span>
                                 </template>

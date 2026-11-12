@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ConfigureRunCloudSubdomainSsl;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
@@ -10,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
 
@@ -310,6 +312,9 @@ class DeploymentSubdomainHtaccessTest extends TestCase
         Config::set('services.runcloud.api_key', 'test-key');
         Config::set('services.runcloud.api_secret', 'test-secret');
 
+        Queue::fake([ConfigureRunCloudSubdomainSsl::class]);
+        Http::preventStrayRequests();
+
         Http::fake([
             'https://manage.runcloud.io/api/v3/servers/10/webapps/77/domains' => function (Request $request) {
                 if ($request->method() === 'GET') {
@@ -326,6 +331,9 @@ class DeploymentSubdomainHtaccessTest extends TestCase
                     $this->assertFalse($request['www']);
                     $this->assertTrue($request['allowDnsIntegration']);
                     $this->assertTrue($request['setAsProxied']);
+                    $this->assertSame('cloudflare', $request['dnsProvider']);
+                    $this->assertSame(42310, $request['cfApiKeyId']);
+                    $this->assertTrue($request['updateCloudflare']);
 
                     return Http::response([
                         'data' => ['id' => 999, 'name' => 'blog.example.com'],
@@ -333,14 +341,6 @@ class DeploymentSubdomainHtaccessTest extends TestCase
                 }
 
                 return Http::response([], 400);
-            },
-            'https://manage.runcloud.io/api/v3/servers/10/webapps/77/ssl/advanced' => Http::response(['success' => true], 200),
-            'https://manage.runcloud.io/api/v3/servers/10/webapps/77/domains/999/ssl' => function (Request $request) {
-                $this->assertSame('letsencrypt', $request['provider']);
-                $this->assertSame('dns-01', $request['authorizationMethod']);
-                $this->assertFalse($request['enableHttp']);
-
-                return Http::response(['data' => ['id' => 555, 'status' => 'success']], 200);
             },
         ]);
 
@@ -355,7 +355,7 @@ class DeploymentSubdomainHtaccessTest extends TestCase
                 'data' => [
                     'runcloud' => [
                         'added' => [
-                            ['subdomain' => 'blog.example.com', 'name' => 'blog'],
+                            ['subdomain' => 'blog.example.com', 'name' => 'blog', 'ssl' => 'queued'],
                         ],
                         'skipped' => [],
                         'failed' => [],
@@ -372,7 +372,57 @@ class DeploymentSubdomainHtaccessTest extends TestCase
         $this->assertDatabaseHas('deployment_logs', [
             'deployment_id' => $deployment->id,
             'step_name' => 'configuring_subdomain_ssl',
-            'status' => 'success',
+            'status' => 'in_progress',
+            'message' => 'blog.example.com: Cloudflare DNS and SSL configuration queued.',
+        ]);
+
+        Queue::assertPushed(ConfigureRunCloudSubdomainSsl::class, fn (ConfigureRunCloudSubdomainSsl $job) => $job->deployment->is($deployment)
+            && $job->subdomain === 'blog.example.com'
+            && $job->domainId === 999);
+    }
+
+    public function test_it_queues_ssl_repair_for_an_existing_runcloud_subdomain(): void
+    {
+        $user = User::factory()->create();
+        Server::factory()->create(['server_id' => 10, 'ip_address' => '192.0.2.10']);
+        $deployment = $this->createDeployment([
+            'user_id' => $user->id,
+            'server_id' => 10,
+            'runcloud_web_app_id' => 77,
+        ]);
+
+        $sftp = Mockery::mock(SftpFileService::class);
+        $sftp->shouldReceive('fileExists')->andReturnUsing(fn (string $host, string $path) => ! str_contains($path, '.bak-'));
+        $sftp->shouldReceive('readFile')->once()->andReturn("<IfModule mod_rewrite.c>\nRewriteEngine On\n</IfModule>\n");
+        $sftp->shouldReceive('getFilePermissions')->once()->andReturn(0644);
+        $sftp->shouldReceive('writeFile')->twice();
+        $this->app->instance(SftpFileService::class, $sftp);
+
+        Config::set('services.runcloud.base_url', 'https://manage.runcloud.io/api/v3');
+        Config::set('services.runcloud.api_key', 'test-key');
+        Config::set('services.runcloud.api_secret', 'test-secret');
+        Queue::fake([ConfigureRunCloudSubdomainSsl::class]);
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://manage.runcloud.io/api/v3/servers/10/webapps/77/domains' => Http::response([
+                'data' => [['id' => 999, 'name' => 'blog.example.com', 'type' => 'alias']],
+            ]),
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson("/api/deployments/{$deployment->id}/subdomain-htaccess/apply", ['folders' => ['blog-sub']])
+            ->assertOk()
+            ->assertJsonPath('data.runcloud.skipped.0.ssl', 'queued')
+            ->assertJsonPath('data.runcloud.skipped.0.id', 999);
+
+        Queue::assertPushed(ConfigureRunCloudSubdomainSsl::class, fn (ConfigureRunCloudSubdomainSsl $job) => $job->deployment->is($deployment)
+            && $job->subdomain === 'blog.example.com'
+            && $job->domainId === 999);
+        Http::assertSentCount(1);
+        $this->assertDatabaseHas('deployment_logs', [
+            'deployment_id' => $deployment->id,
+            'step_name' => 'configuring_subdomain_ssl',
+            'status' => 'in_progress',
         ]);
     }
 
@@ -395,6 +445,7 @@ class DeploymentSubdomainHtaccessTest extends TestCase
         $this->app->instance(SftpFileService::class, $sftp);
 
         Http::fake();
+        Queue::fake([ConfigureRunCloudSubdomainSsl::class]);
 
         $response = $this->actingAs($user, 'sanctum')
             ->postJson("/api/deployments/{$deployment->id}/subdomain-htaccess/apply", [
@@ -405,5 +456,6 @@ class DeploymentSubdomainHtaccessTest extends TestCase
 
         // RunCloud HTTP API should never have been contacted
         Http::assertNothingSent();
+        Queue::assertNotPushed(ConfigureRunCloudSubdomainSsl::class);
     }
 }
