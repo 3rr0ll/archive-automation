@@ -10,6 +10,7 @@ use App\Models\Server;
 use App\Models\User;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use App\Services\Sftp\SftpConnectionFactory;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -119,33 +120,62 @@ Route::middleware('admin')->group(function (): void {
     Route::get('/servers', function () {
         $servers = Server::orderBy('created_at', 'desc')->get();
 
-        // Disk usage for each server via SSH, cached so the page doesn't reconnect on every load.
-        config(['services.sftp.timeout' => 10]);
-        $factory = app(SftpConnectionFactory::class);
-        $command = <<<'CMD'
+        return view('pages.servers', compact('servers'));
+    })->name('servers');
+
+    Route::get('/servers/{server:server_id}/storage', function (Request $request, Server $server, SftpConnectionFactory $factory): JsonResponse {
+        $key = "server-storage:{$server->server_id}";
+
+        if ($request->boolean('refresh')) {
+            Cache::forget($key);
+        }
+
+        $data = Cache::get($key);
+
+        if ($data === null) {
+            $timeout = config('services.sftp.timeout');
+            config(['services.sftp.timeout' => 10]);
+
+            $command = <<<'CMD'
 df -B1 --output=size,used,avail,pcent / | tail -1 | awk '{gsub("%","",$4); printf "{\"total\":%s,\"used\":%s,\"available\":%s,\"percent\":%s}\n",$1,$2,$3,$4}'
 CMD;
 
-        $servers->each(function ($server) use ($factory, $command) {
-            $server->storage = Cache::remember(
-                "server-storage:{$server->server_id}",
-                now()->addMinutes(10),
-                function () use ($factory, $command, $server) {
-                    try {
-                        $ssh = $factory->connectSsh($server->ip_address);
-                        $result = json_decode(trim($ssh->exec($command)), true);
-                        $ssh->disconnect();
+            $ssh = null;
 
-                        return is_array($result) ? $result : ['error' => 'Unexpected response'];
-                    } catch (Throwable $e) {
-                        return ['error' => $e->getMessage()];
+            try {
+                $ssh = $factory->connectSsh($server->ip_address);
+                $ssh->setTimeout(10);
+                $output = $ssh->exec($command);
+
+                if (! is_string($output) || $ssh->isTimeout()) {
+                    throw new RuntimeException('Storage command failed.');
+                }
+
+                $result = json_decode(trim($output), true, flags: JSON_THROW_ON_ERROR);
+
+                if (! is_array($result) || count($result) !== 4) {
+                    throw new RuntimeException('Invalid storage response.');
+                }
+
+                foreach (['total', 'used', 'available', 'percent'] as $field) {
+                    if (! isset($result[$field]) || ! is_numeric($result[$field]) || $result[$field] < 0) {
+                        throw new RuntimeException('Invalid storage response.');
                     }
                 }
-            );
-        });
 
-        return view('pages.servers', compact('servers'));
-    })->name('servers');
+                $data = $result;
+            } catch (Throwable) {
+                $data = ['error' => 'Unable to connect'];
+            } finally {
+                config(['services.sftp.timeout' => $timeout]);
+                $ssh?->disconnect();
+            }
+
+            Cache::put($key, $data, isset($data['error']) ? now()->addMinute() : now()->addMinutes(10));
+        }
+
+        return response()->json(isset($data['error']) ? ['error' => 'Unable to connect'] : $data);
+    })->name('servers.storage');
 
     Route::get('/users', function () {
         $users = User::orderBy('created_at', 'desc')->get();
