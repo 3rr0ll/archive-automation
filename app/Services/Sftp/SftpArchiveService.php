@@ -11,7 +11,7 @@ class SftpArchiveService
         private SftpConnectionFactory $connectionFactory,
     ) {}
 
-    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>} */
+    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>, subdomain_folders: list<string>} */
     public function extract(
         string $host,
         string $archivePath,
@@ -34,7 +34,7 @@ class SftpArchiveService
         );
     }
 
-    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>} */
+    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>, subdomain_folders: list<string>} */
     public function uploadAndExtract(
         string $host,
         string $localArchivePath,
@@ -72,7 +72,7 @@ class SftpArchiveService
         );
     }
 
-    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>} */
+    /** @return array{archive_path: string, destination_path: string, entries_extracted: int, archive_deleted: bool, archive_uploaded: bool, deleted_index_files: list<string>, subdomain_folders: list<string>} */
     private function extractWithClient(
         SFTP $client,
         string $archivePath,
@@ -92,6 +92,7 @@ class SftpArchiveService
 
         $entries = $this->listEntries($client, $archivePath);
         $this->guardArchiveEntries($entries);
+        $subdomainFolders = $this->detectSubdomainFolders($entries);
         $deletedIndexFiles = $deleteExistingIndex
             ? $this->deleteExistingIndexFiles($client, $destinationPath)
             : [];
@@ -119,7 +120,45 @@ class SftpArchiveService
             'archive_deleted' => $deleteArchive,
             'archive_uploaded' => $archiveUploaded,
             'deleted_index_files' => $deletedIndexFiles,
+            'subdomain_folders' => $subdomainFolders,
         ];
+    }
+
+    /**
+     * Top-level archive directories ending in "-sub" mark subdomain content.
+     *
+     * @param  list<string>  $entries
+     * @return list<string>
+     */
+    private function detectSubdomainFolders(array $entries): array
+    {
+        $folders = [];
+
+        foreach ($entries as $entry) {
+            $normalized = str_replace('\\', '/', $entry);
+            $segments = array_values(array_filter(
+                explode('/', $normalized),
+                static fn (string $segment): bool => $segment !== '',
+            ));
+
+            if ($segments === []) {
+                continue;
+            }
+
+            $topLevelName = $segments[0];
+            $isDirectory = str_ends_with($normalized, '/') || count($segments) > 1;
+
+            if (! $isDirectory || ! str_ends_with($topLevelName, '-sub')) {
+                continue;
+            }
+
+            $folders[$topLevelName] = true;
+        }
+
+        $detected = array_keys($folders);
+        natcasesort($detected);
+
+        return array_values($detected);
     }
 
     /** @return list<string> */

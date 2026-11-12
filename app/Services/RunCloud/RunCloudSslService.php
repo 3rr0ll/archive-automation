@@ -3,6 +3,7 @@
 namespace App\Services\RunCloud;
 
 use Exception;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
@@ -19,10 +20,6 @@ class RunCloudSslService
      * 1. Enable Advanced SSL & AutoSSL on the web application.
      * 2. Deploy Let's Encrypt certificate to the domain using dns-01 via Cloudflare externalApi.
      *
-     * @param  int  $serverId
-     * @param  int  $appId
-     * @param  string  $domain
-     * @param  int|null  $domainId
      * @return array<string, mixed>
      *
      * @throws Exception
@@ -30,7 +27,9 @@ class RunCloudSslService
     public function configureAdvancedSsl(int $serverId, int $appId, string $domain, ?int $domainId = null): array
     {
         // 1. Enable Advanced SSL and AutoSSL mode on the web application
-        $this->enableAdvancedSslMode($serverId, $appId);
+        if (! $this->enableAdvancedSslMode($serverId, $appId)) {
+            throw new Exception('RunCloud could not enable Advanced SSL and AutoSSL for this web application.');
+        }
 
         // 2. Resolve domain ID under this web application if not provided
         $domainId = $domainId ?? $this->webAppService->getDomainId($serverId, $appId, $domain);
@@ -75,11 +74,41 @@ class RunCloudSslService
             'external_api' => (int) $externalApiId,
         ]);
 
-        $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
+        $sslEndpoint = "/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl";
+        $response = $this->client->client()->post($sslEndpoint, $payload);
+
+        if ($response->status() === 403 && str_contains(strtolower((string) $response->json('message', '')), 'you already have ssl installed')) {
+            $existingResponse = $this->client->client()->get($sslEndpoint);
+            if (! $existingResponse->successful()) {
+                $this->client->handleApiError('RunCloud could not verify the existing domain SSL certificate', $existingResponse);
+            }
+
+            $existingSsl = $existingResponse->json('data') ?? $existingResponse->json() ?? [];
+            $sslId = (int) ($existingSsl['id'] ?? 0);
+            if ($sslId <= 0) {
+                throw new Exception("RunCloud reported existing SSL for [{$domain}], but returned no SSL certificate ID.");
+            }
+
+            $settings = ['enableHttp' => false, 'enableHsts' => false];
+            $updateResponse = $this->client->client()->patch("{$sslEndpoint}/{$sslId}", $settings);
+            if (! $updateResponse->successful()) {
+                $this->client->handleApiError('RunCloud could not update the existing domain SSL configuration', $updateResponse);
+            }
+
+            Log::info('RunCloud existing domain SSL configuration updated', [
+                'server_id' => $serverId,
+                'app_id' => $appId,
+                'domain_id' => $domainId,
+                'domain' => $domain,
+                'ssl_id' => $sslId,
+            ]);
+
+            return array_merge(Arr::only($existingSsl, ['id', 'method', 'provider', 'status']), $settings);
+        }
 
         // If certificate endpoint already initialized or requires update, fall back to PUT
         if ($response->status() === 404 || $response->status() === 405) {
-            $response = $this->client->client()->put("/servers/{$serverId}/webapps/{$appId}/domains/{$domainId}/ssl", $payload);
+            $response = $this->client->client()->put($sslEndpoint, $payload);
         }
 
         if (! $response->successful()) {

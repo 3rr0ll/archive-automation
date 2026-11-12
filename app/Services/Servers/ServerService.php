@@ -43,6 +43,7 @@ class ServerService
      * servers and leaving newly discovered servers inactive.
      *
      * @return Collection<int, Server>
+     *
      * @throws Exception
      */
     public function syncFromRunCloud(): Collection
@@ -80,10 +81,6 @@ class ServerService
 
     /**
      * Toggle or update only the active/inactive status of a server.
-     *
-     * @param Server $server
-     * @param bool|null $isActive
-     * @return Server
      */
     public function toggleActive(Server $server, ?bool $isActive = null): Server
     {

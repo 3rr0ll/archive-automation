@@ -115,6 +115,39 @@ class SftpArchiveServiceTest extends TestCase
             ['/home/runcloud/webapps/example/public_html/index.html'],
             $result['deleted_index_files'],
         );
+        $this->assertSame([], $result['subdomain_folders']);
+    }
+
+    public function test_it_detects_top_level_subdomain_folders_ending_with_sub(): void
+    {
+        config()->set('services.sftp.allowed_roots', ['/home/runcloud']);
+
+        $client = Mockery::mock(SFTP::class);
+        $client->shouldReceive('is_file')->once()->with('/home/runcloud/archive.zip')->andReturnTrue();
+        $client->shouldReceive('is_dir')->once()->with('/home/runcloud/webapps/example/public_html')->andReturnTrue();
+        $client->shouldReceive('exec')
+            ->once()
+            ->with("unzip -Z1 '/home/runcloud/archive.zip'")
+            ->andReturn("index.html\nblog-sub/\nblog-sub/index.html\nshop-sub/page.html\nassets/app.css\nnotes-sub.txt\n");
+        $client->shouldReceive('getExitStatus')->once()->andReturn(0);
+        $client->shouldReceive('is_file')->twice()->andReturnFalse();
+        $client->shouldReceive('exec')
+            ->once()
+            ->with("unzip -oq '/home/runcloud/archive.zip' -d '/home/runcloud/webapps/example/public_html'")
+            ->andReturn('');
+        $client->shouldReceive('getExitStatus')->once()->andReturn(0);
+
+        $factory = Mockery::mock(SftpConnectionFactory::class);
+        $factory->shouldReceive('connect')->once()->with('192.0.2.10')->andReturn($client);
+
+        $result = (new SftpArchiveService($factory))->extract(
+            '192.0.2.10',
+            '/home/runcloud/archive.zip',
+            '/home/runcloud/webapps/example/public_html',
+            false,
+        );
+
+        $this->assertSame(['blog-sub', 'shop-sub'], $result['subdomain_folders']);
     }
 
     public function test_it_rejects_zip_slip_entries_before_extraction(): void

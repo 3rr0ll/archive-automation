@@ -71,7 +71,7 @@ class DeploymentFileEditorController extends Controller
                 ],
             ]);
         } catch (Throwable $e) {
-            Log::error('SFTP file tree list failed: ' . $e->getMessage(), [
+            Log::error('SFTP file tree list failed: '.$e->getMessage(), [
                 'deployment_id' => $deployment->id,
                 'path' => $remoteDir,
             ]);
@@ -114,7 +114,7 @@ class DeploymentFileEditorController extends Controller
                 ],
             ]);
         } catch (Throwable $e) {
-            Log::error('SFTP file read failed: ' . $e->getMessage(), [
+            Log::error('SFTP file read failed: '.$e->getMessage(), [
                 'deployment_id' => $deployment->id,
                 'path' => $filePath,
             ]);
@@ -159,7 +159,7 @@ class DeploymentFileEditorController extends Controller
                 ],
             ]);
         } catch (Throwable $e) {
-            Log::error('SFTP file save failed: ' . $e->getMessage(), [
+            Log::error('SFTP file save failed: '.$e->getMessage(), [
                 'deployment_id' => $deployment->id,
                 'path' => $filePath,
             ]);
@@ -204,7 +204,7 @@ class DeploymentFileEditorController extends Controller
                 ],
             ]);
         } catch (Throwable $e) {
-            Log::error('SFTP file create failed: ' . $e->getMessage(), [
+            Log::error('SFTP file create failed: '.$e->getMessage(), [
                 'deployment_id' => $deployment->id,
                 'path' => $filePath,
             ]);
@@ -262,20 +262,20 @@ class DeploymentFileEditorController extends Controller
             }, $downloadFilename, [
                 'Content-Type' => $contentType,
                 'Content-Length' => (string) $fileSize,
-                'Content-Disposition' => 'attachment; filename="' . $downloadFilename . '"',
+                'Content-Disposition' => 'attachment; filename="'.$downloadFilename.'"',
                 'Cache-Control' => 'no-cache, no-store, must-revalidate',
                 'Pragma' => 'no-cache',
                 'Expires' => '0',
             ]);
         } catch (Throwable $e) {
-            Log::error('SFTP zip download failed: ' . $e->getMessage(), [
+            Log::error('SFTP zip download failed: '.$e->getMessage(), [
                 'deployment_id' => $deployment->id,
                 'domain' => $deployment->domain,
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to generate archive: ' . $e->getMessage(),
+                'message' => 'Failed to generate archive: '.$e->getMessage(),
             ], 500);
         }
     }

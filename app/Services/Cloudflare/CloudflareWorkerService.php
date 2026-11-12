@@ -5,7 +5,6 @@ namespace App\Services\Cloudflare;
 use App\Models\EnvironmentVariable;
 use App\Services\Cache\ApplicationCache;
 use Exception;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
 class CloudflareWorkerService

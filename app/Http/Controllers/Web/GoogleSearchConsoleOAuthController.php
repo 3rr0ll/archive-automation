@@ -19,19 +19,19 @@ class GoogleSearchConsoleOAuthController extends Controller
      */
     public function handleCallback(Request $request)
     {
-            if ($request->has('error')) {
+        if ($request->has('error')) {
             $error = (string) $request->query('error_description', $request->query('error'));
             Log::error('Google OAuth callback error', ['error' => $error]);
 
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Google authorization denied: ' . $error,
+                    'message' => 'Google authorization denied: '.$error,
                 ], 400);
             }
 
             return redirect()->route('google-search-console')
-                ->with('error', 'Google authorization failed: ' . $error);
+                ->with('error', 'Google authorization failed: '.$error);
         }
 
         $code = (string) $request->query('code');
@@ -83,12 +83,12 @@ class GoogleSearchConsoleOAuthController extends Controller
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to link Google account: ' . $e->getMessage(),
+                    'message' => 'Failed to link Google account: '.$e->getMessage(),
                 ], 500);
             }
 
             return redirect()->route('google-search-console')
-                ->with('error', 'Failed to link Google account: ' . $e->getMessage());
+                ->with('error', 'Failed to link Google account: '.$e->getMessage());
         }
     }
 }

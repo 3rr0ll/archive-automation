@@ -13,7 +13,7 @@ class EnvironmentVariable extends Model
         'type',
         'environments',
         'note',
-        'user_id'
+        'user_id',
     ];
 
     protected $casts = [

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminDeploymentIndexRequest;
 use App\Http\Requests\BulkDeploymentRequest;
 use App\Http\Requests\DeploymentLogsRequest;
+use App\Http\Requests\DeploymentSubdomainFoldersRequest;
 use App\Http\Requests\StoreDeploymentRequest;
 use App\Http\Resources\DeploymentResource;
 use App\Models\Deployment;
@@ -77,8 +78,12 @@ class DeploymentController extends Controller
     {
         $validated = $request->validated();
         $logs = $deployment->logs()
+            ->when(
+                isset($validated['step_name']),
+                fn ($query) => $query->where('step_name', $validated['step_name']),
+                fn ($query) => $query->where('step_name', '!=', 'detecting_subdomains'),
+            )
             ->when(isset($validated['status']), fn ($query) => $query->where('status', $validated['status']))
-            ->when(isset($validated['step_name']), fn ($query) => $query->where('step_name', $validated['step_name']))
             ->orderBy('created_at', $validated['sort_direction'] ?? 'desc')
             ->orderBy('id', $validated['sort_direction'] ?? 'desc')
             ->paginate($validated['per_page'] ?? 25)
@@ -98,6 +103,39 @@ class DeploymentController extends Controller
                 'last_page' => $logs->lastPage(),
                 'per_page' => $logs->perPage(),
                 'total' => $logs->total(),
+            ],
+        ]);
+    }
+
+    public function subdomainFolders(DeploymentSubdomainFoldersRequest $request, Deployment $deployment): JsonResponse
+    {
+        $validated = $request->validated();
+        $query = $deployment->logs()
+            ->where('step_name', 'detecting_subdomains')
+            ->orderBy('id');
+
+        $folders = (clone $query)
+            ->paginate($validated['per_page'] ?? 10)
+            ->withQueryString();
+
+        $allFolders = (clone $query)
+            ->pluck('message')
+            ->filter(fn ($f): bool => is_string($f) && $f !== '')
+            ->values()
+            ->all();
+
+        return response()->json([
+            'data' => $folders->getCollection()->map(fn ($log): array => [
+                'id' => $log->id,
+                'name' => $log->message,
+                'created_at' => $log->created_at?->toIso8601String(),
+            ])->values(),
+            'all_folders' => $allFolders,
+            'meta' => [
+                'current_page' => $folders->currentPage(),
+                'last_page' => $folders->lastPage(),
+                'per_page' => $folders->perPage(),
+                'total' => $folders->total(),
             ],
         ]);
     }
@@ -243,6 +281,7 @@ class DeploymentController extends Controller
         $foundItems = collect(DeploymentResource::collection($deployments)->resolve())
             ->map(function ($item) {
                 $item['source'] = 'database';
+
                 return $item;
             });
 

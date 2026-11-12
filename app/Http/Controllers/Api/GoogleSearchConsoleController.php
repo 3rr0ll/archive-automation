@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\GoogleSearchConsole\GoogleSearchConsoleAccountService;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -299,7 +300,7 @@ class GoogleSearchConsoleController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to exchange authorization code: ' . $e->getMessage(),
+                'message' => 'Failed to exchange authorization code: '.$e->getMessage(),
             ], 400);
         }
     }
@@ -309,7 +310,7 @@ class GoogleSearchConsoleController extends Controller
      */
     public function oauthStatus(Request $request): JsonResponse
     {
-        $activeAccount = app(\App\Services\GoogleSearchConsole\GoogleSearchConsoleAccountService::class)->active();
+        $activeAccount = app(GoogleSearchConsoleAccountService::class)->active();
         $accountType = null;
 
         if ($activeAccount) {
@@ -336,5 +337,4 @@ class GoogleSearchConsoleController extends Controller
             'account_type' => $accountType,
         ]);
     }
-
 }

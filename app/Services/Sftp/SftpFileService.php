@@ -2,6 +2,7 @@
 
 namespace App\Services\Sftp;
 
+use Illuminate\Support\Facades\Log;
 use phpseclib3\Net\SFTP;
 use RuntimeException;
 
@@ -37,7 +38,7 @@ class SftpFileService
                 continue;
             }
 
-            $fullPath = rtrim($remoteDir, '/') . '/' . $filename;
+            $fullPath = rtrim($remoteDir, '/').'/'.$filename;
             $isDir = isset($info['type']) && $info['type'] === NET_SFTP_TYPE_DIRECTORY;
 
             $items[] = [
@@ -54,6 +55,7 @@ class SftpFileService
             if ($a['type'] !== $b['type']) {
                 return $a['type'] === 'directory' ? -1 : 1;
             }
+
             return strcasecmp($a['name'], $b['name']);
         });
 
@@ -76,7 +78,7 @@ class SftpFileService
         // 10MB safety limit for in-browser editing
         $size = $client->filesize($filePath);
         if ($size !== false && $size > 10 * 1024 * 1024) {
-            throw new RuntimeException("File is too large to open in the editor (max 10MB).");
+            throw new RuntimeException('File is too large to open in the editor (max 10MB).');
         }
 
         $content = $client->get($filePath);
@@ -88,9 +90,65 @@ class SftpFileService
     }
 
     /**
-     * Write contents to a remote file.
+     * Read a remote file when it exists; return null when it does not.
      */
-    public function writeFile(string $host, string $filePath, string $content): void
+    public function readFileIfExists(string $host, string $filePath): ?string
+    {
+        $this->guardPath($filePath);
+
+        $client = $this->connectionFactory->connect($host);
+
+        if (! $client->is_file($filePath)) {
+            return null;
+        }
+
+        $size = $client->filesize($filePath);
+        if ($size !== false && $size > 10 * 1024 * 1024) {
+            throw new RuntimeException('File is too large to open in the editor (max 10MB).');
+        }
+
+        $content = $client->get($filePath);
+        if ($content === false) {
+            throw new RuntimeException("Could not read file: {$filePath}");
+        }
+
+        return $content;
+    }
+
+    /**
+     * Check if a remote file exists.
+     */
+    public function fileExists(string $host, string $filePath): bool
+    {
+        $this->guardPath($filePath);
+
+        $client = $this->connectionFactory->connect($host);
+
+        return $client->is_file($filePath);
+    }
+
+    /**
+     * Get remote file permissions (e.g. 0644), or null if file does not exist.
+     */
+    public function getFilePermissions(string $host, string $filePath): ?int
+    {
+        $this->guardPath($filePath);
+
+        $client = $this->connectionFactory->connect($host);
+
+        if (! $client->is_file($filePath)) {
+            return null;
+        }
+
+        $stat = $client->stat($filePath);
+
+        return isset($stat['mode']) ? ((int) $stat['mode'] & 0777) : null;
+    }
+
+    /**
+     * Write contents to a remote file, optionally restoring/setting file permissions.
+     */
+    public function writeFile(string $host, string $filePath, string $content, ?int $permissions = null): void
     {
         $this->guardPath($filePath);
 
@@ -103,6 +161,10 @@ class SftpFileService
 
         if (! $client->put($filePath, $content)) {
             throw new RuntimeException("Failed to save file: {$filePath}");
+        }
+
+        if ($permissions !== null) {
+            $client->chmod($permissions, $filePath);
         }
     }
 
@@ -119,7 +181,7 @@ class SftpFileService
 
         $remoteDirClean = rtrim(str_replace('\\', '/', $remoteDir), '/');
         $sftp = $this->connectionFactory->connect($host);
-        $remoteTempZip = "/tmp/{$zipBasename}_" . uniqid() . ".zip";
+        $remoteTempZip = "/tmp/{$zipBasename}_".uniqid().'.zip';
 
         // Execute zip in the target directory; if zip is unavailable, fallback to tar.gz
         $cmd = sprintf(
@@ -142,7 +204,7 @@ class SftpFileService
             }
         }
 
-        $remoteTarGz = $remoteTempZip . '.tar.gz';
+        $remoteTarGz = $remoteTempZip.'.tar.gz';
         if ($sftp->is_file($remoteTarGz)) {
             $size = (int) $sftp->filesize($remoteTarGz);
             if ($size > 0) {
@@ -161,7 +223,7 @@ class SftpFileService
      * Stream a remote file directly to an output stream (e.g. php://output) in chunks,
      * then delete the remote file.
      *
-     * @param callable(string): void|null $chunkCallback Optional custom handler per chunk
+     * @param  callable(string): void|null  $chunkCallback  Optional custom handler per chunk
      */
     public function streamRemoteFile(string $host, string $remoteFilePath, ?callable $chunkCallback = null, bool $deleteAfter = true): void
     {
@@ -182,7 +244,7 @@ class SftpFileService
                 try {
                     $sftp->delete($remoteFilePath);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Failed to delete temporary remote archive: ' . $e->getMessage());
+                    Log::warning('Failed to delete temporary remote archive: '.$e->getMessage());
                 }
             }
         }
@@ -207,13 +269,14 @@ class SftpFileService
             $archive = $this->createRemoteArchive($host, $remoteDirClean, $zipBasename);
             $sftp = $this->connectionFactory->connect($host);
             $extension = $archive['format'] === 'tar.gz' ? '.tar.gz' : '.zip';
-            $localFile = tempnam(sys_get_temp_dir(), 'arch_') . $extension;
+            $localFile = tempnam(sys_get_temp_dir(), 'arch_').$extension;
 
             $sftp->get($archive['path'], $localFile);
             $sftp->delete($archive['path']);
+
             return $localFile;
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Remote SSH/SFTP zip failed, attempting SFTP fallback: ' . $e->getMessage());
+            Log::warning('Remote SSH/SFTP zip failed, attempting SFTP fallback: '.$e->getMessage());
         }
 
         // Approach 2 (Fallback): SFTP recursive file fetch
@@ -223,8 +286,8 @@ class SftpFileService
             throw new RuntimeException("Directory not found: {$remoteDirClean}");
         }
 
-        $tempZipPath = tempnam(sys_get_temp_dir(), 'zip_') . '.zip';
-        $zip = new \ZipArchive();
+        $tempZipPath = tempnam(sys_get_temp_dir(), 'zip_').'.zip';
+        $zip = new \ZipArchive;
 
         if ($zip->open($tempZipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('Failed to create local zip archive.');
@@ -241,7 +304,7 @@ class SftpFileService
                     continue;
                 }
 
-                $fullPath = $dir . '/' . $filename;
+                $fullPath = $dir.'/'.$filename;
                 $relativePath = ltrim(substr($fullPath, strlen($remoteDirClean)), '/');
                 $isDir = isset($info['type']) && $info['type'] === NET_SFTP_TYPE_DIRECTORY;
 

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Enums\DomainVersion;
+use App\Support\UrlSigner;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,13 +50,13 @@ class Deployment extends Model
 
     public function getHashAttribute(): string
     {
-        return \App\Support\UrlSigner::encode($this->id);
+        return UrlSigner::encode($this->id);
     }
 
     public function resolveRouteBinding($value, $field = null): ?Model
     {
         // Try decoding as token first
-        $decodedId = \App\Support\UrlSigner::decode((string) $value);
+        $decodedId = UrlSigner::decode((string) $value);
         if ($decodedId !== null) {
             return $this->where('id', $decodedId)->first();
         }

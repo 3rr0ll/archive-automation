@@ -12,11 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::disableForeignKeyConstraints();
-    
+
         Schema::dropIfExists('servers');
-    
+
         Schema::enableForeignKeyConstraints();
     }
+
     /**
      * Reverse the migrations.
      */

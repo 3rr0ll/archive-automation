@@ -590,30 +590,195 @@ class RunCloudWebAppService
     }
 
     /**
-     * Find the domain ID for a web application domain.
+     * Get all domains attached to a web application.
+     *
+     * @return list<array<string, mixed>>
      */
-    public function getDomainId(int $serverId, int $appId, string $domain): ?int
+    public function getWebAppDomains(int $serverId, int $appId): array
     {
         try {
             $response = $this->client->client()->get("/servers/{$serverId}/webapps/{$appId}/domains");
 
             if ($response->successful()) {
                 $domains = $response->json('data') ?? $response->json() ?? [];
-                $normalized = strtolower(trim($domain));
 
-                foreach ($domains as $item) {
-                    $itemDomain = strtolower(trim($item['name'] ?? ''));
-                    if ($itemDomain === $normalized || str_contains($itemDomain, $normalized)) {
-                        return (int) $item['id'];
-                    }
-                }
+                return is_array($domains) ? array_values($domains) : [];
+            }
 
-                if (! empty($domains[0]['id'])) {
-                    return (int) $domains[0]['id'];
+            Log::warning("Failed to retrieve domains list for webapp {$appId}: status ".$response->status());
+        } catch (Throwable $e) {
+            Log::warning("Failed to retrieve domains list for webapp {$appId}: ".$e->getMessage());
+        }
+
+        return [];
+    }
+
+    /**
+     * Attach a subdomain as an alias in RunCloud with Cloudflare DNS integration and proxy settings.
+     *
+     * @return array<string, mixed>
+     */
+    public function attachSubdomainAlias(
+        int $serverId,
+        int $appId,
+        string $subdomain,
+        ?int $externalApiId = null,
+    ): array {
+        $externalApiId = $externalApiId
+            ?: (int) ($this->client->getEnvValue(
+                'RUNCLOUD_CLOUDFLARE_EXTERNAL_API_ID',
+                Config::get('services.runcloud.cloudflare_external_api_id', 42310)
+            ) ?: 42310);
+
+        $payload = [
+            'name' => $subdomain,
+            'type' => 'alias',
+            'www' => false,
+            'redirection' => 'none',
+            'dnsProvider' => 'cloudflare',
+            'cfApiKeyId' => $externalApiId,
+            'updateCloudflare' => true,
+            'allowDnsIntegration' => true,
+            'setAsProxied' => true,
+        ];
+
+        $response = $this->client->client()->post("/servers/{$serverId}/webapps/{$appId}/domains", $payload);
+
+        if (! $response->successful()) {
+            if ($response->status() === 422) {
+                $errorMsg = (string) ($response->json('message') ?? $response->body());
+                if (str_contains(strtolower($errorMsg), 'already') || str_contains(strtolower($errorMsg), 'taken')) {
+                    throw new RuntimeException("Subdomain [{$subdomain}] already attached on RunCloud.");
                 }
             }
-        } catch (Exception $e) {
-            Log::warning('Failed to retrieve domains list for webapp: '.$e->getMessage());
+
+            $this->client->handleApiError("RunCloud attach subdomain alias failed for {$subdomain}", $response);
+        }
+
+        return $response->json('data') ?? $response->json() ?? [];
+    }
+
+    /**
+     * Automatically add subdomain aliases for checked subfolders to a RunCloud web app.
+     *
+     * @param  list<string>  $subdomainFolders
+     * @return array{
+     *     added: list<array{subdomain: string, name: string, id: ?int}>,
+     *     skipped: list<array{subdomain: string, name: string, id: ?int, reason: string}>,
+     *     failed: list<array{subdomain: string, name: string, error: string}>,
+     * }
+     */
+    public function attachSubdomainAliases(
+        int $serverId,
+        int $appId,
+        string $domain,
+        array $subdomainFolders,
+        ?int $externalApiId = null,
+    ): array {
+        $results = [
+            'added' => [],
+            'skipped' => [],
+            'failed' => [],
+        ];
+
+        if ($subdomainFolders === []) {
+            return $results;
+        }
+
+        $cleanDomain = strtolower(trim(preg_replace('#^https?://#i', '', $domain)));
+        $cleanDomain = explode('/', $cleanDomain)[0];
+        $cleanDomain = explode(':', $cleanDomain)[0];
+
+        // 1. Fetch existing domains attached to this web application to avoid duplicates
+        $existingDomains = $this->getWebAppDomains($serverId, $appId);
+        $existingDomainIds = collect($existingDomains)
+            ->filter(fn (array $item) => is_string($item['name'] ?? null) && trim($item['name']) !== '')
+            ->mapWithKeys(fn (array $item) => [strtolower(trim($item['name'])) => isset($item['id']) ? (int) $item['id'] : null])
+            ->all();
+
+        // 2. Process each checked subfolder independently
+        foreach ($subdomainFolders as $rawFolder) {
+            if (! is_string($rawFolder)) {
+                continue;
+            }
+
+            $trimmed = trim($rawFolder);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            $lower = strtolower($trimmed);
+            $name = str_ends_with($lower, '-sub') ? substr($lower, 0, -4) : $lower;
+
+            // Validate subdomain label: a-z, 0-9, and - only
+            if (preg_match('/^[a-z0-9-]+$/', $name) !== 1 || trim($name, '-') === '') {
+                $results['failed'][] = [
+                    'subdomain' => "{$name}.{$cleanDomain}",
+                    'name' => $name,
+                    'error' => "Invalid subdomain name '{$rawFolder}'. Only a-z, 0-9, and hyphen (-) are allowed.",
+                ];
+
+                continue;
+            }
+
+            $fullSubdomain = "{$name}.{$cleanDomain}";
+
+            // Skip subdomains that already exist in RunCloud
+            if (array_key_exists($fullSubdomain, $existingDomainIds)) {
+                $results['skipped'][] = [
+                    'subdomain' => $fullSubdomain,
+                    'name' => $name,
+                    'id' => $existingDomainIds[$fullSubdomain],
+                    'reason' => 'Subdomain already attached in RunCloud.',
+                ];
+
+                continue;
+            }
+
+            // Attempt to add subdomain alias in RunCloud
+            try {
+                $response = $this->attachSubdomainAlias($serverId, $appId, $fullSubdomain, $externalApiId);
+                $domainId = isset($response['id']) ? (int) $response['id'] : null;
+
+                $results['added'][] = [
+                    'subdomain' => $fullSubdomain,
+                    'name' => $name,
+                    'id' => $domainId,
+                ];
+
+                // Prevent duplicates within the same batch
+                $existingDomainIds[$fullSubdomain] = $domainId;
+            } catch (Throwable $e) {
+                Log::warning("RunCloud failed to attach subdomain alias [{$fullSubdomain}]: {$e->getMessage()}");
+
+                $results['failed'][] = [
+                    'subdomain' => $fullSubdomain,
+                    'name' => $name,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Find the domain ID for a web application domain.
+     */
+    public function getDomainId(int $serverId, int $appId, string $domain): ?int
+    {
+        $domains = $this->getWebAppDomains($serverId, $appId);
+        $normalized = strtolower(trim($domain));
+
+        foreach ($domains as $item) {
+            $itemDomain = strtolower(trim($item['name'] ?? ''));
+            if ($itemDomain === $normalized || str_contains($itemDomain, $normalized)) {
+                return (int) $item['id'];
+            }
+        }
+
+        if (! empty($domains[0]['id'])) {
+            return (int) $domains[0]['id'];
         }
 
         return null;

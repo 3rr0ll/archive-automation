@@ -30,6 +30,23 @@ export async function fetchDeploymentLogs(id, params = {}) {
     return api.get(`/deployments/${id}/logs${query ? `?${query}` : ''}`);
 }
 
+export async function fetchDeploymentSubdomainFolders(id, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return api.get(`/deployments/${id}/subdomain-folders${query ? `?${query}` : ''}`);
+}
+
+export async function fetchDeploymentSubdomainHtaccessStatus(id) {
+    return api.get(`/deployments/${id}/subdomain-htaccess`);
+}
+
+export async function previewDeploymentSubdomainHtaccess(id, folders) {
+    return api.post(`/deployments/${id}/subdomain-htaccess/preview`, { folders });
+}
+
+export async function applyDeploymentSubdomainHtaccess(id, folders) {
+    return api.post(`/deployments/${id}/subdomain-htaccess/apply`, { folders });
+}
+
 export async function cancelDeployment(id) {
     const res = await api.post(`/deployments/${id}/cancel`);
     clientCache.invalidate('deployments*');

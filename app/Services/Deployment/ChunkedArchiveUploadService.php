@@ -115,7 +115,7 @@ class ChunkedArchiveUploadService
         }
 
         $signature = file_get_contents(Storage::disk('local')->path($assembledPath), false, null, 0, 4);
-        if (! is_string($signature) || ! str_starts_with($signature, "PK")) {
+        if (! is_string($signature) || ! str_starts_with($signature, 'PK')) {
             Storage::disk('local')->delete($assembledPath);
             throw new RuntimeException('The uploaded file is not a valid ZIP archive.');
         }
