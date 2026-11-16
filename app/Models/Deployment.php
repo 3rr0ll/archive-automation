@@ -87,6 +87,11 @@ class Deployment extends Model
         return $this->hasMany(DeploymentLog::class);
     }
 
+    public function subdomainFolders(): HasMany
+    {
+        return $this->logs()->where('step_name', 'detecting_subdomains');
+    }
+
     public function apiUsageRecords(): HasMany
     {
         return $this->hasMany(ApiUsageRecord::class);

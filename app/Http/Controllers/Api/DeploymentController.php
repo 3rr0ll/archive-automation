@@ -40,6 +40,7 @@ class DeploymentController extends Controller
 
         $deployments = $this->filteredAdminQuery($validated)
             ->with(['user:id,name,email', 'server'])
+            ->withCount('subdomainFolders')
             ->orderBy($validated['sort_by'] ?? 'created_at', $validated['sort_direction'] ?? 'desc')
             ->orderByDesc('id')
             ->paginate($validated['per_page'] ?? 15)
@@ -463,6 +464,7 @@ class DeploymentController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $deployments = Deployment::where('user_id', $request->user()->id)
+            ->withCount('subdomainFolders')
             ->latest()
             ->paginate(15);
 

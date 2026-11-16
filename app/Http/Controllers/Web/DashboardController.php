@@ -21,6 +21,7 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         $deployments = Deployment::with(['user:id,name,email', 'server'])
+            ->withCount('subdomainFolders')
             ->latest('created_at')
             ->orderByDesc('id')
             ->get();

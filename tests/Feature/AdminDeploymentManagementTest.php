@@ -89,6 +89,37 @@ class AdminDeploymentManagementTest extends TestCase
             ->assertJsonPath('data.current_step_counts.queued', 1);
     }
 
+    public function test_deployment_list_counts_detected_subdomain_folders_only(): void
+    {
+        $withFolders = $this->deployment(['domain' => 'with-folders.test']);
+        $withoutFolders = $this->deployment(['domain' => 'without-folders.test']);
+        $withFolders->logs()->createMany([
+            ['step_name' => 'detecting_subdomains', 'status' => 'warning', 'message' => 'blog-sub'],
+            ['step_name' => 'detecting_subdomains', 'status' => 'warning', 'message' => 'shop-sub'],
+            ['step_name' => 'deploy', 'status' => 'success', 'message' => 'Deployed.'],
+        ]);
+        $withoutFolders->logs()->create(['step_name' => 'deploy', 'status' => 'success', 'message' => 'Deployed.']);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/deployments?sort_by=domain&sort_direction=asc')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $withFolders->id)
+            ->assertJsonPath('data.0.subdomain_folders_count', 2)
+            ->assertJsonPath('data.1.id', $withoutFolders->id)
+            ->assertJsonPath('data.1.subdomain_folders_count', 0);
+    }
+
+    public function test_dashboard_includes_detected_subdomain_folder_count(): void
+    {
+        $deployment = $this->deployment(['status' => 'completed']);
+        $deployment->logs()->create(['step_name' => 'detecting_subdomains', 'status' => 'warning', 'message' => 'blog-sub']);
+
+        $this->actingAs($this->admin)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertViewHas('deployments', fn ($deployments): bool => $deployments->find($deployment->id)->subdomain_folders_count === 1);
+    }
+
     public function test_admin_can_paginate_and_filter_deployment_logs(): void
     {
         $deployment = $this->deployment();

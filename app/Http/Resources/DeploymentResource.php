@@ -34,6 +34,7 @@ class DeploymentResource extends JsonResource
             'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
             'deployment_type' => $this->deployment_type ?? 'full',
             'has_sitemap' => (bool) ($this->has_sitemap ?? true),
+            'subdomain_folders_count' => $this->whenCounted('subdomainFolders'),
             'archive_source' => $this->archive_source,
             'archive_original_name' => $this->archive_original_name,
             'archive_status' => $this->archive_status instanceof \BackedEnum ? $this->archive_status->value : $this->archive_status,
