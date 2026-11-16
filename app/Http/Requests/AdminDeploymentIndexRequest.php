@@ -38,7 +38,7 @@ class AdminDeploymentIndexRequest extends FormRequest
                 'current_step',
             ])],
             'sort_direction' => ['sometimes', Rule::in(['asc', 'desc'])],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 }

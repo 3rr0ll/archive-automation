@@ -32,6 +32,8 @@ class DeploymentResource extends JsonResource
             ] : null),
             'domain' => $this->domain,
             'version' => $this->version instanceof \BackedEnum ? $this->version->value : $this->version,
+            'historical_ips' => $this->historical_ips,
+            'working_ip' => $this->working_ip,
             'deployment_type' => $this->deployment_type ?? 'full',
             'has_sitemap' => (bool) ($this->has_sitemap ?? true),
             'subdomain_folders_count' => $this->whenCounted('subdomainFolders'),

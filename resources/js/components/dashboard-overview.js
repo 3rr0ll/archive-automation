@@ -36,14 +36,13 @@ export function dashboardOverview(
 
         // Drawer Form state
         form: {
-            deployment_type: 'full',
             domain: '',
             server_id: '',
             version: 'non-www',
             source_type: 'url',
             archive_url: '',
             archiveFile: null,
-            has_sitemap: true,
+            historical_ips: '',
         },
         serverDropdownOpen: false,
         get selectedServer() {
@@ -127,7 +126,7 @@ export function dashboardOverview(
         async loadDeployments(showSpinner = false, forceRefresh = false) {
             if (showSpinner) this.isLoading = true;
             try {
-                const res = await fetchDeployments(forceRefresh);
+                const res = await fetchDeployments(forceRefresh, { per_page: 1000 });
                 this.deployments = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
             } catch (err) {
                 console.warn('Could not load deployments from /api:', err);
@@ -198,6 +197,23 @@ export function dashboardOverview(
         // Pagination computed properties
         get totalPages() {
             return Math.ceil(this.displayedDeployments.length / this.perPage) || 1;
+        },
+
+        get visiblePages() {
+            const total = this.totalPages;
+            const current = Math.min(Math.max(1, this.currentPage), total);
+            const delta = 1; // Number of pages around current
+            const pages = [];
+
+            for (let i = 1; i <= total; i++) {
+                if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
+                    pages.push(i);
+                } else if (pages[pages.length - 1] !== '...') {
+                    pages.push('...');
+                }
+            }
+
+            return pages;
         },
 
         get paginatedDeployments() {
@@ -428,14 +444,13 @@ export function dashboardOverview(
                 : (this.servers.length > 0 ? this.servers[0].server_id : '');
 
             this.form = {
-                deployment_type: 'full',
                 domain: '',
                 server_id: defaultServerId,
                 version: 'non-www',
                 source_type: 'url',
                 archive_url: '',
                 archiveFile: null,
-                has_sitemap: true,
+                historical_ips: '',
             };
         },
 
@@ -474,43 +489,6 @@ export function dashboardOverview(
                 return;
             }
 
-            // Redirect-only mode: skips server provisioning and archive uploads
-            if (this.form.deployment_type === 'redirect') {
-                try {
-                    const payload = {
-                        deployment_type: 'redirect',
-                        domain: this.form.domain.trim(),
-                        version: this.form.version,
-                        has_sitemap: Boolean(this.form.has_sitemap),
-                    };
-
-                    console.log('[submitDeployment] Sending POST /api/deployments redirect payload:', payload);
-                    const response = await createDeployment(payload);
-                    console.log('[submitDeployment] Received redirect response:', response);
-
-                    const created = response.data || response;
-                    if (created && created.id) {
-                        this.deployments.unshift(created);
-                    } else {
-                        await this.loadDeployments(false);
-                    }
-
-                    this.closeModal();
-                    window.toast?.success('Redirect deployment queued successfully.');
-                } catch (error) {
-                    console.error('Redirect deployment error:', error);
-                    if (error.status === 422 && error.errors) {
-                        this.errors = error.errors;
-                    } else {
-                        this.errors = { general: error.message || 'Failed to trigger redirect deployment.' };
-                    }
-                    window.toast?.error(error.message || 'Failed to start redirect deployment.');
-                } finally {
-                    this.isSubmitting = false;
-                }
-                return;
-            }
-
             if (!this.form.server_id) {
                 console.warn('[submitDeployment] Validation failed: server_id is empty');
                 this.errors = { server_id: ['Please choose an active server.'] };
@@ -544,12 +522,18 @@ export function dashboardOverview(
                         version: this.form.version,
                         archive_upload_token: uploadToken,
                     };
+                    if (this.form.historical_ips && this.form.historical_ips.trim()) {
+                        payload.historical_ips = this.form.historical_ips.trim();
+                    }
                 } else {
                     payload = {
                         domain: this.form.domain.trim(),
                         server_id: parseInt(this.form.server_id, 10),
                         version: this.form.version,
                     };
+                    if (this.form.historical_ips && this.form.historical_ips.trim()) {
+                        payload.historical_ips = this.form.historical_ips.trim();
+                    }
                     if (this.form.archive_url && this.form.archive_url.trim()) {
                         payload.archive_url = this.form.archive_url.trim();
                     }

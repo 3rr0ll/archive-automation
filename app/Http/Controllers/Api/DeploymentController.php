@@ -463,10 +463,11 @@ class DeploymentController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        $perPage = $request->integer('per_page', 15);
         $deployments = Deployment::where('user_id', $request->user()->id)
             ->withCount('subdomainFolders')
             ->latest()
-            ->paginate(15);
+            ->paginate($perPage);
 
         return DeploymentResource::collection($deployments);
     }

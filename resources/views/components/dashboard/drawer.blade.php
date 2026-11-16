@@ -25,37 +25,13 @@
                         <!-- Drawer Header -->
                         <div class="px-6 py-5 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
                             <div>
-                                <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100" id="slide-over-title" x-text="form.deployment_type === 'redirect' ? 'New Redirect Deployment' : 'New Deployment'">New Deployment</h2>
-                                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5" x-text="form.deployment_type === 'redirect' ? 'Automate Cloudflare Worker redirects & Google Search Console using old DNS.' : 'Deploy an archived website or custom ZIP onto your servers.'">Deploy an archived website or custom ZIP onto your servers.</p>
+                                <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100" id="slide-over-title">New Deployment</h2>
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Deploy an archived website or custom ZIP onto your servers.</p>
                             </div>
                             <button type="button" @click="closeModal()" class="rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 focus:outline-none transition p-1 cursor-pointer">
                                 <span class="sr-only">Close panel</span>
                                 <x-lucide-x class="size-4.5" />
                             </button>
-                        </div>
-
-                        <!-- Tab Selector -->
-                        <div class="px-6 pt-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40">
-                            <div class="flex gap-6 -mb-px">
-                                <button type="button"
-                                        @click="form.deployment_type = 'full'"
-                                        class="pb-3 px-0.5 text-xs font-medium border-b-2 transition cursor-pointer flex items-center gap-2 focus:outline-none"
-                                        :class="form.deployment_type === 'full'
-                                            ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-semibold'
-                                            : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700'">
-                                    <x-lucide-server class="size-3.5" />
-                                    <span>Server Deployment</span>
-                                </button>
-                                <button type="button"
-                                        @click="form.deployment_type = 'redirect'"
-                                        class="pb-3 px-0.5 text-xs font-medium border-b-2 transition cursor-pointer flex items-center gap-2 focus:outline-none"
-                                        :class="form.deployment_type === 'redirect'
-                                            ? 'border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-semibold'
-                                            : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700'">
-                                    <x-lucide-arrow-right-left class="size-3.5" />
-                                    <span>Old DNS / Redirect</span>
-                                </button>
-                            </div>
                         </div>
 
                         <!-- Drawer Body -->
@@ -77,8 +53,29 @@
                                     </template>
                                 </div>
 
-                                <!-- Server Selection (Full Deployment only) -->
-                                <div x-show="form.deployment_type === 'full'">
+                                <!-- Historical IPs Prober Field -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <label for="deployment-historical-ips" class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                                            Historical IPs <span class="text-zinc-400 font-normal">(optional)</span>
+                                        </label>
+                                        <span class="text-[11px] text-zinc-400 dark:text-zinc-500">Auto-checks content & redirects</span>
+                                    </div>
+                                    <textarea id="deployment-historical-ips" 
+                                              x-model="form.historical_ips" 
+                                              rows="2" 
+                                              placeholder="Paste historical IPs here (e.g. 192.0.2.1, 198.51.100.2)..." 
+                                              class="block w-full rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#18181b] px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-zinc-400 dark:focus:border-zinc-600 focus:outline-none focus:ring-0 sm:leading-5 transition font-mono"></textarea>
+                                    <p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
+                                        If a working IP with domain-related content is found, Cloudflare Worker redirect will be configured directly (and sitemap submitted if present). Otherwise, it falls back to RunCloud server deployment.
+                                    </p>
+                                    <template x-if="errors.historical_ips">
+                                        <p class="text-xs text-red-500 mt-1" x-text="errors.historical_ips[0]"></p>
+                                    </template>
+                                </div>
+
+                                <!-- Server Selection -->
+                                <div>
                                     <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
                                         Target Server <span class="text-red-500">*</span>
                                     </label>
@@ -173,21 +170,8 @@
                                     </template>
                                 </div>
 
-                                <!-- Has Sitemap Checkbox (Redirect Mode) -->
-                                <div x-show="form.deployment_type === 'redirect'">
-                                    <label class="flex items-center gap-2.5 cursor-pointer select-none">
-                                        <input type="checkbox"
-                                               x-model="form.has_sitemap"
-                                               class="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-500 focus:ring-0 cursor-pointer">
-                                        <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Submit sitemap to Google Search Console</span>
-                                    </label>
-                                    <p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1 pl-6">
-                                        Submits <span class="font-mono" x-text="`https://${form.version === 'www' ? 'www.' : ''}${form.domain.trim() || 'example.com'}/sitemap.xml`"></span> after verification.
-                                    </p>
-                                </div>
-
-                                <!-- Archive Source Selection: Wayback URL vs Upload File (Full Deployment only) -->
-                                <div x-show="form.deployment_type === 'full'">
+                                <!-- Archive Source Selection: Wayback URL vs Upload File -->
+                                <div>
                                     <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-2">Archive Source</label>
                                     <div class="grid grid-cols-2 gap-3 mb-4">
                                         <button type="button" 
@@ -273,10 +257,10 @@
                                     form="deployment-form" 
                                     :disabled="isSubmitting" 
                                     class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md text-white bg-zinc-900 hover:bg-zinc-800 border border-transparent dark:border-zinc-700/80 focus:outline-none disabled:opacity-50 transition cursor-pointer">
-                                <span x-show="!isSubmitting" x-text="form.deployment_type === 'redirect' ? 'Continue' : 'Deploy Domain'">Deploy Domain</span>
+                                <span x-show="!isSubmitting">Deploy Domain</span>
                                 <span x-show="isSubmitting" class="flex items-center gap-1.5">
                                     <span class="animate-spin inline-block size-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-                                    <span x-text="uploadProgress > 0 && uploadProgress < 100 ? `Uploading ${uploadProgress}%` : (form.deployment_type === 'redirect' ? 'Deploying Redirect' : 'Deploying')"></span>
+                                    <span x-text="uploadProgress > 0 && uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Deploying'"></span>
                                 </span>
                             </button>
                         </div>

@@ -5,6 +5,7 @@ namespace App\Services\Deployment;
 use App\Enums\ArchiveStatus;
 use App\Enums\DeploymentStatus;
 use App\Jobs\DeployArchivedWebsite;
+use App\Jobs\ProbeHistoricalDns;
 use App\Jobs\WaitForWaybackArchive;
 use App\Models\Deployment;
 use App\Models\User;
@@ -28,11 +29,12 @@ class DeploymentLifecycleService
     ) {}
 
     /**
-     * @param  array{server_id?: int|null, domain: string, version: string, deployment_type?: string|null, has_sitemap?: bool|null, archive_url?: string|null, archive?: UploadedFile|null, archive_upload_token?: string|null}  $data
+     * @param  array{server_id?: int|null, domain: string, version: string, deployment_type?: string|null, has_sitemap?: bool|null, historical_ips?: string|null, working_ip?: string|null, archive_url?: string|null, archive?: UploadedFile|null, archive_upload_token?: string|null}  $data
      */
     public function submit(User $user, array $data): Deployment
     {
         $isRedirect = ($data['deployment_type'] ?? null) === 'redirect';
+        $hasHistoricalIps = filled($data['historical_ips'] ?? null);
         $upload = $data['archive'] ?? null;
         $uploadToken = $data['archive_upload_token'] ?? null;
         $isChunkedUpload = is_string($uploadToken) && $uploadToken !== '';
@@ -40,14 +42,18 @@ class DeploymentLifecycleService
         $storedPath = null;
 
         try {
-            $deployment = DB::transaction(function () use ($user, $data, $upload, $uploadToken, $isChunkedUpload, $isUpload, $isRedirect, &$storedPath): Deployment {
-                $step = $isRedirect ? 'queued' : ($isUpload ? 'archive_ready' : 'waiting_for_archive');
+            $deployment = DB::transaction(function () use ($user, $data, $upload, $uploadToken, $isChunkedUpload, $isUpload, $isRedirect, $hasHistoricalIps, &$storedPath): Deployment {
+                $step = $hasHistoricalIps
+                    ? 'probing_historical_ips'
+                    : ($isRedirect ? 'queued' : ($isUpload ? 'archive_ready' : 'waiting_for_archive'));
 
                 $deployment = Deployment::create([
                     'user_id' => $user->id,
                     'server_id' => $isRedirect ? ($data['server_id'] ?? null) : $data['server_id'],
                     'domain' => $data['domain'],
                     'version' => $data['version'],
+                    'historical_ips' => $data['historical_ips'] ?? null,
+                    'working_ip' => $data['working_ip'] ?? null,
                     'deployment_type' => $isRedirect ? 'redirect' : 'full',
                     'has_sitemap' => array_key_exists('has_sitemap', $data) ? (bool) $data['has_sitemap'] : true,
                     'archive_source' => $isRedirect ? 'redirect' : ($isUpload ? 'upload' : 'url'),
@@ -85,12 +91,14 @@ class DeploymentLifecycleService
 
                 $deployment->logs()->create([
                     'step_name' => $step,
-                    'status' => ($isUpload || $isRedirect) ? 'success' : 'in_progress',
-                    'message' => $isRedirect
-                        ? 'Redirect deployment queued. Will configure Cloudflare redirects and Google Search Console (skipping RunCloud).'
-                        : ($isUpload
-                            ? 'Uploaded ZIP stored privately. Recovery deployment queued.'
-                            : 'Recovery submitted. Waiting for the Wayback ZIP to become available.'),
+                    'status' => ($hasHistoricalIps || (! $isUpload && ! $isRedirect)) ? 'in_progress' : 'success',
+                    'message' => $hasHistoricalIps
+                        ? 'Deployment queued for historical DNS testing on the probing queue.'
+                        : ($isRedirect
+                            ? 'Redirect deployment queued. Will configure Cloudflare redirects and Google Search Console (skipping RunCloud).'
+                            : ($isUpload
+                                ? 'Uploaded ZIP stored privately. Recovery deployment queued.'
+                                : 'Recovery submitted. Waiting for the Wayback ZIP to become available.')),
                 ]);
 
                 return $deployment;
@@ -107,7 +115,9 @@ class DeploymentLifecycleService
             $this->chunkedUploads->forget($user, $uploadToken);
         }
 
-        if ($isRedirect || $isUpload) {
+        if ($hasHistoricalIps) {
+            ProbeHistoricalDns::dispatch($deployment);
+        } elseif ($isRedirect || $isUpload) {
             DeployArchivedWebsite::dispatch($deployment);
         } else {
             WaitForWaybackArchive::dispatch($deployment);
@@ -156,22 +166,25 @@ class DeploymentLifecycleService
         }
 
         $isRedirect = ($deployment->deployment_type ?? null) === 'redirect' || $deployment->archive_source === 'redirect';
+        $shouldProbe = filled($deployment->historical_ips) && blank($deployment->working_ip) && ! $isRedirect;
 
         $hasLocalArchive = filled($deployment->archive_path)
             && Storage::disk('local')->exists($deployment->archive_path)
             && Storage::disk('local')->size($deployment->archive_path) > 0;
 
-        $waitsForArchive = ! $isRedirect && filled($deployment->archive_url) && ! $hasLocalArchive;
+        $waitsForArchive = ! $isRedirect && ! $shouldProbe && filled($deployment->archive_url) && ! $hasLocalArchive;
 
-        if (! $isRedirect && $deployment->archive_source === 'upload' && ! $hasLocalArchive) {
+        if (! $isRedirect && ! $shouldProbe && $deployment->archive_source === 'upload' && ! $hasLocalArchive) {
             throw new DomainException('The uploaded ZIP is no longer available. Upload it again before retrying.');
         }
 
-        $readyStep = $isRedirect
-            ? 'queued'
-            : (($deployment->archive_source === 'upload' || $hasLocalArchive) ? 'archive_ready' : 'queued');
+        $readyStep = $shouldProbe
+            ? 'probing_historical_ips'
+            : ($isRedirect
+                ? 'queued'
+                : (($deployment->archive_source === 'upload' || $hasLocalArchive) ? 'archive_ready' : 'queued'));
 
-        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep, $hasLocalArchive, $isRedirect): void {
+        DB::transaction(function () use ($deployment, $waitsForArchive, $readyStep, $hasLocalArchive, $isRedirect, $shouldProbe): void {
             $deployment->update([
                 'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : ArchiveStatus::Ready,
                 'status' => DeploymentStatus::Pending,
@@ -180,13 +193,15 @@ class DeploymentLifecycleService
             $deployment->logs()->create([
                 'step_name' => $waitsForArchive ? 'waiting_for_archive' : $readyStep,
                 'status' => 'in_progress',
-                'message' => $isRedirect
-                    ? 'Redirect deployment retry queued.'
-                    : ($waitsForArchive
-                        ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
-                        : ($hasLocalArchive
-                            ? 'Deployment retry queued. Existing archive file is ready, resuming deployment.'
-                            : 'Deployment retry queued by an administrator.')),
+                'message' => $shouldProbe
+                    ? 'Historical IP probing retry queued on the probing queue.'
+                    : ($isRedirect
+                        ? 'Redirect deployment retry queued.'
+                        : ($waitsForArchive
+                            ? 'Recovery retry queued. Waiting for the Wayback ZIP.'
+                            : ($hasLocalArchive
+                                ? 'Deployment retry queued. Existing archive file is ready, resuming deployment.'
+                                : 'Deployment retry queued by an administrator.'))),
             ]);
         });
 
@@ -195,7 +210,9 @@ class DeploymentLifecycleService
             'waits_for_archive' => $waitsForArchive,
         ]);
 
-        if ($waitsForArchive) {
+        if ($shouldProbe) {
+            ProbeHistoricalDns::dispatch($deployment);
+        } elseif ($waitsForArchive) {
             WaitForWaybackArchive::dispatch($deployment);
         } else {
             DeployArchivedWebsite::dispatch($deployment);

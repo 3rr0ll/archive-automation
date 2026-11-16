@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\EnvironmentVariableController;
 use App\Http\Controllers\Api\GoogleSearchConsoleAccountController;
 use App\Http\Controllers\Api\GoogleSearchConsoleController;
 use App\Http\Controllers\Api\InternetArchiveSettingsController;
+use App\Http\Controllers\Api\ProbeController;
 use App\Http\Controllers\Api\RunCloudController;
 use App\Http\Controllers\Api\ServerController;
 use App\Http\Controllers\Api\UserController;
@@ -44,6 +45,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/cloudflare/dns/setup-runcloud', [CloudflareController::class, 'setupRunCloudDns']);
     Route::post('/cloudflare/dns', [CloudflareController::class, 'setupRunCloudDns']);
     Route::post('/cloudflare/cache/purge', [CloudflareController::class, 'purgeCache']);
+
+    // DNS & Direct IP Prober API
+    Route::post('/probe', [ProbeController::class, 'probe']);
+    Route::post('/probe/single', [ProbeController::class, 'single']);
 
     // Deployments API (Authenticated Users)
     Route::post('/deployment-uploads/chunks', [ChunkedArchiveUploadController::class, 'store']);
