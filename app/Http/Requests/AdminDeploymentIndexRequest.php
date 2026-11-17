@@ -22,7 +22,9 @@ class AdminDeploymentIndexRequest extends FormRequest
     {
         return [
             'user_id' => ['sometimes', 'integer', 'exists:users,id'],
-            'status' => ['sometimes', 'string', Rule::enum(DeploymentStatus::class)],
+            'status' => ['sometimes', 'string'],
+            'statuses' => ['sometimes', 'array'],
+            'statuses.*' => ['string', Rule::enum(DeploymentStatus::class)],
             'archive_status' => ['sometimes', 'string', Rule::enum(ArchiveStatus::class)],
             'server_id' => ['sometimes', 'integer', 'exists:servers,server_id'],
             'search' => ['sometimes', 'string', 'max:255'],

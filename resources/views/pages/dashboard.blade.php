@@ -2,10 +2,13 @@
 
 @section('content')
 <div x-data="dashboardOverview(
-    @js($deployments ?? []),
+    @js($initialDeployments ?? []),
     @js($servers ?? []),
     {{ (int) config('archive.max_upload_kb') * 1024 }},
-    {{ (int) config('archive.chunk_upload_kb') * 1024 }}
+    {{ (int) config('archive.chunk_upload_kb') * 1024 }},
+    {{ (int) ($initialTotal ?? 0) }},
+    @js($initialQueue ?? []),
+    @js($initialFailed ?? [])
 )">
     <!-- Slide-over Drawer for New Deployment (fixed overlay, outside flow) -->
     <x-dashboard.drawer />

@@ -522,7 +522,14 @@ class DeploymentController extends Controller
     {
         return Deployment::query()
             ->when(isset($filters['user_id']), fn (Builder $query) => $query->where('user_id', $filters['user_id']))
-            ->when(isset($filters['status']), fn (Builder $query) => $query->where('status', $filters['status']))
+            ->when(isset($filters['statuses']) && is_array($filters['statuses']), fn (Builder $query) => $query->whereIn('status', $filters['statuses']))
+            ->when(isset($filters['status']) && !isset($filters['statuses']), function (Builder $query) use ($filters) {
+                if (str_contains($filters['status'], ',')) {
+                    $query->whereIn('status', array_map('trim', explode(',', $filters['status'])));
+                } else {
+                    $query->where('status', $filters['status']);
+                }
+            })
             ->when(isset($filters['archive_status']), fn (Builder $query) => $query->where('archive_status', $filters['archive_status']))
             ->when(isset($filters['server_id']), fn (Builder $query) => $query->where('server_id', $filters['server_id']))
             ->when(isset($filters['search']), fn (Builder $query) => $query->where('domain', 'like', '%'.$filters['search'].'%'))

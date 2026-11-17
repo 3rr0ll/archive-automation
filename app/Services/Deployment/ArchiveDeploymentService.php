@@ -392,8 +392,7 @@ class ArchiveDeploymentService
     private function resolveWorkingHistoricalIp(Deployment $deployment): ?array
     {
         $rawIps = (string) $deployment->historical_ips;
-        preg_match_all('/\b(?:\d{1,3}\.){3}\d{1,3}\b/', $rawIps, $matches);
-        $ips = array_values(array_unique($matches[0] ?? []));
+        $ips = $this->dnsProbeService->filterHistoricalIpsOneYearApart($rawIps);
 
         if (empty($ips)) {
             return null;
@@ -459,6 +458,86 @@ class ArchiveDeploymentService
                 }
             }
 
+            // 4. Fourth priority: If no working IP found, test Live (blocked) IPs one by one via Cloudflare
+            if (! $matchingCandidate) {
+                $blockedCandidates = array_values(array_filter(
+                    $summaries,
+                    fn (array $s) => ! empty($s['is_blocked']) || ($s['verdict'] ?? '') === 'Live (blocked)'
+                ));
+
+                if (! empty($blockedCandidates)) {
+                    $deployment->logs()->create([
+                        'step_name' => 'probing_historical_ips',
+                        'status' => 'in_progress',
+                        'message' => sprintf(
+                            'No directly accessible working IP found. Testing %d Live (blocked) candidate IP(s) one by one via Cloudflare proxy...',
+                            count($blockedCandidates)
+                        ),
+                    ]);
+
+                    foreach ($blockedCandidates as $index => $candidate) {
+                        $candidateIp = $candidate['ip'];
+
+                        $deployment->refresh();
+                        if (in_array($deployment->status, [DeploymentStatus::Cancelled, DeploymentStatus::Completed], true)) {
+                            return null;
+                        }
+
+                        $deployment->logs()->create([
+                            'step_name' => 'probing_historical_ips',
+                            'status' => 'in_progress',
+                            'message' => sprintf('Assigning Cloudflare DNS to blocked IP [%s] (%d/%d) and verifying live content...', $candidateIp, $index + 1, count($blockedCandidates)),
+                        ]);
+
+                        try {
+                            $this->cloudflareDnsService->setupRunCloudDns($deployment->domain, $candidateIp, true);
+
+                            sleep(3);
+
+                            $verifyResult = $this->dnsProbeService->verifyLiveDomainContent($deployment->domain, 10);
+
+                            if ($verifyResult['is_working'] && $verifyResult['is_content_related']) {
+                                $deployment->logs()->create([
+                                    'step_name' => 'probing_historical_ips',
+                                    'status' => 'success',
+                                    'message' => sprintf(
+                                        'Verified Live (blocked) IP [%s] is serving related content via Cloudflare (Title: "%s", Status: %d).',
+                                        $candidateIp,
+                                        $verifyResult['title'] ?? 'N/A',
+                                        $verifyResult['status'] ?? 200
+                                    ),
+                                ]);
+
+                                $candidate['title'] = $verifyResult['title'];
+                                $candidate['score'] = max($candidate['score'] ?? 0, 8);
+                                if (! empty($verifyResult['detected_version'])) {
+                                    $candidate['detected_version'] = $verifyResult['detected_version'];
+                                }
+                                $matchingCandidate = $candidate;
+                                break;
+                            } else {
+                                $deployment->logs()->create([
+                                    'step_name' => 'probing_historical_ips',
+                                    'status' => 'warning',
+                                    'message' => sprintf(
+                                        'Blocked IP [%s] did not serve valid related content through Cloudflare (Status: %s, Error: %s). Checking next candidate...',
+                                        $candidateIp,
+                                        $verifyResult['status'] ?? 'None',
+                                        $verifyResult['error'] ?? 'Unrelated or empty content'
+                                    ),
+                                ]);
+                            }
+                        } catch (Throwable $cfEx) {
+                            $deployment->logs()->create([
+                                'step_name' => 'probing_historical_ips',
+                                'status' => 'warning',
+                                'message' => sprintf('Error verifying blocked IP [%s] via Cloudflare: %s', $candidateIp, $cfEx->getMessage()),
+                            ]);
+                        }
+                    }
+                }
+            }
+
             if (! $matchingCandidate) {
                 $deployment->logs()->create([
                     'step_name' => 'probing_historical_ips',
@@ -494,9 +573,23 @@ class ArchiveDeploymentService
                     : 'No sitemap found on working IP. Sitemap submission to Google Search Console will be skipped.',
             ]);
 
+            $detectedVersion = $matchingCandidate['detected_version'] ?? null;
+            if (! empty($detectedVersion)) {
+                $deployment->logs()->create([
+                    'step_name' => 'probing_historical_ips',
+                    'status' => 'success',
+                    'message' => sprintf(
+                        'Detected working live site version as [%s]. Cloudflare redirect Worker will be configured for %s.',
+                        $detectedVersion,
+                        $detectedVersion
+                    ),
+                ]);
+            }
+
             return [
                 'ip' => $workingIp,
                 'has_sitemap' => $hasSitemap,
+                'version' => $detectedVersion,
             ];
         } catch (Throwable $e) {
             Log::warning('Error probing historical IPs during deployment', [
