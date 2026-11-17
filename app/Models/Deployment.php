@@ -22,6 +22,8 @@ class Deployment extends Model
         'runcloud_web_app_name',
         'domain',
         'version',
+        'historical_ips',
+        'working_ip',
         'deployment_type',
         'has_sitemap',
         'archive_source',

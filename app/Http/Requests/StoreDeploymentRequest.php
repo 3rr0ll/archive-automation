@@ -32,6 +32,7 @@ class StoreDeploymentRequest extends FormRequest
         return [
             'deployment_type' => ['nullable', 'string', Rule::in(['full', 'redirect'])],
             'has_sitemap' => ['nullable', 'boolean'],
+            'historical_ips' => ['nullable', 'string'],
             'server_id' => [
                 Rule::requiredIf(! $isRedirect),
                 'nullable',

@@ -73,7 +73,7 @@ class ArchiveDeploymentServiceTest extends TestCase
         $searchConsoleService->shouldReceive('isEnabled')->once()->andReturnTrue();
         $searchConsoleService->shouldReceive('registerDomain')
             ->once()
-            ->with('example.com', 'https://example.com/sitemap.xml', true, true)
+            ->with('example.com', 'https://example.com/sitemap.xml', true, true, true)
             ->andReturn([
                 'domain' => 'example.com',
                 'verified' => true,

@@ -5,9 +5,11 @@ namespace App\Services\Deployment;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\ApiUsage\ApiUsageContext;
+use App\Services\Cloudflare\CloudflareDnsService;
 use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use App\Services\InternetArchive\InternetArchiveService;
+use App\Services\Prober\DnsProbeService;
 use App\Services\RunCloud\RunCloudService;
 use App\Services\Sftp\SftpArchiveService;
 use Illuminate\Support\Facades\Log;
@@ -25,8 +27,12 @@ class ArchiveDeploymentService
         private CloudflareWorkerService $cloudflareWorkerService,
         private GoogleSearchConsoleService $searchConsoleService,
         private SftpArchiveService $sftpArchiveService,
+        private ?CloudflareDnsService $cloudflareDnsService = null,
+        private ?DnsProbeService $dnsProbeService = null,
         ?ApiUsageContext $apiUsageContext = null,
     ) {
+        $this->cloudflareDnsService = $cloudflareDnsService ?? app(CloudflareDnsService::class);
+        $this->dnsProbeService = $dnsProbeService ?? app(DnsProbeService::class);
         $this->apiUsageContext = $apiUsageContext ?? app(ApiUsageContext::class);
     }
 
@@ -271,6 +277,35 @@ class ArchiveDeploymentService
             ? $deployment->version->value
             : (string) $deployment->version;
 
+        // If a working historical IP is present, update @ and www A records in Cloudflare DNS
+        $workingIp = $deployment->working_ip;
+        if (! empty($workingIp)) {
+            $this->transition($deployment, 'configuring_dns', sprintf('Configuring Cloudflare DNS A records (@ and www) to %s.', $workingIp), DeploymentStatus::Processing);
+
+            try {
+                $this->cloudflareDnsService->setupRunCloudDns($deployment->domain, $workingIp, true);
+
+                $deployment->logs()->create([
+                    'step_name' => 'configuring_dns',
+                    'status' => 'success',
+                    'message' => sprintf('Cloudflare DNS A records for @ and www updated to %s (proxied).', $workingIp),
+                ]);
+            } catch (Throwable $dnsException) {
+                Log::warning('Failed to configure Cloudflare DNS A records for redirect deployment.', [
+                    'deployment_id' => $deployment->id,
+                    'domain' => $deployment->domain,
+                    'working_ip' => $workingIp,
+                    'error' => $dnsException->getMessage(),
+                ]);
+
+                $deployment->logs()->create([
+                    'step_name' => 'configuring_dns',
+                    'status' => 'warning',
+                    'message' => sprintf('Cloudflare DNS update to %s encountered a warning: %s', $workingIp, $dnsException->getMessage()),
+                ]);
+            }
+        }
+
         $this->transition($deployment, 'configuring_cloudflare_workers', 'Assigning Cloudflare redirect Worker routes.', DeploymentStatus::Processing);
 
         // Configure Cloudflare Worker redirect routes:
@@ -347,6 +382,137 @@ class ArchiveDeploymentService
         ]);
 
         return $deployment->refresh();
+    }
+
+    /**
+     * Probe historical IPs for a domain to check if any IP is alive and serving related content.
+     *
+     * @return array{ip: string, has_sitemap: bool}|null
+     */
+    private function resolveWorkingHistoricalIp(Deployment $deployment): ?array
+    {
+        $rawIps = (string) $deployment->historical_ips;
+        preg_match_all('/\b(?:\d{1,3}\.){3}\d{1,3}\b/', $rawIps, $matches);
+        $ips = array_values(array_unique($matches[0] ?? []));
+
+        if (empty($ips)) {
+            return null;
+        }
+
+        $this->transition(
+            $deployment,
+            'probing_historical_ips',
+            sprintf('Probing %d historical IP address(es) for live related content.', count($ips)),
+            DeploymentStatus::Processing
+        );
+
+        try {
+            $probeResult = $this->dnsProbeService->probeMultiple(
+                $deployment->domain,
+                $ips,
+                ['http', 'https'],
+                10
+            );
+
+            $summaries = $probeResult['summaries'] ?? [];
+            $matchingCandidate = null;
+
+            // 1. First priority: Working IP with HTTP 2xx on HTTPS and content related to domain
+            foreach ($summaries as $summary) {
+                if (! empty($summary['is_parking'])) {
+                    continue;
+                }
+
+                $hasHttps2xx = ! empty($summary['is_https_2xx'])
+                    || (is_numeric($summary['https'] ?? null) && (int) $summary['https'] >= 200 && (int) $summary['https'] < 300);
+
+                if ($hasHttps2xx && ! empty($summary['is_content_related'])) {
+                    $matchingCandidate = $summary;
+                    break;
+                }
+            }
+
+            // 2. Second priority: Any working 2xx (HTTP or HTTPS) with content related to domain
+            if (! $matchingCandidate) {
+                foreach ($summaries as $summary) {
+                    if (! empty($summary['is_parking'])) {
+                        continue;
+                    }
+
+                    if (! empty($summary['is_working']) && ! empty($summary['is_content_related'])) {
+                        $matchingCandidate = $summary;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Third priority: score >= 8 or verdict 'Likely old site' AND not parking/sale
+            if (! $matchingCandidate) {
+                foreach ($summaries as $summary) {
+                    if (! empty($summary['is_parking'])) {
+                        continue;
+                    }
+                    if (($summary['score'] ?? 0) >= 8 || ($summary['verdict'] ?? '') === 'Likely old site') {
+                        $matchingCandidate = $summary;
+                        break;
+                    }
+                }
+            }
+
+            if (! $matchingCandidate) {
+                $deployment->logs()->create([
+                    'step_name' => 'probing_historical_ips',
+                    'status' => 'warning',
+                    'message' => 'No working IP with content related to the domain was found. Falling back to RunCloud server deployment.',
+                ]);
+
+                return null;
+            }
+
+            $workingIp = $matchingCandidate['ip'];
+            $title = $matchingCandidate['title'] ?? 'N/A';
+
+            $deployment->logs()->create([
+                'step_name' => 'probing_historical_ips',
+                'status' => 'success',
+                'message' => sprintf(
+                    'Found working historical IP %s with related content (Title: "%s", Score: %s).',
+                    $workingIp,
+                    $title,
+                    $matchingCandidate['score'] ?? 0
+                ),
+            ]);
+
+            // Check if that working DNS/IP has a sitemap.xml
+            $hasSitemap = $this->dnsProbeService->checkSitemapExists($deployment->domain, $workingIp);
+
+            $deployment->logs()->create([
+                'step_name' => 'probing_historical_ips',
+                'status' => 'success',
+                'message' => $hasSitemap
+                    ? 'Sitemap detected on working IP (https://'.$deployment->domain.'/sitemap.xml). It will be submitted to Google Search Console.'
+                    : 'No sitemap found on working IP. Sitemap submission to Google Search Console will be skipped.',
+            ]);
+
+            return [
+                'ip' => $workingIp,
+                'has_sitemap' => $hasSitemap,
+            ];
+        } catch (Throwable $e) {
+            Log::warning('Error probing historical IPs during deployment', [
+                'deployment_id' => $deployment->id,
+                'domain' => $deployment->domain,
+                'error' => $e->getMessage(),
+            ]);
+
+            $deployment->logs()->create([
+                'step_name' => 'probing_historical_ips',
+                'status' => 'warning',
+                'message' => 'Historical IP probing encountered an error ('.$e->getMessage().'). Falling back to RunCloud deployment.',
+            ]);
+
+            return null;
+        }
     }
 
     private function failureMessage(Throwable $exception): string

@@ -5,10 +5,14 @@ const DEPLOYMENTS_LIST_CACHE_KEY = 'deployments:list';
 const DEPLOYMENTS_TTL = 10000; // 10 seconds
 const DEFAULT_ARCHIVE_CHUNK_SIZE = 1024 * 1024;
 
-export async function fetchDeployments(forceRefresh = false) {
+export async function fetchDeployments(forceRefresh = false, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const endpoint = `/deployments${query ? `?${query}` : ''}`;
+    const cacheKey = `${DEPLOYMENTS_LIST_CACHE_KEY}:${query || 'all'}`;
+
     return clientCache.remember(
-        DEPLOYMENTS_LIST_CACHE_KEY,
-        () => api.get('/deployments'),
+        cacheKey,
+        () => api.get(endpoint),
         DEPLOYMENTS_TTL,
         'memory',
         forceRefresh

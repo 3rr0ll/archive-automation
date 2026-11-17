@@ -221,14 +221,20 @@
                 </button>
 
                 <div class="flex items-center gap-1">
-                    <template x-for="p in totalPages" :key="'p-'+p">
-                        <button type="button"
-                                x-show="p === 1 || p === totalPages || (p >= currentPage - 1 && p <= currentPage + 1)"
-                                @click="goToPage(p)"
-                                :class="p === currentPage ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-800 dark:border-zinc-700/80 dark:text-zinc-100' : 'bg-white dark:bg-[#18181b] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-800'"
-                                class="min-w-[28px] h-7 px-2 rounded border text-xs font-medium transition cursor-pointer flex items-center justify-center"
-                                x-text="p">
-                        </button>
+                    <template x-for="(p, idx) in visiblePages" :key="'p-'+idx+'-'+p">
+                        <div>
+                            <template x-if="p === '...'">
+                                <span class="min-w-[28px] h-7 px-1 text-xs text-zinc-400 dark:text-zinc-500 flex items-center justify-center select-none font-medium">…</span>
+                            </template>
+                            <template x-if="p !== '...'">
+                                <button type="button"
+                                        @click="goToPage(p)"
+                                        :class="p === currentPage ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-800 dark:border-zinc-700/80 dark:text-zinc-100' : 'bg-white dark:bg-[#18181b] text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-800'"
+                                        class="min-w-[28px] h-7 px-2 rounded border text-xs font-medium transition cursor-pointer flex items-center justify-center"
+                                        x-text="p">
+                                </button>
+                            </template>
+                        </div>
                     </template>
                 </div>
 
