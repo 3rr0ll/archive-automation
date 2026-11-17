@@ -44,33 +44,43 @@ class DnsProbeService
      */
     public function probeMultiple(string $domain, array $ips, array $protocols = ['http', 'https'], int $timeout = 15): array
     {
+        $domain = strtolower(trim($domain));
+        $domainBase = preg_replace('/^www\./', '', $domain);
+        $domainVariants = array_values(array_unique([
+            $domainBase,
+            'www.' . $domainBase,
+        ]));
+
         $mh = curl_multi_init();
         $handles = [];
         $immediateResults = [];
         $fallbackSequential = false;
 
         foreach ($ips as $ip) {
-            foreach ($protocols as $protocol) {
-                $handleOrError = $this->httpProbeService->createHandle($domain, $ip, $protocol, $timeout);
+            foreach ($domainVariants as $targetHost) {
+                foreach ($protocols as $protocol) {
+                    $handleOrError = $this->httpProbeService->createHandle($targetHost, $ip, $protocol, $timeout);
 
-                if (is_array($handleOrError)) {
-                    $immediateResults[] = $handleOrError;
-                    continue;
+                    if (is_array($handleOrError)) {
+                        $immediateResults[] = $handleOrError;
+                        continue;
+                    }
+
+                    if (! ($handleOrError instanceof \CurlHandle) && ! is_resource($handleOrError)) {
+                        $fallbackSequential = true;
+                        break 3;
+                    }
+
+                    $key = (int) $handleOrError;
+                    curl_multi_add_handle($mh, $handleOrError);
+                    $handles[$key] = [
+                        'handle' => $handleOrError,
+                        'ip' => $ip,
+                        'target_host' => $targetHost,
+                        'protocol' => $protocol,
+                        'start_time' => microtime(true),
+                    ];
                 }
-
-                if (! ($handleOrError instanceof \CurlHandle) && ! is_resource($handleOrError)) {
-                    $fallbackSequential = true;
-                    break 2;
-                }
-
-                $key = (int) $handleOrError;
-                curl_multi_add_handle($mh, $handleOrError);
-                $handles[$key] = [
-                    'handle' => $handleOrError,
-                    'ip' => $ip,
-                    'protocol' => $protocol,
-                    'start_time' => microtime(true),
-                ];
             }
         }
 
@@ -78,8 +88,10 @@ class DnsProbeService
             curl_multi_close($mh);
             $results = [];
             foreach ($ips as $ip) {
-                foreach ($protocols as $protocol) {
-                    $results[] = $this->httpProbeService->probe($domain, $ip, $protocol, $timeout);
+                foreach ($domainVariants as $targetHost) {
+                    foreach ($protocols as $protocol) {
+                        $results[] = $this->httpProbeService->probe($targetHost, $ip, $protocol, $timeout);
+                    }
                 }
             }
 
@@ -117,7 +129,9 @@ class DnsProbeService
             $durationMs = (int) round((microtime(true) - $item['start_time']) * 1000);
 
             $response = curl_multi_getcontent($ch);
-            $results[] = $this->httpProbeService->parseResponse($ch, $response, $ip, $protocol, $durationMs);
+            $parsed = $this->httpProbeService->parseResponse($ch, $response, $ip, $protocol, $durationMs);
+            $parsed['target_host'] = $item['target_host'] ?? null;
+            $results[] = $parsed;
 
             curl_multi_remove_handle($mh, $ch);
             curl_close($ch);
@@ -145,36 +159,42 @@ class DnsProbeService
     public function checkSitemapExists(string $domain, string $ip, int $timeout = 10): bool
     {
         $domain = strtolower(trim($domain));
+        $domainBase = preg_replace('/^www\./', '', $domain);
+        $domainVariants = array_values(array_unique([
+            $domainBase,
+            'www.' . $domainBase,
+        ]));
         $protocols = ['https', 'http'];
 
-        foreach ($protocols as $protocol) {
-            $port = $protocol === 'https' ? 443 : 80;
-            $url = "{$protocol}://{$domain}/sitemap.xml";
-            $resolveRule = "{$domain}:{$port}:{$ip}";
+        foreach ($domainVariants as $targetHost) {
+            foreach ($protocols as $protocol) {
+                $port = $protocol === 'https' ? 443 : 80;
+                $url = "{$protocol}://{$targetHost}/sitemap.xml";
+                $resolveRule = "{$targetHost}:{$port}:{$ip}";
 
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => $url,
-                CURLOPT_RESOLVE => [$resolveRule],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_NOBODY => true, // HEAD request
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS => 3,
-                CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_CONNECTTIMEOUT => min($timeout, 5),
-                CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Prober/1.0',
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 0,
-            ]);
+                $ch = curl_init();
+                curl_setopt_array($ch, [
+                    CURLOPT_URL => $url,
+                    CURLOPT_RESOLVE => [$resolveRule],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_NOBODY => true, // HEAD request
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_TIMEOUT => $timeout,
+                    CURLOPT_CONNECTTIMEOUT => min($timeout, 5),
+                    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Prober/1.0',
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => 0,
+                ]);
 
-            curl_exec($ch);
-            $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-            curl_close($ch);
+                curl_exec($ch);
+                $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
 
-            if ($statusCode >= 200 && $statusCode < 300) {
-                // Return true if HTTP 2xx
-                return true;
+                if ($statusCode >= 200 && $statusCode < 300) {
+                    // Return true if HTTP 2xx
+                    return true;
+                }
             }
         }
 
@@ -214,23 +234,31 @@ class DnsProbeService
             }
 
             $proto = strtolower($res['protocol'] ?? 'http');
-            $grouped[$ip][$proto] = $res['status'] ?? null;
+            $status = $res['status'] ?? null;
             $grouped[$ip]['raw_results'][] = $res;
 
+            // Preserve best (2xx preferred over redirect/error) status per protocol
             if ($proto === 'https') {
-                $grouped[$ip]['https'] = $res['status'] ?? null;
-                $grouped[$ip]['https_res'] = $res;
+                if ($grouped[$ip]['https'] === null || ($status >= 200 && $status < 300) || ($status && $grouped[$ip]['https'] >= 400)) {
+                    $grouped[$ip]['https'] = $status;
+                    $grouped[$ip]['https_res'] = $res;
+                }
             } else {
-                $grouped[$ip]['http'] = $res['status'] ?? null;
-                $grouped[$ip]['http_res'] = $res;
+                if ($grouped[$ip]['http'] === null || ($status >= 200 && $status < 300) || ($status && $grouped[$ip]['http'] >= 400)) {
+                    $grouped[$ip]['http'] = $status;
+                    $grouped[$ip]['http_res'] = $res;
+                }
             }
 
             if (! empty($res['server']) && empty($grouped[$ip]['server'])) {
                 $grouped[$ip]['server'] = $res['server'];
             }
 
-            if (! empty($res['title']) && empty($grouped[$ip]['title'])) {
-                $grouped[$ip]['title'] = $res['title'];
+            // Prefer a title that mentions content over an empty/redirect title
+            if (! empty($res['title'])) {
+                if (empty($grouped[$ip]['title']) || strlen($res['title']) > strlen($grouped[$ip]['title'])) {
+                    $grouped[$ip]['title'] = $res['title'];
+                }
             }
 
             if (! empty($res['is_cloudflare_challenge'])) {
@@ -244,7 +272,12 @@ class DnsProbeService
             }
 
             if (! empty($res['is_empty_or_default'])) {
-                $grouped[$ip]['is_empty'] = true;
+                // Only mark empty if we haven't seen a non-empty body
+                if ($grouped[$ip]['body_len'] === 0) {
+                    $grouped[$ip]['is_empty'] = true;
+                }
+            } else {
+                $grouped[$ip]['is_empty'] = false;
             }
 
             if (! empty($res['is_redirect'])) {
@@ -262,6 +295,15 @@ class DnsProbeService
 
         $summaries = [];
         $cleanDomain = strtolower($domain);
+        $domainBase = preg_replace('/^www\./', '', $cleanDomain);
+        $domainParts = explode('.', $domainBase);
+        $domainNameOnly = $domainParts[0] ?? $domainBase; // e.g. "qatar-gulfnews"
+        // Also domain with hyphens/underscores replaced by space, e.g. "qatar gulfnews"
+        $domainWordsSpace = str_replace(['-', '_'], ' ', $domainNameOnly); // e.g. "qatar gulfnews"
+        // And domain without hyphens/underscores/spaces, e.g. "qatargulfnews"
+        $domainWordsJoined = str_replace(['-', '_', ' '], '', $domainNameOnly);
+        // Clean alphanumerics only from words
+        $domainTokens = array_filter(preg_split('/[^a-z0-9]+/', $domainNameOnly));
 
         foreach ($grouped as $ip => $data) {
             $score = 0;
@@ -310,6 +352,8 @@ class DnsProbeService
                 'domain parking',
                 'parked domain',
                 'parked free',
+                'resources and information',
+                'resources and information.',
                 'spaceship.com',
                 'dan.com',
                 'sedo.com',
@@ -320,6 +364,7 @@ class DnsProbeService
                 'bodis',
                 'domain is registered',
                 'inquire about this domain',
+                'related searches',
             ];
 
             foreach ($parkingPatterns as $pattern) {
@@ -329,11 +374,50 @@ class DnsProbeService
                 }
             }
 
+            // Check if title or body mentions the domain or brand keywords
+            $matchesDomainKeywords = function (string $text) use ($cleanDomain, $domainBase, $domainNameOnly, $domainWordsSpace, $domainWordsJoined, $domainTokens): bool {
+                $lower = strtolower($text);
+                if (str_contains($lower, $cleanDomain) || str_contains($lower, $domainBase)) {
+                    return true;
+                }
+                if (strlen($domainNameOnly) >= 4 && str_contains($lower, $domainNameOnly)) {
+                    return true;
+                }
+                if (strlen($domainWordsSpace) >= 4 && str_contains($lower, $domainWordsSpace)) {
+                    return true;
+                }
+                if (strlen($domainWordsJoined) >= 4 && str_contains($lower, $domainWordsJoined)) {
+                    return true;
+                }
+
+                // Also match normalized alphanumeric text (e.g. "qatar gulf news" matches "qatargulfnews")
+                $normalizedText = preg_replace('/[^a-z0-9]+/', '', $lower);
+                if (strlen($domainWordsJoined) >= 4 && str_contains($normalizedText, $domainWordsJoined)) {
+                    return true;
+                }
+
+                // Check if major tokens from domain name are in the text
+                if (! empty($domainTokens)) {
+                    $matchedCount = 0;
+                    foreach ($domainTokens as $token) {
+                        if (strlen($token) >= 3 && str_contains($lower, $token)) {
+                            $matchedCount++;
+                        }
+                    }
+                    if ($matchedCount >= count($domainTokens)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
+
+
             if (! empty($title)) {
                 if ($isParkingOrSale) {
                     $notes[] = 'Parking / For Sale page';
                     $score += 1;
-                } elseif (str_contains(strtolower($title), $cleanDomain)) {
+                } elseif ($matchesDomainKeywords($title)) {
                     $score += 4;
                     $notes[] = 'Title mentions domain';
                     $isContentRelated = true;
@@ -348,8 +432,8 @@ class DnsProbeService
                 }
             }
 
-            // Also check body text for domain name if NOT parking/for sale
-            if (! $isContentRelated && ! $isParkingOrSale && ! empty($body) && str_contains(strtolower($body), $cleanDomain)) {
+            // Also check body text for domain or brand keywords if NOT parking/for sale
+            if (! $isContentRelated && ! $isParkingOrSale && ! empty($body) && $matchesDomainKeywords($body)) {
                 $isContentRelated = true;
                 $score += 2;
                 $notes[] = 'Body mentions domain';
@@ -422,6 +506,7 @@ class DnsProbeService
                 'verdict' => $verdict,
                 'score' => $score,
                 'is_working' => $has2xx,
+                'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300,
                 'is_parking' => $isParkingOrSale,
                 'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale,
                 'https' => $data['https'] ? (string) $data['https'] : '—',
@@ -433,8 +518,15 @@ class DnsProbeService
             ];
         }
 
-        // Sort: Highest score first, then by reachability, then IP
+        // Sort: Highest score first, then prioritize working HTTPS (2xx), then reachability, then IP
         usort($summaries, function (array $a, array $b): int {
+            // Prioritize HTTPS 2xx with content-related site
+            $aHttpsRelated = ! empty($a['is_https_2xx']) && ! empty($a['is_content_related']) && empty($a['is_parking']) ? 1 : 0;
+            $bHttpsRelated = ! empty($b['is_https_2xx']) && ! empty($b['is_content_related']) && empty($b['is_parking']) ? 1 : 0;
+            if ($bHttpsRelated !== $aHttpsRelated) {
+                return $bHttpsRelated <=> $aHttpsRelated;
+            }
+
             if ($b['score'] !== $a['score']) {
                 return $b['score'] <=> $a['score'];
             }

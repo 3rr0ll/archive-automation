@@ -5,6 +5,7 @@ namespace App\Services\Deployment;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\ApiUsage\ApiUsageContext;
+use App\Services\Cloudflare\CloudflareDnsService;
 use App\Services\Cloudflare\CloudflareWorkerService;
 use App\Services\GoogleSearchConsole\GoogleSearchConsoleService;
 use App\Services\InternetArchive\InternetArchiveService;
@@ -26,9 +27,11 @@ class ArchiveDeploymentService
         private CloudflareWorkerService $cloudflareWorkerService,
         private GoogleSearchConsoleService $searchConsoleService,
         private SftpArchiveService $sftpArchiveService,
+        private ?CloudflareDnsService $cloudflareDnsService = null,
         private ?DnsProbeService $dnsProbeService = null,
         ?ApiUsageContext $apiUsageContext = null,
     ) {
+        $this->cloudflareDnsService = $cloudflareDnsService ?? app(CloudflareDnsService::class);
         $this->dnsProbeService = $dnsProbeService ?? app(DnsProbeService::class);
         $this->apiUsageContext = $apiUsageContext ?? app(ApiUsageContext::class);
     }
@@ -274,6 +277,35 @@ class ArchiveDeploymentService
             ? $deployment->version->value
             : (string) $deployment->version;
 
+        // If a working historical IP is present, update @ and www A records in Cloudflare DNS
+        $workingIp = $deployment->working_ip;
+        if (! empty($workingIp)) {
+            $this->transition($deployment, 'configuring_dns', sprintf('Configuring Cloudflare DNS A records (@ and www) to %s.', $workingIp), DeploymentStatus::Processing);
+
+            try {
+                $this->cloudflareDnsService->setupRunCloudDns($deployment->domain, $workingIp, true);
+
+                $deployment->logs()->create([
+                    'step_name' => 'configuring_dns',
+                    'status' => 'success',
+                    'message' => sprintf('Cloudflare DNS A records for @ and www updated to %s (proxied).', $workingIp),
+                ]);
+            } catch (Throwable $dnsException) {
+                Log::warning('Failed to configure Cloudflare DNS A records for redirect deployment.', [
+                    'deployment_id' => $deployment->id,
+                    'domain' => $deployment->domain,
+                    'working_ip' => $workingIp,
+                    'error' => $dnsException->getMessage(),
+                ]);
+
+                $deployment->logs()->create([
+                    'step_name' => 'configuring_dns',
+                    'status' => 'warning',
+                    'message' => sprintf('Cloudflare DNS update to %s encountered a warning: %s', $workingIp, $dnsException->getMessage()),
+                ]);
+            }
+        }
+
         $this->transition($deployment, 'configuring_cloudflare_workers', 'Assigning Cloudflare redirect Worker routes.', DeploymentStatus::Processing);
 
         // Configure Cloudflare Worker redirect routes:
@@ -385,20 +417,36 @@ class ArchiveDeploymentService
             $summaries = $probeResult['summaries'] ?? [];
             $matchingCandidate = null;
 
+            // 1. First priority: Working IP with HTTP 2xx on HTTPS and content related to domain
             foreach ($summaries as $summary) {
-                // Ignore parking or for sale pages
                 if (! empty($summary['is_parking'])) {
                     continue;
                 }
 
-                // Must be working (HTTP 2xx) and content related to domain
-                if (! empty($summary['is_working']) && ! empty($summary['is_content_related'])) {
+                $hasHttps2xx = ! empty($summary['is_https_2xx'])
+                    || (is_numeric($summary['https'] ?? null) && (int) $summary['https'] >= 200 && (int) $summary['https'] < 300);
+
+                if ($hasHttps2xx && ! empty($summary['is_content_related'])) {
                     $matchingCandidate = $summary;
                     break;
                 }
             }
 
-            // Fallback: only if score >= 8 or verdict 'Likely old site' AND not parking/sale
+            // 2. Second priority: Any working 2xx (HTTP or HTTPS) with content related to domain
+            if (! $matchingCandidate) {
+                foreach ($summaries as $summary) {
+                    if (! empty($summary['is_parking'])) {
+                        continue;
+                    }
+
+                    if (! empty($summary['is_working']) && ! empty($summary['is_content_related'])) {
+                        $matchingCandidate = $summary;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Third priority: score >= 8 or verdict 'Likely old site' AND not parking/sale
             if (! $matchingCandidate) {
                 foreach ($summaries as $summary) {
                     if (! empty($summary['is_parking'])) {

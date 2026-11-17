@@ -92,17 +92,36 @@ class ProbeHistoricalDns implements ShouldQueue
             $summaries = $probeResult['summaries'] ?? [];
             $matchingCandidate = null;
 
+            // 1. First priority: Working IP with HTTP 2xx on HTTPS and content related to domain
             foreach ($summaries as $summary) {
                 if (! empty($summary['is_parking'])) {
                     continue;
                 }
 
-                if (! empty($summary['is_working']) && ! empty($summary['is_content_related'])) {
+                $hasHttps2xx = ! empty($summary['is_https_2xx'])
+                    || (is_numeric($summary['https'] ?? null) && (int) $summary['https'] >= 200 && (int) $summary['https'] < 300);
+
+                if ($hasHttps2xx && ! empty($summary['is_content_related'])) {
                     $matchingCandidate = $summary;
                     break;
                 }
             }
 
+            // 2. Second priority: Any working 2xx (HTTP or HTTPS) with content related to domain
+            if (! $matchingCandidate) {
+                foreach ($summaries as $summary) {
+                    if (! empty($summary['is_parking'])) {
+                        continue;
+                    }
+
+                    if (! empty($summary['is_working']) && ! empty($summary['is_content_related'])) {
+                        $matchingCandidate = $summary;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Third priority: Score >= 8 or verdict 'Likely old site' AND not parking/sale
             if (! $matchingCandidate) {
                 foreach ($summaries as $summary) {
                     if (! empty($summary['is_parking'])) {
