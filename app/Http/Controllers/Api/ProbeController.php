@@ -29,9 +29,8 @@ class ProbeController extends Controller
 
         $inputIps = $request->input('ips');
         if (is_string($inputIps)) {
-            // Support raw pasted text containing IPs
-            preg_match_all('/\b(?:\d{1,3}\.){3}\d{1,3}\b/', $inputIps, $matches);
-            $request->merge(['ips' => array_values(array_unique($matches[0] ?? []))]);
+            // Support raw pasted text containing IPs with dynamic 1-year window filter
+            $request->merge(['ips' => $this->dnsProbeService->filterHistoricalIpsOneYearApart($inputIps)]);
         } elseif (is_array($inputIps)) {
             // Clean up any strings in array that might contain tabs/spaces/extra columns
             $cleanedIps = [];

@@ -20,11 +20,25 @@ class DashboardController extends Controller
      */
     public function index(Request $request): View
     {
-        $deployments = Deployment::with(['user:id,name,email', 'server'])
+        $queueDeployments = Deployment::with(['user:id,name,email', 'server'])
             ->withCount('subdomainFolders')
+            ->whereIn('status', ['pending', 'processing'])
+            ->orderBy('created_at')
+            ->get();
+
+        $failedDeployments = Deployment::with(['user:id,name,email', 'server'])
+            ->withCount('subdomainFolders')
+            ->where('status', 'failed')
+            ->latest('created_at')
+            ->limit(30)
+            ->get();
+
+        $initialCompleted = Deployment::with(['user:id,name,email', 'server'])
+            ->withCount('subdomainFolders')
+            ->where('status', 'completed')
             ->latest('created_at')
             ->orderByDesc('id')
-            ->get();
+            ->paginate(9);
 
         $servers = $this->cache->rememberLocalServers(function () {
             return Server::where('is_active', true)
@@ -32,6 +46,12 @@ class DashboardController extends Controller
                 ->get();
         });
 
-        return view('pages.dashboard', compact('deployments', 'servers'));
+        return view('pages.dashboard', [
+            'initialDeployments' => $initialCompleted->items(),
+            'initialTotal' => $initialCompleted->total(),
+            'initialQueue' => $queueDeployments,
+            'initialFailed' => $failedDeployments,
+            'servers' => $servers,
+        ]);
     }
 }

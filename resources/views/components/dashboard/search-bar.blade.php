@@ -4,8 +4,7 @@
             <x-lucide-search class="size-4 text-zinc-400" />
         </div>
         <input type="text" 
-               x-model.debounce.300ms="searchQuery" 
-               @input="currentPage = 1"
+               x-model.debounce.350ms="searchQuery" 
                class="block w-full h-9 pl-10 pr-3 text-sm text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-[#18181b] focus:ring-zinc-900 dark:focus:ring-zinc-100 focus:border-zinc-900 dark:focus:border-zinc-100 transition placeholder:text-zinc-400 dark:placeholder:text-zinc-500" 
                placeholder="Search Domains...">
     </div>

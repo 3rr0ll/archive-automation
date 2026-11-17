@@ -15,13 +15,19 @@ export function dashboardOverview(
     initialServers = [],
     maxArchiveUploadBytes = 512 * 1024 * 1024,
     archiveChunkBytes = 1024 * 1024,
+    initialTotal = 0,
+    initialQueue = [],
+    initialFailed = []
 ) {
     const hasInitialData = (Array.isArray(initialDeployments) && initialDeployments.length > 0) || 
-                           (Array.isArray(initialServers) && initialServers.length > 0);
+                           (Array.isArray(initialServers) && initialServers.length > 0) ||
+                           initialTotal > 0;
 
     return {
         userName: '',
-        isLoading: !hasInitialData,
+        isLoading: false,
+        isSearching: false,
+        isFetchingDeployments: false,
         isSubmitting: false,
         uploadProgress: 0,
         maxArchiveUploadBytes,
@@ -32,7 +38,15 @@ export function dashboardOverview(
 
         // Data arrays initialized with server-provided cached data
         deployments: Array.isArray(initialDeployments) ? initialDeployments : [],
+        queueItems: Array.isArray(initialQueue) ? initialQueue : [],
+        failedDeployments: Array.isArray(initialFailed) ? initialFailed : [],
+        totalDeploymentsCount: Number(initialTotal) || (Array.isArray(initialDeployments) ? initialDeployments.length : 0),
         servers: Array.isArray(initialServers) ? initialServers.filter(s => Boolean(s.is_active)) : [],
+
+        // Pagination state (server-driven)
+        currentPage: 1,
+        perPage: 9,
+        totalPages: Math.max(1, Math.ceil((Number(initialTotal) || 0) / 9)),
 
         // Drawer Form state
         form: {
@@ -73,7 +87,8 @@ export function dashboardOverview(
                 if (!hasInitialData) {
                     await Promise.allSettled([
                         this.loadServers(),
-                        this.loadDeployments(),
+                        this.fetchPageDeployments(1),
+                        this.pollActiveQueue(),
                     ]);
                 } else {
                     // Refresh servers in the background to ensure fresh state
@@ -85,15 +100,17 @@ export function dashboardOverview(
                 }
             } catch (error) {
                 console.error('Failed to initialize dashboard:', error);
-            } finally {
-                this.isLoading = false;
             }
 
-            // Periodically refresh deployments from /api every 5 seconds if active deployments exist
+            // Watch search query to fetch from server
+            this.$watch('searchQuery', () => {
+                this.currentPage = 1;
+                this.fetchPageDeployments(1, true);
+            });
+
+            // Periodically refresh active queue from /api every 5 seconds
             this.pollInterval = setInterval(() => {
-                if (this.queueItems.length > 0) {
-                    this.loadDeployments(false, true).catch(() => { });
-                }
+                this.pollActiveQueue().catch(() => { });
             }, 5000);
         },
 
@@ -123,50 +140,86 @@ export function dashboardOverview(
             }
         },
 
-        async loadDeployments(showSpinner = false, forceRefresh = false) {
-            if (showSpinner) this.isLoading = true;
+        // Poll only active queue items (pending, processing) and failed items
+        async pollActiveQueue() {
             try {
-                const res = await fetchDeployments(forceRefresh, { per_page: 1000 });
-                this.deployments = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-            } catch (err) {
-                console.warn('Could not load deployments from /api:', err);
-                this.deployments = [];
-            } finally {
-                if (showSpinner) this.isLoading = false;
-            }
-        },
-
-        // Pagination state
-        currentPage: 1,
-        perPage: 9,
-
-        // Filtered domains based on search
-        get filteredDeployments() {
-            let list = [...this.deployments];
-            if (this.searchQuery.trim() !== '') {
-                const q = this.searchQuery.toLowerCase().trim();
-                list = list.filter(d =>
-                    (d.domain && d.domain.toLowerCase().includes(q)) ||
-                    (d.server?.name && d.server.name.toLowerCase().includes(q)) ||
-                    (d.current_step && d.current_step.toLowerCase().includes(q))
-                );
-            }
-            return list;
-        },
-
-        // Active / Queue deployments (pending, processing)
-        // Processing items first (most active), then pending items in FIFO order (earliest first in line)
-        get queueItems() {
-            return this.deployments
-                .filter(d => d.status === 'pending' || d.status === 'processing')
-                .sort((a, b) => {
+                const res = await fetchDeployments(true, {
+                    status: 'pending,processing',
+                    per_page: 50,
+                });
+                const active = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+                
+                // Check if queue transition occurred (an item completed or failed)
+                const previousQueueCount = this.queueItems.length;
+                this.queueItems = active.sort((a, b) => {
                     if (a.status === 'processing' && b.status !== 'processing') return -1;
                     if (b.status === 'processing' && a.status !== 'processing') return 1;
-                    // For items in the same status, order FIFO (oldest queued first)
-                    const dateA = new Date(a.created_at || 0).getTime();
-                    const dateB = new Date(b.created_at || 0).getTime();
-                    return dateA - dateB;
+                    return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
                 });
+
+                // If items in queue decreased or finished, reload current page and failed items to sync
+                if (previousQueueCount > 0 && active.length < previousQueueCount) {
+                    this.fetchPageDeployments(this.currentPage, false);
+                    this.refreshFailedDeployments();
+                }
+            } catch (err) {
+                console.warn('Could not poll active queue:', err);
+            }
+        },
+
+        async refreshFailedDeployments() {
+            try {
+                const res = await fetchDeployments(true, {
+                    status: 'failed',
+                    per_page: 30,
+                });
+                this.failedDeployments = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            } catch (err) {
+                console.warn('Could not refresh failed deployments:', err);
+            }
+        },
+
+        // Fetch paginated deployments from server with search and status=completed
+        async fetchPageDeployments(page = 1, isSearch = false) {
+            if (isSearch) this.isSearching = true;
+            this.isFetchingDeployments = true;
+
+            try {
+                const params = {
+                    status: 'completed',
+                    page,
+                    per_page: this.perPage,
+                };
+                if (this.searchQuery && this.searchQuery.trim() !== '') {
+                    params.search = this.searchQuery.trim();
+                }
+
+                const res = await fetchDeployments(true, params);
+                const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+                this.deployments = items;
+                this.currentPage = page;
+
+                if (res?.meta) {
+                    this.totalDeploymentsCount = res.meta.total ?? items.length;
+                    this.totalPages = res.meta.last_page ?? (Math.ceil(this.totalDeploymentsCount / this.perPage) || 1);
+                } else {
+                    this.totalDeploymentsCount = items.length;
+                    this.totalPages = Math.ceil(this.totalDeploymentsCount / this.perPage) || 1;
+                }
+            } catch (err) {
+                console.warn('Could not load deployments from /api:', err);
+            } finally {
+                this.isFetchingDeployments = false;
+                if (isSearch) this.isSearching = false;
+            }
+        },
+
+        // Backward-compatible alias for manual refreshes
+        async loadDeployments(showSpinner = false, forceRefresh = false) {
+            await Promise.allSettled([
+                this.fetchPageDeployments(this.currentPage, false),
+                this.pollActiveQueue(),
+            ]);
         },
 
         // Active deployment: Currently processing deployment first, otherwise earliest pending in queue
@@ -174,35 +227,15 @@ export function dashboardOverview(
             return this.queueItems.find(d => d.status === 'processing') || this.queueItems[0] || null;
         },
 
-        // Successful / Completed deployments
-        get successfulDeployments() {
-            return this.filteredDeployments.filter(d => d.status === 'completed');
-        },
-
-        // Deployments to display in the main list/grid:
-        // Completed deployments plus the active/processing queue deployment (if matches search filter)
+        // Deployments to display in the main list/grid
         get displayedDeployments() {
-            const list = [...this.successfulDeployments];
-            const active = this.activeQueueDeployment;
-            if (active) {
-                // Check if active deployment matches current search filter
-                const matchesSearch = this.filteredDeployments.some(d => d.id === active.id);
-                if (matchesSearch && !list.some(d => d.id === active.id)) {
-                    list.unshift(active);
-                }
-            }
-            return list;
-        },
-
-        // Pagination computed properties
-        get totalPages() {
-            return Math.ceil(this.displayedDeployments.length / this.perPage) || 1;
+            return this.deployments;
         },
 
         get visiblePages() {
             const total = this.totalPages;
             const current = Math.min(Math.max(1, this.currentPage), total);
-            const delta = 1; // Number of pages around current
+            const delta = 1;
             const pages = [];
 
             for (let i = 1; i <= total; i++) {
@@ -216,41 +249,41 @@ export function dashboardOverview(
             return pages;
         },
 
-        get paginatedDeployments() {
-            const page = Math.min(Math.max(1, this.currentPage), this.totalPages);
-            const start = (page - 1) * this.perPage;
-            return this.displayedDeployments.slice(start, start + this.perPage);
-        },
-
         get paginationFrom() {
-            if (this.displayedDeployments.length === 0) return 0;
+            if (this.totalDeploymentsCount === 0) return 0;
             return (Math.min(this.currentPage, this.totalPages) - 1) * this.perPage + 1;
         },
 
         get paginationTo() {
-            return Math.min(Math.min(this.currentPage, this.totalPages) * this.perPage, this.displayedDeployments.length);
+            return Math.min(Math.min(this.currentPage, this.totalPages) * this.perPage, this.totalDeploymentsCount);
+        },
+
+        changePerPage(val) {
+            this.perPage = val;
+            this.currentPage = 1;
+            this.fetchPageDeployments(1);
         },
 
         goToPage(page) {
-            if (page >= 1 && page <= this.totalPages) {
-                this.currentPage = page;
+            if (page >= 1 && page <= this.totalPages && page !== this.currentPage) {
+                this.fetchPageDeployments(page);
             }
         },
 
         nextPage() {
             if (this.currentPage < this.totalPages) {
-                this.currentPage++;
+                this.fetchPageDeployments(this.currentPage + 1);
             }
         },
 
         prevPage() {
             if (this.currentPage > 1) {
-                this.currentPage--;
+                this.fetchPageDeployments(this.currentPage - 1);
             }
         },
 
         get selectableDeployments() {
-            return this.paginatedDeployments.filter(item => item.status !== 'processing');
+            return this.displayedDeployments.filter(item => item.status !== 'processing');
         },
 
         get allVisibleDeploymentsSelected() {
@@ -334,11 +367,6 @@ export function dashboardOverview(
 
         isItemActive(item) {
             return item.status === 'pending' || item.status === 'processing';
-        },
-
-        // Failed deployments
-        get failedDeployments() {
-            return this.deployments.filter(d => d.status === 'failed');
         },
 
         // Calculate progress % based on current_step
@@ -543,7 +571,7 @@ export function dashboardOverview(
                 const response = await createDeployment(payload);
                 console.log('[submitDeployment] Received response:', response);
 
-                // Add newly created deployment to local list
+                // Add newly created deployment to queue items
                 const created = response.data || response;
                 if (created && created.id) {
                     // Enrich server relationship if missing
@@ -553,9 +581,9 @@ export function dashboardOverview(
                             created.server = matchingServer;
                         }
                     }
-                    this.deployments.unshift(created);
+                    this.queueItems.unshift(created);
                 } else {
-                    await this.loadDeployments(false);
+                    await this.pollActiveQueue();
                 }
 
                 this.closeModal();

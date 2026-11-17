@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\ApiUsage\ApiUsageContext;
+use App\Services\Cloudflare\CloudflareDnsService;
 use App\Services\Deployment\ArchiveDeploymentService;
 use App\Services\Prober\DnsProbeService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -29,6 +30,7 @@ class ProbeHistoricalDns implements ShouldQueue
     public function handle(
         DnsProbeService $dnsProbeService,
         ArchiveDeploymentService $deploymentService,
+        CloudflareDnsService $cloudflareDnsService,
         ?ApiUsageContext $apiUsageContext = null
     ): void {
         $context = [
@@ -42,7 +44,7 @@ class ProbeHistoricalDns implements ShouldQueue
         try {
             ($apiUsageContext ?? app(ApiUsageContext::class))->forDeployment(
                 (int) $this->deployment->getKey(),
-                fn () => $this->probeAndDispatch($dnsProbeService, $deploymentService),
+                fn () => $this->probeAndDispatch($dnsProbeService, $deploymentService, $cloudflareDnsService),
             );
         } finally {
             Log::withoutContext(array_keys($context));
@@ -51,7 +53,8 @@ class ProbeHistoricalDns implements ShouldQueue
 
     private function probeAndDispatch(
         DnsProbeService $dnsProbeService,
-        ArchiveDeploymentService $deploymentService
+        ArchiveDeploymentService $deploymentService,
+        CloudflareDnsService $cloudflareDnsService
     ): void {
         $this->deployment->refresh();
 
@@ -60,8 +63,7 @@ class ProbeHistoricalDns implements ShouldQueue
         }
 
         $rawIps = (string) $this->deployment->historical_ips;
-        preg_match_all('/\b(?:\d{1,3}\.){3}\d{1,3}\b/', $rawIps, $matches);
-        $ips = array_values(array_unique($matches[0] ?? []));
+        $ips = $dnsProbeService->filterHistoricalIpsOneYearApart($rawIps);
 
         if (empty($ips)) {
             $this->fallbackToRuncloud('No valid historical IP addresses provided. Proceeding with fallback deployment.');
@@ -134,6 +136,89 @@ class ProbeHistoricalDns implements ShouldQueue
                 }
             }
 
+            // 4. Fourth priority: If no working IP found, test Live (blocked) IPs one by one via Cloudflare
+            if (! $matchingCandidate) {
+                $blockedCandidates = array_values(array_filter(
+                    $summaries,
+                    fn (array $s) => ! empty($s['is_blocked']) || ($s['verdict'] ?? '') === 'Live (blocked)'
+                ));
+
+                if (! empty($blockedCandidates)) {
+                    $this->deployment->logs()->create([
+                        'step_name' => 'probing_historical_ips',
+                        'status' => 'in_progress',
+                        'message' => sprintf(
+                            'No directly accessible working IP found. Testing %d Live (blocked) candidate IP(s) one by one via Cloudflare proxy...',
+                            count($blockedCandidates)
+                        ),
+                    ]);
+
+                    foreach ($blockedCandidates as $index => $candidate) {
+                        $candidateIp = $candidate['ip'];
+
+                        $this->deployment->refresh();
+                        if (in_array($this->deployment->status, [DeploymentStatus::Cancelled, DeploymentStatus::Completed], true)) {
+                            return;
+                        }
+
+                        $this->deployment->logs()->create([
+                            'step_name' => 'probing_historical_ips',
+                            'status' => 'in_progress',
+                            'message' => sprintf('Assigning Cloudflare DNS to blocked IP [%s] (%d/%d) and verifying live content...', $candidateIp, $index + 1, count($blockedCandidates)),
+                        ]);
+
+                        try {
+                            // Assign Cloudflare DNS A records (@ and www) proxied to the blocked IP
+                            $cloudflareDnsService->setupRunCloudDns($this->deployment->domain, $candidateIp, true);
+
+                            // Short pause to allow Cloudflare edge routing to take effect
+                            sleep(3);
+
+                            // Verify content through Cloudflare
+                            $verifyResult = $dnsProbeService->verifyLiveDomainContent($this->deployment->domain, 10);
+
+                            if ($verifyResult['is_working'] && $verifyResult['is_content_related']) {
+                                $this->deployment->logs()->create([
+                                    'step_name' => 'probing_historical_ips',
+                                    'status' => 'success',
+                                    'message' => sprintf(
+                                        'Verified Live (blocked) IP [%s] is serving related content via Cloudflare (Title: "%s", Status: %d).',
+                                        $candidateIp,
+                                        $verifyResult['title'] ?? 'N/A',
+                                        $verifyResult['status'] ?? 200
+                                    ),
+                                ]);
+
+                                $candidate['title'] = $verifyResult['title'];
+                                $candidate['score'] = max($candidate['score'] ?? 0, 8);
+                                if (! empty($verifyResult['detected_version'])) {
+                                    $candidate['detected_version'] = $verifyResult['detected_version'];
+                                }
+                                $matchingCandidate = $candidate;
+                                break;
+                            } else {
+                                $this->deployment->logs()->create([
+                                    'step_name' => 'probing_historical_ips',
+                                    'status' => 'warning',
+                                    'message' => sprintf(
+                                        'Blocked IP [%s] did not serve valid related content through Cloudflare (Status: %s, Error: %s). Checking next candidate...',
+                                        $candidateIp,
+                                        $verifyResult['status'] ?? 'None',
+                                        $verifyResult['error'] ?? 'Unrelated or empty content'
+                                    ),
+                                ]);
+                            }
+                        } catch (Throwable $cfEx) {
+                            $this->deployment->logs()->create([
+                                'step_name' => 'probing_historical_ips',
+                                'status' => 'warning',
+                                'message' => sprintf('Error verifying blocked IP [%s] via Cloudflare: %s', $candidateIp, $cfEx->getMessage()),
+                            ]);
+                        }
+                    }
+                }
+            }
+
             if ($matchingCandidate) {
                 $workingIp = $matchingCandidate['ip'];
                 $title = $matchingCandidate['title'] ?? 'N/A';
@@ -159,9 +244,23 @@ class ProbeHistoricalDns implements ShouldQueue
                         : 'No sitemap found on working IP. Sitemap submission to Google Search Console will be skipped.',
                 ]);
 
+                $detectedVersion = $matchingCandidate['detected_version'] ?? null;
+                if (! empty($detectedVersion)) {
+                    $this->deployment->logs()->create([
+                        'step_name' => 'probing_historical_ips',
+                        'status' => 'success',
+                        'message' => sprintf(
+                            'Detected working live site version as [%s]. Cloudflare redirect Worker will be configured for %s.',
+                            $detectedVersion,
+                            $detectedVersion
+                        ),
+                    ]);
+                }
+
                 $workingIpData = [
                     'ip' => $workingIp,
                     'has_sitemap' => $hasSitemap,
+                    'version' => $detectedVersion,
                 ];
             }
         } catch (Throwable $e) {
@@ -179,12 +278,18 @@ class ProbeHistoricalDns implements ShouldQueue
         }
 
         if ($workingIpData !== null) {
-            $this->deployment->update([
+            $updateData = [
                 'working_ip' => $workingIpData['ip'],
                 'deployment_type' => 'redirect',
                 'archive_source' => 'redirect',
                 'has_sitemap' => $workingIpData['has_sitemap'],
-            ]);
+            ];
+
+            if (! empty($workingIpData['version'])) {
+                $updateData['version'] = $workingIpData['version'];
+            }
+
+            $this->deployment->update($updateData);
 
             // Directly complete the Cloudflare redirect & Search Console setup
             $deploymentService->deploy($this->deployment);

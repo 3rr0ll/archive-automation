@@ -1,8 +1,8 @@
 <div class="lg:col-span-8 xl:col-span-9">
     <div class="flex items-center justify-between gap-3 mb-4">
-        <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Deployed Domains
-            <span class="text-xs font-normal text-zinc-500 dark:text-zinc-400 ml-1.5" x-text="`(${displayedDeployments.length})`"></span>
+        <h2 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center">
+            <span>Deployed Domains</span>
+            <span class="text-xs font-normal text-zinc-500 dark:text-zinc-400 ml-1.5" x-text="`(${totalDeploymentsCount})`"></span>
         </h2>
         <div x-show="$store.auth.isAdmin && displayedDeployments.length > 0" class="flex items-center gap-2">
             <label class="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
@@ -22,6 +22,11 @@
         </div>
     </div>
     
+    <!-- Domain List Loading Skeleton -->
+    <x-skeleton.domain-list-skeleton />
+
+    <!-- Content (hidden during search / pagination fetch) -->
+    <div x-show="!isFetchingDeployments">
     <!-- Empty State -->
     <template x-if="displayedDeployments.length === 0">
         <div class="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-lg p-12 text-center transition-colors">
@@ -42,7 +47,7 @@
     <!-- Grid View -->
     <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'grid'">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <template x-for="item in paginatedDeployments" :key="'grid-'+item.id">
+            <template x-for="item in displayedDeployments" :key="'grid-'+item.id">
                 <div @click="window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'"
                    class="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-lg transition hover:border-zinc-300 dark:hover:border-zinc-700 group p-4 flex flex-col justify-between min-h-[140px] cursor-pointer">
                     <div class="flex items-start justify-between">
@@ -52,8 +57,10 @@
                             </div>
                             <div class="flex flex-col min-w-0">
                                 <h3 class="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
-                                <span class="text-[12px] text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
-                                <x-dashboard.subfolder-badge class="mt-1.5" />
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="text-[12px] text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
+                                    <x-dashboard.subfolder-badge />
+                                </div>
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
@@ -82,9 +89,9 @@
 
                     <div class="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                         <div class="flex items-center gap-1.5 text-xs text-zinc-800 dark:text-zinc-300 font-medium min-w-0">
-                            <x-lucide-arrow-right-left x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-indigo-500" />
+                            <x-lucide-history x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
                             <x-lucide-server x-show="item.deployment_type !== 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
-                            <span class="truncate" x-text="item.deployment_type === 'redirect' ? 'DNS Redirect' : (item.server ? item.server.name : 'Unknown server')"></span>
+                            <span class="truncate" x-text="item.deployment_type === 'redirect' ? 'Historical DNS' : (item.server ? item.server.name : 'Unknown server')"></span>
                             <span class="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono" x-show="item.version" x-text="`(${item.version})`"></span>
                         </div>
                         <span class="text-xs text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition flex items-center gap-1">
@@ -107,7 +114,7 @@
     <!-- List View -->
     <template x-if="displayedDeployments.length > 0 && $store.domainView.mode === 'list'">
         <div class="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-200 dark:divide-zinc-800 transition-colors">
-            <template x-for="item in paginatedDeployments" :key="'list-'+item.id">
+            <template x-for="item in displayedDeployments" :key="'list-'+item.id">
                 <div class="flex items-center justify-between p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition group cursor-pointer"
                      @click="window.location.href = '/deployments/' + (item.hash || item.id) + '/logs'">
                     <!-- Left Section -->
@@ -117,16 +124,18 @@
                         </div>
                         <div class="flex flex-col min-w-0">
                             <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
-                            <span class="text-xs text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
-                            <x-dashboard.subfolder-badge class="mt-1.5" />
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
+                                <x-dashboard.subfolder-badge />
+                            </div>
                         </div>
                     </div>
                     <!-- Right Section -->
                     <div class="flex items-center gap-6 shrink-0" @click.stop>
                         <div class="hidden sm:block text-right">
                             <div class="flex items-center justify-end gap-1.5 text-xs text-zinc-800 dark:text-zinc-300 font-medium">
-                                <span class="truncate max-w-[200px]" x-text="item.deployment_type === 'redirect' ? 'DNS Redirect' : (item.server ? item.server.name : 'Server')"></span>
-                                <x-lucide-arrow-right-left x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-indigo-500" />
+                                <span class="truncate max-w-[200px]" x-text="item.deployment_type === 'redirect' ? 'Historical DNS' : (item.server ? item.server.name : 'Server')"></span>
+                                <x-lucide-history x-show="item.deployment_type === 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
                                 <x-lucide-server x-show="item.deployment_type !== 'redirect'" class="size-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
                             </div>
                             <div class="flex items-center justify-end gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
@@ -170,14 +179,15 @@
             </template>
         </div>
     </template>
+    </div>
 
     <!-- Pagination Controls -->
-    <template x-if="displayedDeployments.length > 0">
+    <template x-if="totalDeploymentsCount > 0">
         <div class="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-600 dark:text-zinc-400">
             <!-- Count and Per Page selector -->
             <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                 <span>
-                    Showing <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="paginationFrom"></span> to <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="paginationTo"></span> of <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="displayedDeployments.length"></span> domains
+                    Showing <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="paginationFrom"></span> to <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="paginationTo"></span> of <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="totalDeploymentsCount"></span> domains
                 </span>
                 <div class="flex items-center gap-1.5">
                     <span class="text-zinc-400 dark:text-zinc-500">Per page:</span>
@@ -196,7 +206,7 @@
                              role="menu">
                             <template x-for="val in [6, 9, 15, 30]" :key="'domain-opt-'+val">
                                 <button type="button" 
-                                        @click="perPage = val; currentPage = 1; open = false;" 
+                                        @click="changePerPage(val); open = false;" 
                                         class="flex items-center justify-between w-full px-2.5 py-1.5 text-left text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
                                         :class="perPage === val ? 'bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-900 dark:text-zinc-100' : ''"
                                         role="menuitem">

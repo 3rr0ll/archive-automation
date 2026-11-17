@@ -103,9 +103,12 @@ class HttpProbeService
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => min($timeout, 5),
             CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Prober/1.0',
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_FRESH_CONNECT => true,
+            CURLOPT_FORBID_REUSE => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
             CURLOPT_SSL_VERIFYSTATUS => false,
+            CURLOPT_CERTINFO => true,
         ]);
 
         return $ch;
@@ -140,7 +143,24 @@ class HttpProbeService
                 $errorType = 'ssl_error';
                 $errorMessage = "SSL Certificate verification failed: {$curlError}";
             } elseif ($curlErrno === 0) {
-                $sslValid = true;
+                // Check certificate validity (e.g. expiration date) if available from certinfo
+                $certinfo = curl_getinfo($ch, CURLINFO_CERTINFO);
+                $isExpired = false;
+                if (! empty($certinfo) && is_array($certinfo)) {
+                    foreach ($certinfo as $cert) {
+                        if (isset($cert['Expire date'])) {
+                            $expireTs = strtotime($cert['Expire date']);
+                            if ($expireTs && $expireTs < time()) {
+                                $isExpired = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                $sslValid = ! $isExpired;
+                if ($isExpired) {
+                    $sslError = 'Certificate expired';
+                }
             }
         }
 

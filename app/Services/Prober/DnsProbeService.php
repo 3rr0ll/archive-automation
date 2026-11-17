@@ -11,6 +11,75 @@ class DnsProbeService
     ) {}
 
     /**
+     * Parse raw historical IP input text (which may contain tabular records with dates/years)
+     * and filter records to only include IPs within the most recent 1-year period.
+     *
+     * Finds the latest year present across all records and includes all records dated
+     * from the latest year back to (latestYear - 1). Any records older than that 1-year window
+     * are excluded.
+     *
+     * @param string $rawInput
+     * @return array<int, string>
+     */
+    public function filterHistoricalIpsOneYearApart(string $rawInput): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim($rawInput));
+        $parsedRecords = [];
+        $plainIps = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+
+            // Find IPv4 in the line
+            if (! preg_match('/\b(?:\d{1,3}\.){3}\d{1,3}\b/', $line, $ipMatch)) {
+                continue;
+            }
+
+            $ip = $ipMatch[0];
+
+            // Match full date or 4-digit year (e.g. 2026-11-17, 2026/11/17, 2026.11.17, or year 1990-2099)
+            $year = null;
+            if (preg_match('/\b(19\d\d|20\d\d)(?:[-.\/]\d{1,2}[-.\/]\d{1,2})?\b/', $line, $dateMatch)) {
+                $year = (int) $dateMatch[1];
+            }
+
+            $parsedRecords[] = [
+                'ip' => $ip,
+                'year' => $year,
+            ];
+            $plainIps[] = $ip;
+        }
+
+        if (empty($parsedRecords)) {
+            return [];
+        }
+
+        // Find all detected years
+        $years = array_filter(array_column($parsedRecords, 'year'), fn ($y) => $y !== null);
+
+        // If no years could be parsed from the records at all, fallback to distinct IPs in original order
+        if (empty($years)) {
+            return array_values(array_unique($plainIps));
+        }
+
+        // Determine the latest available year dynamically and set a 1-year lookback window
+        $latestYear = max($years);
+        $minAllowedYear = $latestYear - 1;
+
+        $selectedIps = [];
+        foreach ($parsedRecords as $record) {
+            if ($record['year'] !== null && $record['year'] >= $minAllowedYear) {
+                $selectedIps[] = $record['ip'];
+            }
+        }
+
+        return array_values(array_unique($selectedIps));
+    }
+
+    /**
      * Probe a single IP against the specified domain and protocol.
      *
      * @param string $domain
@@ -42,7 +111,21 @@ class DnsProbeService
      *     summaries: array<int, array<string, mixed>>
      * }
      */
-    public function probeMultiple(string $domain, array $ips, array $protocols = ['http', 'https'], int $timeout = 15): array
+    /**
+     * Probe a list of IPs and protocols against the specified domain using a controlled concurrency pool.
+     *
+     * @param string $domain
+     * @param array<int, string> $ips
+     * @param array<int, string> $protocols
+     * @param int $timeout
+     * @param int $maxConcurrent Maximum open sockets at any given time (defaults to 6 for safe networking)
+     * @return array{
+     *     domain: string,
+     *     results: array<int, array<string, mixed>>,
+     *     summaries: array<int, array<string, mixed>>
+     * }
+     */
+    public function probeMultiple(string $domain, array $ips, array $protocols = ['http', 'https'], int $timeout = 10, int $maxConcurrent = 6): array
     {
         $domain = strtolower(trim($domain));
         $domainBase = preg_replace('/^www\./', '', $domain);
@@ -51,91 +134,101 @@ class DnsProbeService
             'www.' . $domainBase,
         ]));
 
-        $mh = curl_multi_init();
-        $handles = [];
-        $immediateResults = [];
-        $fallbackSequential = false;
-
+        // Build list of all tasks to execute
+        $queue = [];
         foreach ($ips as $ip) {
             foreach ($domainVariants as $targetHost) {
                 foreach ($protocols as $protocol) {
-                    $handleOrError = $this->httpProbeService->createHandle($targetHost, $ip, $protocol, $timeout);
-
-                    if (is_array($handleOrError)) {
-                        $immediateResults[] = $handleOrError;
-                        continue;
-                    }
-
-                    if (! ($handleOrError instanceof \CurlHandle) && ! is_resource($handleOrError)) {
-                        $fallbackSequential = true;
-                        break 3;
-                    }
-
-                    $key = (int) $handleOrError;
-                    curl_multi_add_handle($mh, $handleOrError);
-                    $handles[$key] = [
-                        'handle' => $handleOrError,
+                    $queue[] = [
                         'ip' => $ip,
                         'target_host' => $targetHost,
                         'protocol' => $protocol,
-                        'start_time' => microtime(true),
                     ];
                 }
             }
         }
 
-        if ($fallbackSequential) {
-            curl_multi_close($mh);
-            $results = [];
-            foreach ($ips as $ip) {
-                foreach ($domainVariants as $targetHost) {
-                    foreach ($protocols as $protocol) {
-                        $results[] = $this->httpProbeService->probe($targetHost, $ip, $protocol, $timeout);
-                    }
+        $results = [];
+        $activeHandles = [];
+        $mh = curl_multi_init();
+
+        // Helper to launch next task from queue into the multi handle
+        $enqueueNext = function () use ($mh, &$queue, &$activeHandles, $domain, $timeout, &$results): bool {
+            while (! empty($queue)) {
+                $task = array_shift($queue);
+                $ip = $task['ip'];
+                $targetHost = $task['target_host'];
+                $protocol = $task['protocol'];
+
+                $handleOrError = $this->httpProbeService->createHandle($targetHost, $ip, $protocol, $timeout);
+
+                if (is_array($handleOrError)) {
+                    $results[] = $handleOrError;
+                    continue;
+                }
+
+                if (! ($handleOrError instanceof \CurlHandle) && ! is_resource($handleOrError)) {
+                    continue;
+                }
+
+                $key = (int) $handleOrError;
+                curl_multi_add_handle($mh, $handleOrError);
+                $activeHandles[$key] = [
+                    'handle' => $handleOrError,
+                    'ip' => $ip,
+                    'target_host' => $targetHost,
+                    'protocol' => $protocol,
+                    'start_time' => microtime(true),
+                ];
+
+                return true;
+            }
+
+            return false;
+        };
+
+        // Seed initial pool up to $maxConcurrent sockets
+        for ($i = 0; $i < $maxConcurrent; $i++) {
+            if (! $enqueueNext()) {
+                break;
+            }
+        }
+
+        // Run event loop until all handles and queue items are exhausted
+        do {
+            $mrc = curl_multi_exec($mh, $active);
+            if ($mrc === CURLM_CALL_MULTI_PERFORM) {
+                continue;
+            }
+
+            // Check for completed transfers
+            while ($info = curl_multi_info_read($mh)) {
+                $ch = $info['handle'];
+                $key = (int) $ch;
+
+                if (isset($activeHandles[$key])) {
+                    $item = $activeHandles[$key];
+                    $durationMs = (int) round((microtime(true) - $item['start_time']) * 1000);
+                    $response = curl_multi_getcontent($ch);
+                    $parsed = $this->httpProbeService->parseResponse($ch, $response, $item['ip'], $item['protocol'], $durationMs);
+                    $parsed['target_host'] = $item['target_host'];
+                    $results[] = $parsed;
+
+                    curl_multi_remove_handle($mh, $ch);
+                    curl_close($ch);
+                    unset($activeHandles[$key]);
+
+                    // Immediately replenish the pool with the next socket
+                    $enqueueNext();
                 }
             }
 
-            $summaries = $this->buildIpSummaries($results, $domain);
-
-            return [
-                'domain' => $domain,
-                'results' => $results,
-                'summaries' => $summaries,
-            ];
-        }
-
-        // Execute all handles in parallel
-        $active = null;
-        do {
-            $mrc = curl_multi_exec($mh, $active);
-        } while ($mrc === CURLM_CALL_MULTI_PERFORM);
-
-        while ($active && $mrc === CURLM_OK) {
-            if (curl_multi_select($mh, 0.5) === -1) {
-                usleep(5000);
+            if ($active && $mrc === CURLM_OK) {
+                if (curl_multi_select($mh, 0.2) === -1) {
+                    usleep(5000);
+                }
             }
-            do {
-                $mrc = curl_multi_exec($mh, $active);
-            } while ($mrc === CURLM_CALL_MULTI_PERFORM);
-        }
-
-        // Collect results
-        $results = $immediateResults;
-
-        foreach ($handles as $item) {
-            $ch = $item['handle'];
-            $ip = $item['ip'];
-            $protocol = $item['protocol'];
-            $durationMs = (int) round((microtime(true) - $item['start_time']) * 1000);
-
-            $response = curl_multi_getcontent($ch);
-            $parsed = $this->httpProbeService->parseResponse($ch, $response, $ip, $protocol, $durationMs);
-            $parsed['target_host'] = $item['target_host'] ?? null;
-            $results[] = $parsed;
-
-            curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
-        }
+        } while (($active > 0 || ! empty($activeHandles) || ! empty($queue)) && $mrc === CURLM_OK);
 
         curl_multi_close($mh);
 
@@ -145,6 +238,165 @@ class DnsProbeService
             'domain' => $domain,
             'results' => $results,
             'summaries' => $summaries,
+        ];
+    }
+
+    /**
+     * Check if a given domain text matches domain or brand keywords.
+     */
+    public function matchesDomainKeywords(string $domain, string $text): bool
+    {
+        $cleanDomain = strtolower(trim($domain));
+        $domainBase = preg_replace('/^www\./', '', $cleanDomain);
+        $domainParts = explode('.', $domainBase);
+        $domainNameOnly = $domainParts[0] ?? $domainBase;
+        $domainWordsSpace = str_replace(['-', '_'], ' ', $domainNameOnly);
+        $domainWordsJoined = str_replace(['-', '_', ' '], '', $domainNameOnly);
+        $domainTokens = array_filter(preg_split('/[^a-z0-9]+/', $domainNameOnly) ?: []);
+
+        $lower = strtolower($text);
+        if (str_contains($lower, $cleanDomain) || str_contains($lower, $domainBase)) {
+            return true;
+        }
+        if (strlen($domainNameOnly) >= 4 && str_contains($lower, $domainNameOnly)) {
+            return true;
+        }
+        if (strlen($domainWordsSpace) >= 4 && str_contains($lower, $domainWordsSpace)) {
+            return true;
+        }
+        if (strlen($domainWordsJoined) >= 4 && str_contains($lower, $domainWordsJoined)) {
+            return true;
+        }
+
+        $normalizedText = preg_replace('/[^a-z0-9]+/', '', $lower);
+        if (strlen($domainWordsJoined) >= 4 && str_contains($normalizedText, $domainWordsJoined)) {
+            return true;
+        }
+
+        if (! empty($domainTokens)) {
+            $matchedCount = 0;
+            foreach ($domainTokens as $token) {
+                if (strlen($token) >= 3 && str_contains($lower, $token)) {
+                    $matchedCount++;
+                }
+            }
+            if ($matchedCount >= count($domainTokens)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a text represents a parking, for-sale, or placeholder page.
+     */
+    public function isParkingOrSale(string $text): bool
+    {
+        $combinedText = strtolower($text);
+        $parkingPatterns = [
+            'for sale',
+            'buy this domain',
+            'is for sale',
+            'parking page',
+            'domain parking',
+            'parked domain',
+            'parked free',
+            'resources and information',
+            'resources and information.',
+            'spaceship.com',
+            'dan.com',
+            'sedo.com',
+            'godaddy.com',
+            'namecheap.com',
+            'hugedomains',
+            'afternic',
+            'bodis',
+            'domain is registered',
+            'inquire about this domain',
+            'related searches',
+        ];
+
+        foreach ($parkingPatterns as $pattern) {
+            if (str_contains($combinedText, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Fetch a live domain over HTTP/HTTPS and check if it returns working 2xx status and content related to domain.
+     *
+     * @param string $domain
+     * @param int $timeout
+     * @return array{is_working: bool, is_content_related: bool, title: ?string, status: ?int, error: ?string}
+     */
+    public function verifyLiveDomainContent(string $domain, int $timeout = 10): array
+    {
+        $domain = strtolower(trim($domain));
+        $domainBase = preg_replace('/^www\./', '', $domain);
+        $domainVariants = array_values(array_unique([
+            'https://' . $domainBase . '/',
+            'https://www.' . $domainBase . '/',
+            'http://' . $domainBase . '/',
+            'http://www.' . $domainBase . '/',
+        ]));
+
+        foreach ($domainVariants as $url) {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 4,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min($timeout, 5),
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Prober/1.0',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+            ]);
+
+            $response = curl_exec($ch);
+            $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($statusCode >= 200 && $statusCode < 300 && is_string($response) && strlen($response) > 0) {
+                $extracted = app(HtmlExtractorService::class)->extract($response);
+                $title = $extracted['title'] ?? '';
+                $body = $extracted['body_text'] ?? '';
+                $combined = $title . ' ' . substr($body, 0, 1000);
+
+                if (! $this->isParkingOrSale($combined) && ! $extracted['is_empty_or_default']) {
+                    $isRelated = $this->matchesDomainKeywords($domain, $title) || $this->matchesDomainKeywords($domain, $body);
+                    if ($isRelated) {
+                        $parsedHost = parse_url($url, PHP_URL_HOST);
+                        $detectedVersion = ($parsedHost && str_starts_with(strtolower($parsedHost), 'www.')) ? 'www' : 'non-www';
+
+                        return [
+                            'is_working' => true,
+                            'is_content_related' => true,
+                            'title' => $title,
+                            'status' => $statusCode,
+                            'url' => $url,
+                            'detected_version' => $detectedVersion,
+                            'error' => null,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'is_working' => false,
+            'is_content_related' => false,
+            'title' => null,
+            'status' => null,
+            'url' => null,
+            'detected_version' => null,
+            'error' => 'No working related content found across domain variants.',
         ];
     }
 
@@ -317,6 +569,32 @@ class DnsProbeService
 
             $hasHttpsHandshakeOk = ($httpsRes && ($httpsRes['ssl_valid'] === true || $data['https'] !== null));
 
+            // Check if any handle for this IP encountered a block/challenge, 429, or 403 status
+            $hasBlockedStatus = false;
+            $hasBlockedError = false;
+            $allTimeouts = true;
+            $hasAnyError = false;
+
+            foreach ($data['raw_results'] as $raw) {
+                $status = $raw['status'] ?? null;
+                $err = strtolower($raw['error'] ?? '');
+                if ($status === 403 || $status === 429) {
+                    $hasBlockedStatus = true;
+                }
+                if ($raw['is_cloudflare_challenge'] ?? false) {
+                    $hasBlockedError = true;
+                }
+                if (! empty($err)) {
+                    $hasAnyError = true;
+                    if (! str_contains($err, 'timeout')) {
+                        $allTimeouts = false;
+                    }
+                    if (str_contains($err, 'refused') || str_contains($err, 'reset') || str_contains($err, 'ssl_error') || str_contains($err, 'handshake') || str_contains($err, 'forbidden') || str_contains($err, 'blocked')) {
+                        $hasBlockedError = true;
+                    }
+                }
+            }
+
             // 1. Status 2xx base score
             if ($has2xx) {
                 $score += 2;
@@ -342,82 +620,14 @@ class DnsProbeService
             $isContentRelated = false;
 
             // Check for parking / for sale / placeholder indicators
-            $isParkingOrSale = false;
-            $combinedText = strtolower($title . ' ' . substr($body, 0, 1000));
-            $parkingPatterns = [
-                'for sale',
-                'buy this domain',
-                'is for sale',
-                'parking page',
-                'domain parking',
-                'parked domain',
-                'parked free',
-                'resources and information',
-                'resources and information.',
-                'spaceship.com',
-                'dan.com',
-                'sedo.com',
-                'godaddy.com',
-                'namecheap.com',
-                'hugedomains',
-                'afternic',
-                'bodis',
-                'domain is registered',
-                'inquire about this domain',
-                'related searches',
-            ];
-
-            foreach ($parkingPatterns as $pattern) {
-                if (str_contains($combinedText, $pattern)) {
-                    $isParkingOrSale = true;
-                    break;
-                }
-            }
-
-            // Check if title or body mentions the domain or brand keywords
-            $matchesDomainKeywords = function (string $text) use ($cleanDomain, $domainBase, $domainNameOnly, $domainWordsSpace, $domainWordsJoined, $domainTokens): bool {
-                $lower = strtolower($text);
-                if (str_contains($lower, $cleanDomain) || str_contains($lower, $domainBase)) {
-                    return true;
-                }
-                if (strlen($domainNameOnly) >= 4 && str_contains($lower, $domainNameOnly)) {
-                    return true;
-                }
-                if (strlen($domainWordsSpace) >= 4 && str_contains($lower, $domainWordsSpace)) {
-                    return true;
-                }
-                if (strlen($domainWordsJoined) >= 4 && str_contains($lower, $domainWordsJoined)) {
-                    return true;
-                }
-
-                // Also match normalized alphanumeric text (e.g. "qatar gulf news" matches "qatargulfnews")
-                $normalizedText = preg_replace('/[^a-z0-9]+/', '', $lower);
-                if (strlen($domainWordsJoined) >= 4 && str_contains($normalizedText, $domainWordsJoined)) {
-                    return true;
-                }
-
-                // Check if major tokens from domain name are in the text
-                if (! empty($domainTokens)) {
-                    $matchedCount = 0;
-                    foreach ($domainTokens as $token) {
-                        if (strlen($token) >= 3 && str_contains($lower, $token)) {
-                            $matchedCount++;
-                        }
-                    }
-                    if ($matchedCount >= count($domainTokens)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            };
-
+            $combinedText = ($title ?? '') . ' ' . substr($body ?? '', 0, 1000);
+            $isParkingOrSale = $this->isParkingOrSale($combinedText);
 
             if (! empty($title)) {
                 if ($isParkingOrSale) {
                     $notes[] = 'Parking / For Sale page';
                     $score += 1;
-                } elseif ($matchesDomainKeywords($title)) {
+                } elseif ($this->matchesDomainKeywords($domain, $title)) {
                     $score += 4;
                     $notes[] = 'Title mentions domain';
                     $isContentRelated = true;
@@ -433,7 +643,7 @@ class DnsProbeService
             }
 
             // Also check body text for domain or brand keywords if NOT parking/for sale
-            if (! $isContentRelated && ! $isParkingOrSale && ! empty($body) && $matchesDomainKeywords($body)) {
+            if (! $isContentRelated && ! $isParkingOrSale && ! empty($body) && $this->matchesDomainKeywords($domain, $body)) {
                 $isContentRelated = true;
                 $score += 2;
                 $notes[] = 'Body mentions domain';
@@ -459,7 +669,7 @@ class DnsProbeService
             }
 
             $isRedirectOnly = (($data['http'] >= 300 && $data['http'] < 400) || ($data['https'] >= 300 && $data['https'] < 400)) && ! $has2xx;
-            if ($isRedirectOnly) {
+            if ($isRedirectOnly && ! $hasBlockedStatus) {
                 $score = max($score, 2);
                 $notes = array_merge(['Redirect response'], $notes);
             }
@@ -473,7 +683,7 @@ class DnsProbeService
             $isTimeout = false;
 
             if ($bothNoStatus) {
-                if (($httpsErr && str_contains(strtolower($httpsErr), 'timeout')) || ($httpErr && str_contains(strtolower($httpErr), 'timeout'))) {
+                if ($allTimeouts && $hasAnyError) {
                     $isTimeout = true;
                     $score = 0;
                     $notes = ['No response — connect-timeout'];
@@ -482,23 +692,70 @@ class DnsProbeService
                     $score = 1;
                     $notes = ['TCP 443+80 — server alive · Likely rate-limited/blocked'];
                 }
+            } elseif ($hasBlockedStatus && ! $has2xx) {
+                // If the IP returned 403 Forbidden, 429 Too Many Requests, or Cloudflare challenge, mark as blocked
+                $isBlocked = true;
+                $score = max($score, 1);
+                $notes = array_merge(['Rate-limited / 403 / 429 — server alive'], $notes);
+            } elseif ($hasBlockedError && ! $has2xx) {
+                $isBlocked = true;
+                $score = max($score, 1);
+                $notes = array_merge(['Connection refused or blocked by host'], $notes);
+            } elseif ($isRedirectOnly && $data['https'] === null && ! $has2xx) {
+                // Port 80 gave a redirect (e.g. 301/302) but HTTPS (port 443) connection failed / refused / blocked
+                $isBlocked = true;
+                $score = max($score, 1);
+                $notes = array_merge(['Port 80 redirect, but HTTPS failed/blocked'], $notes);
             }
 
             // Verdict assignment
-            if ($isTimeout || ($score === 0 && $bothNoStatus)) {
-                $verdict = 'Dead';
+            if ($isParkingOrSale) {
+                $verdict = 'Parking / For Sale';
             } elseif ($isBlocked) {
                 $verdict = 'Live (blocked)';
-            } elseif ($isParkingOrSale) {
-                $verdict = 'Parking / For Sale';
+            } elseif ($isTimeout || ($score === 0 && $bothNoStatus)) {
+                $verdict = 'Dead';
             } elseif ($isContentRelated && $has2xx) {
                 $verdict = 'Likely old site';
-            } elseif ($score >= 4 && ! $isParkingOrSale) {
+            } elseif ($score >= 4 && ! $isParkingOrSale && ! $isBlocked) {
                 $verdict = 'Possible';
-            } elseif ($has2xx || $is404 || $score >= 2) {
+            } elseif (($has2xx || $is404 || $score >= 2) && ! $isBlocked) {
                 $verdict = 'Server live';
             } else {
                 $verdict = 'Unlikely';
+            }
+
+            // Detect working version (www vs non-www) based on successful responses or redirects
+            $detectedVersion = null;
+            $workingTargetHost = null;
+
+            // Prioritize 2xx responses (HTTPS then HTTP)
+            foreach ($data['raw_results'] as $raw) {
+                $status = $raw['status'] ?? null;
+                if ($status >= 200 && $status < 300) {
+                    $workingTargetHost = $raw['target_host'] ?? null;
+                    if ($raw['protocol'] === 'https') {
+                        break;
+                    }
+                }
+            }
+
+            // If no 2xx, check redirect_url or target_host with redirect status
+            if (! $workingTargetHost) {
+                foreach ($data['raw_results'] as $raw) {
+                    $redir = $raw['redirect_url'] ?? '';
+                    if (! empty($redir)) {
+                        $parsedHost = parse_url($redir, PHP_URL_HOST);
+                        if (! empty($parsedHost) && str_contains(strtolower($parsedHost), strtolower($domainBase))) {
+                            $workingTargetHost = $parsedHost;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($workingTargetHost) {
+                $detectedVersion = str_starts_with(strtolower($workingTargetHost), 'www.') ? 'www' : 'non-www';
             }
 
             $summaries[] = [
@@ -508,7 +765,9 @@ class DnsProbeService
                 'is_working' => $has2xx,
                 'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300,
                 'is_parking' => $isParkingOrSale,
+                'is_blocked' => $isBlocked,
                 'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale,
+                'detected_version' => $detectedVersion,
                 'https' => $data['https'] ? (string) $data['https'] : '—',
                 'http' => $data['http'] ? (string) $data['http'] : '—',
                 'title' => $data['title'] ?? '',
