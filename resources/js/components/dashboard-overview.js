@@ -229,7 +229,22 @@ export function dashboardOverview(
 
         // Deployments to display in the main list/grid
         get displayedDeployments() {
-            return this.deployments;
+            const list = [...this.deployments];
+            const active = this.activeQueueDeployment;
+
+            if (active && this.currentPage === 1) {
+                const query = (this.searchQuery || '').toLowerCase().trim();
+                const matchesSearch = query === '' ||
+                    (active.domain && active.domain.toLowerCase().includes(query)) ||
+                    (active.server?.name && active.server.name.toLowerCase().includes(query)) ||
+                    (active.current_step && active.current_step.toLowerCase().includes(query));
+
+                if (matchesSearch && !list.some(d => d.id === active.id)) {
+                    list.unshift(active);
+                }
+            }
+
+            return list;
         },
 
         get visiblePages() {
