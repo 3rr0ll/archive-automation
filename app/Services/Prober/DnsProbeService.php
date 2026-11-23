@@ -13,6 +13,7 @@ class DnsProbeService
     /**
      * Parse raw historical IP input text (which may contain tabular records with dates/years)
      * and filter records to only include IPs within the most recent 1-year period.
+     * If the total number of unique IPs is 15 or below, the 1-year rule is bypassed and all distinct IPs are kept.
      *
      * Finds the latest year present across all records and includes all records dated
      * from the latest year back to (latestYear - 1). Any records older than that 1-year window
@@ -57,12 +58,19 @@ class DnsProbeService
             return [];
         }
 
+        $uniquePlainIps = array_values(array_unique($plainIps));
+
+        // If total unique IPs are 15 or below, do not apply the 1-year rule
+        if (count($uniquePlainIps) <= 15) {
+            return $uniquePlainIps;
+        }
+
         // Find all detected years
         $years = array_filter(array_column($parsedRecords, 'year'), fn ($y) => $y !== null);
 
         // If no years could be parsed from the records at all, fallback to distinct IPs in original order
         if (empty($years)) {
-            return array_values(array_unique($plainIps));
+            return $uniquePlainIps;
         }
 
         // Determine the latest available year dynamically and set a 1-year lookback window
