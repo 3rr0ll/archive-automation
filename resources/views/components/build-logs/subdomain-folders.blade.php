@@ -19,11 +19,11 @@
             <!-- Select all / Deselect all toggle -->
             <button type="button"
                     @click="toggleSelectAll"
-                    class="text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center gap-1.5 px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer">
+                    class="text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition cursor-pointer">
                 <input type="checkbox"
                        :checked="isAllSubdomainsSelected"
                        :indeterminate.prop="isSubdomainsIndeterminate"
-                       class="size-3.5 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 pointer-events-none">
+                       class="size-3.5 rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 pointer-events-none">
                 <span x-text="isAllSubdomainsSelected ? 'Deselect all' : 'Select all'"></span>
             </button>
 
@@ -34,7 +34,7 @@
                     :class="selectedSubdomainFolders.length === 0 || isPreviewingHtaccess
                         ? 'opacity-40 cursor-not-allowed text-zinc-400 dark:text-zinc-600'
                         : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 cursor-pointer'"
-                    class="px-2.5 py-1 text-xs font-medium rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 inline-flex items-center gap-1.5 transition">
+                    class="px-2.5 py-1.5 text-xs font-medium rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 inline-flex items-center gap-1.5 transition">
                 <template x-if="isPreviewingHtaccess">
                     <span class="animate-spin inline-block size-3.5 border-2 border-zinc-400 border-t-zinc-800 rounded-full"></span>
                 </template>
@@ -49,9 +49,9 @@
                     @click="applyHtaccessRules"
                     :disabled="selectedSubdomainFolders.length === 0 || isApplyingHtaccess"
                     :class="selectedSubdomainFolders.length === 0 || isApplyingHtaccess
-                        ? 'opacity-40 cursor-not-allowed bg-zinc-300 dark:bg-zinc-800 text-zinc-500'
+                        ? 'opacity-40 cursor-not-allowed bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500'
                         : 'bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-900 shadow-sm cursor-pointer'"
-                    class="px-3 py-1 text-xs font-semibold rounded inline-flex items-center gap-1.5 transition">
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md inline-flex items-center gap-1.5 transition">
                 <template x-if="isApplyingHtaccess">
                     <span class="animate-spin inline-block size-3.5 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full"></span>
                 </template>
@@ -169,35 +169,35 @@
     <div class="p-3 space-y-2 max-h-56 overflow-y-auto">
         <template x-if="isLoadingSubdomainFolders && subdomainFolders.length === 0">
             <div class="py-6 flex items-center justify-center text-zinc-400">
-                <span class="animate-spin inline-block size-4 border-2 border-zinc-300 border-t-zinc-800 rounded-full"></span>
+                <span class="animate-spin inline-block size-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-800 dark:border-t-zinc-200 rounded-full"></span>
             </div>
         </template>
 
         <template x-for="folder in subdomainFolders" :key="folder.id">
-            <label class="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 transition cursor-pointer select-none"
+            <label class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition cursor-pointer select-none"
                    :class="isFolderSelected(folder)
-                       ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20'
-                       : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/40 dark:bg-zinc-900/30'">
+                       ? 'border-zinc-400 dark:border-zinc-600 bg-zinc-100/70 dark:bg-zinc-800/50'
+                       : 'border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-[#18181b]'">
                 <div class="flex items-center gap-3 min-w-0">
                     <input type="checkbox"
                            :checked="isFolderSelected(folder)"
                            @change="toggleFolder(folder)"
-                           class="size-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 transition">
+                           class="size-4 rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 checked:bg-current dark:checked:bg-current checked:border-transparent text-zinc-900 dark:text-zinc-100 focus:ring-zinc-500 transition">
 
                     <div class="flex items-center gap-2 flex-wrap min-w-0">
-                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider select-none bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider select-none bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                             Folder
                         </span>
                         <span class="font-mono text-[12px] font-medium text-zinc-900 dark:text-zinc-100" x-text="folder.name"></span>
-                        <span class="text-xs text-zinc-400">→</span>
-                        <span class="font-mono text-[12px] font-medium text-indigo-600 dark:text-indigo-400"
+                        <span class="text-xs text-zinc-400 dark:text-zinc-500">→</span>
+                        <span class="font-mono text-[12px] font-medium text-zinc-700 dark:text-zinc-300"
                               x-text="`${getSubdomainLabel(folder.name)}.${deployment?.domain || ''}`"></span>
                     </div>
                 </div>
 
                 <div class="shrink-0 flex items-center gap-1.5">
                     <span x-show="isConfiguredInHtaccess(folder)"
-                          class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900 inline-flex items-center gap-1">
+                          class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
                         <x-lucide-check class="size-2.5" />
                         <span>Active in .htaccess</span>
                     </span>
@@ -207,7 +207,7 @@
     </div>
 
     <!-- Pagination & Selection Summary Footer -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-600 dark:text-zinc-400"
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400"
          x-show="subdomainFoldersMeta.total > 0">
         <div class="flex items-center gap-2">
             <span>
@@ -219,7 +219,7 @@
                 <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="subdomainFoldersMeta.total"></span>
             </span>
             <span class="text-zinc-300 dark:text-zinc-700">•</span>
-            <span :class="selectedSubdomainFolders.length > 0 ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-zinc-400'"
+            <span :class="selectedSubdomainFolders.length > 0 ? 'text-zinc-900 dark:text-zinc-100 font-semibold' : 'text-zinc-400 dark:text-zinc-500'"
                   x-text="`${selectedSubdomainFolders.length} checked for routing`"></span>
         </div>
 
@@ -355,7 +355,7 @@
                     </p>
                     <div class="flex items-center flex-wrap gap-1.5">
                         <template x-for="label in selectedSubdomainFolders" :key="label">
-                            <span class="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900 font-mono text-[11px]"
+                            <span class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 font-mono text-[11px]"
                                   x-text="`${label}.${deployment?.domain}`"></span>
                         </template>
                     </div>

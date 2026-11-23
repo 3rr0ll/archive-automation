@@ -56,11 +56,11 @@
                                 <span x-text="(item.domain ? item.domain.charAt(0).toUpperCase() : 'D')"></span>
                             </div>
                             <div class="flex flex-col min-w-0">
-                                <div class="flex items-center gap-2 min-w-0">
-                                    <h3 class="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
+                                <h3 class="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <span class="text-[12px] text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
                                     <x-dashboard.subfolder-badge />
                                 </div>
-                                <span class="text-[12px] text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
@@ -123,11 +123,11 @@
                             <span x-text="(item.domain ? item.domain.charAt(0).toUpperCase() : 'D')"></span>
                         </div>
                         <div class="flex flex-col min-w-0">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
+                            <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-black dark:group-hover:text-white truncate" x-text="formatDomainName(item.domain)"></h3>
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
                                 <x-dashboard.subfolder-badge />
                             </div>
-                            <span class="text-xs text-zinc-500 dark:text-zinc-400 truncate" x-text="item.domain"></span>
                         </div>
                     </div>
                     <!-- Right Section -->
