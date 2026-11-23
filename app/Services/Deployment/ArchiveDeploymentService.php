@@ -342,7 +342,7 @@ class ArchiveDeploymentService
                     ? 'www.'.$deployment->domain
                     : $deployment->domain;
 
-                $this->searchConsoleService->registerDomain(
+                $gscResult = $this->searchConsoleService->registerDomain(
                     domain: $deployment->domain,
                     sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
                     verifyOwnership: true,
@@ -350,12 +350,24 @@ class ArchiveDeploymentService
                     submitSitemap: $hasSitemap,
                 );
 
+                $actions = ['Google Search Console registration'];
+                if ($hasSitemap) {
+                    $actions[] = 'sitemap submission';
+                }
+                if (! empty($gscResult['indexing_requested'])) {
+                    $actions[] = 'indexing request';
+                }
+
+                $message = match (count($actions)) {
+                    1 => $actions[0].' completed.',
+                    2 => $actions[0].' and '.$actions[1].' completed.',
+                    default => implode(', ', array_slice($actions, 0, -1)).', and '.end($actions).' completed.',
+                };
+
                 $deployment->logs()->create([
                     'step_name' => 'registering_search_console',
                     'status' => 'success',
-                    'message' => $hasSitemap
-                        ? 'Google Search Console registration and sitemap submission completed.'
-                        : 'Google Search Console registration completed (sitemap submission skipped).',
+                    'message' => $message,
                 ]);
             } catch (Throwable $exception) {
                 Log::warning('Google Search Console registration failed for redirect deployment.', [
@@ -635,17 +647,33 @@ class ArchiveDeploymentService
                 ? 'www.'.$deployment->domain
                 : $deployment->domain;
 
-            $this->searchConsoleService->registerDomain(
+            $hasSitemap = (bool) ($deployment->has_sitemap ?? true);
+            $gscResult = $this->searchConsoleService->registerDomain(
                 domain: $deployment->domain,
                 sitemapUrl: "https://{$sitemapHost}/sitemap.xml",
                 verifyOwnership: true,
                 requestIndexing: true,
-                submitSitemap: (bool) ($deployment->has_sitemap ?? true),
+                submitSitemap: $hasSitemap,
             );
+
+            $actions = ['Google Search Console registration'];
+            if ($hasSitemap) {
+                $actions[] = 'sitemap submission';
+            }
+            if (! empty($gscResult['indexing_requested'])) {
+                $actions[] = 'indexing request';
+            }
+
+            $message = match (count($actions)) {
+                1 => $actions[0].' completed.',
+                2 => $actions[0].' and '.$actions[1].' completed.',
+                default => implode(', ', array_slice($actions, 0, -1)).', and '.end($actions).' completed.',
+            };
+
             $deployment->logs()->create([
                 'step_name' => 'registering_search_console',
                 'status' => 'success',
-                'message' => 'Google Search Console registration completed.',
+                'message' => $message,
             ]);
         } catch (Throwable $exception) {
             Log::warning('Google Search Console registration failed.', [
