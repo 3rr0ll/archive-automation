@@ -254,34 +254,62 @@ class DnsProbeService
         $domainWordsJoined = str_replace(['-', '_', ' '], '', $domainNameOnly);
         $domainTokens = array_filter(preg_split('/[^a-z0-9]+/', $domainNameOnly) ?: []);
 
+        // Also extract tokens from PascalCase / camelCase domain (e.g. CurrentFishAndOyster -> current, fish, oyster)
+        $rawBase = preg_replace('/^www\./i', '', trim($domain));
+        $rawNameOnly = explode('.', $rawBase)[0] ?? $rawBase;
+        $camelSpaced = preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', ' ', $rawNameOnly);
+        $camelWords = array_values(array_filter(preg_split('/[^a-zA-Z0-9]+/', (string) $camelSpaced) ?: []));
+        $camelTokens = array_map('strtolower', $camelWords);
+
+        // Normalize text and normalize '&' to 'and'
         $lower = strtolower($text);
+        $textWithAnd = str_ireplace('&', 'and', $lower);
+
         if (str_contains($lower, $cleanDomain) || str_contains($lower, $domainBase)) {
             return true;
         }
-        if (strlen($domainNameOnly) >= 4 && str_contains($lower, $domainNameOnly)) {
+        if (strlen($domainNameOnly) >= 4 && (str_contains($lower, $domainNameOnly) || str_contains($textWithAnd, $domainNameOnly))) {
             return true;
         }
-        if (strlen($domainWordsSpace) >= 4 && str_contains($lower, $domainWordsSpace)) {
+        if (strlen($domainWordsSpace) >= 4 && (str_contains($lower, $domainWordsSpace) || str_contains($textWithAnd, $domainWordsSpace))) {
             return true;
         }
-        if (strlen($domainWordsJoined) >= 4 && str_contains($lower, $domainWordsJoined)) {
+        if (strlen($domainWordsJoined) >= 4 && (str_contains($lower, $domainWordsJoined) || str_contains($textWithAnd, $domainWordsJoined))) {
             return true;
         }
 
         $normalizedText = preg_replace('/[^a-z0-9]+/', '', $lower);
-        if (strlen($domainWordsJoined) >= 4 && str_contains($normalizedText, $domainWordsJoined)) {
+        $normalizedTextWithAnd = preg_replace('/[^a-z0-9]+/', '', $textWithAnd);
+        if (strlen($domainWordsJoined) >= 4 && (str_contains($normalizedText, $domainWordsJoined) || str_contains($normalizedTextWithAnd, $domainWordsJoined))) {
             return true;
         }
 
-        if (! empty($domainTokens)) {
+        // Check tokens from punctuation-separated domain (e.g. qatar-gulfnews)
+        if (! empty($domainTokens) && count($domainTokens) > 1) {
             $matchedCount = 0;
             foreach ($domainTokens as $token) {
-                if (strlen($token) >= 3 && str_contains($lower, $token)) {
+                if (strlen($token) >= 3 && (str_contains($lower, $token) || str_contains($textWithAnd, $token))) {
                     $matchedCount++;
                 }
             }
             if ($matchedCount >= count($domainTokens)) {
                 return true;
+            }
+        }
+
+        // Check tokens from camelCase / PascalCase domain (e.g. CurrentFishAndOyster)
+        if (! empty($camelTokens) && count($camelTokens) > 1) {
+            $meaningfulTokens = array_filter($camelTokens, fn ($t) => strlen($t) >= 3 && ! in_array($t, ['and', 'the', 'for', 'with', 'com', 'net', 'org'], true));
+            if (! empty($meaningfulTokens)) {
+                $matchedCount = 0;
+                foreach ($meaningfulTokens as $token) {
+                    if (str_contains($lower, $token) || str_contains($textWithAnd, $token)) {
+                        $matchedCount++;
+                    }
+                }
+                if ($matchedCount >= count($meaningfulTokens)) {
+                    return true;
+                }
             }
         }
 
@@ -370,7 +398,16 @@ class DnsProbeService
                 $combined = $title . ' ' . substr($body, 0, 1000);
 
                 if (! $this->isParkingOrSale($combined) && ! $extracted['is_empty_or_default']) {
-                    $isRelated = $this->matchesDomainKeywords($domain, $title) || $this->matchesDomainKeywords($domain, $body);
+                    // Check title, body, description, canonical, and h1
+                    $extendedContent = implode(' ', array_filter([
+                        $title,
+                        $extracted['description'] ?? '',
+                        $extracted['canonical'] ?? '',
+                        implode(' ', $extracted['h1'] ?? []),
+                        $body,
+                    ]));
+
+                    $isRelated = $this->matchesDomainKeywords($domain, $extendedContent);
                     if ($isRelated) {
                         $parsedHost = parse_url($url, PHP_URL_HOST);
                         $detectedVersion = ($parsedHost && str_starts_with(strtolower($parsedHost), 'www.')) ? 'www' : 'non-www';
@@ -481,6 +518,9 @@ class DnsProbeService
                     'body_len' => 0,
                     'body_text' => '',
                     'ssl_valid' => null,
+                    'description' => null,
+                    'canonical' => null,
+                    'h1' => [],
                     'raw_results' => [],
                 ];
             }
@@ -488,6 +528,16 @@ class DnsProbeService
             $proto = strtolower($res['protocol'] ?? 'http');
             $status = $res['status'] ?? null;
             $grouped[$ip]['raw_results'][] = $res;
+
+            if (! empty($res['description']) && empty($grouped[$ip]['description'])) {
+                $grouped[$ip]['description'] = $res['description'];
+            }
+            if (! empty($res['canonical']) && empty($grouped[$ip]['canonical'])) {
+                $grouped[$ip]['canonical'] = $res['canonical'];
+            }
+            if (! empty($res['h1']) && is_array($res['h1']) && empty($grouped[$ip]['h1'])) {
+                $grouped[$ip]['h1'] = $res['h1'];
+            }
 
             // Preserve best (2xx preferred over redirect/error) status per protocol
             if ($proto === 'https') {
@@ -642,11 +692,18 @@ class DnsProbeService
                 }
             }
 
-            // Also check body text for domain or brand keywords if NOT parking/for sale
-            if (! $isContentRelated && ! $isParkingOrSale && ! empty($body) && $this->matchesDomainKeywords($domain, $body)) {
+            // Check body text and metadata (description, canonical, h1) for domain or brand keywords if NOT parking/for sale
+            $extraMetadata = implode(' ', array_filter([
+                $data['description'] ?? '',
+                $data['canonical'] ?? '',
+                implode(' ', $data['h1'] ?? []),
+                $body,
+            ]));
+
+            if (! $isContentRelated && ! $isParkingOrSale && ! empty($extraMetadata) && $this->matchesDomainKeywords($domain, $extraMetadata)) {
                 $isContentRelated = true;
                 $score += 2;
-                $notes[] = 'Body mentions domain';
+                $notes[] = 'Content/Meta mentions domain';
             }
 
             // 4. Body length
