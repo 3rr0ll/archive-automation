@@ -61,9 +61,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/deployments/{deployment}/subdomain-htaccess', [DeploymentSubdomainHtaccessController::class, 'status'])->name('deployments.subdomain-htaccess.status');
     Route::post('/deployments/{deployment}/subdomain-htaccess/preview', [DeploymentSubdomainHtaccessController::class, 'preview'])->name('deployments.subdomain-htaccess.preview');
     Route::post('/deployments/{deployment}/subdomain-htaccess/apply', [DeploymentSubdomainHtaccessController::class, 'apply'])->name('deployments.subdomain-htaccess.apply');
-    Route::get('/deployments/{deployment}/subdomain-htaccess', [DeploymentSubdomainHtaccessController::class, 'status'])->name('deployments.subdomain-htaccess.status');
-    Route::post('/deployments/{deployment}/subdomain-htaccess/preview', [DeploymentSubdomainHtaccessController::class, 'preview'])->name('deployments.subdomain-htaccess.preview');
-    Route::post('/deployments/{deployment}/subdomain-htaccess/apply', [DeploymentSubdomainHtaccessController::class, 'apply'])->name('deployments.subdomain-htaccess.apply');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
     Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
     Route::get('/deployments/{deployment}/files/tree', [DeploymentFileEditorController::class, 'listDirectory']);
