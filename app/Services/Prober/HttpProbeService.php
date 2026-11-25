@@ -204,8 +204,11 @@ class HttpProbeService
             $server = trim($matches[1]);
         }
 
-        $isRedirect = ($statusCode >= 300 && $statusCode < 400);
+        $isHttpRedirect = ($statusCode >= 300 && $statusCode < 400);
         $extracted = $this->htmlExtractor->extract($htmlContent);
+        $metaRefreshUrl = $extracted['meta_refresh_url'] ?? null;
+        $effectiveRedirectUrl = ! empty($redirectUrl) ? $redirectUrl : $metaRefreshUrl;
+        $isRedirect = $isHttpRedirect || ! empty($metaRefreshUrl);
 
         return [
             'ip' => $ip,
@@ -216,7 +219,7 @@ class HttpProbeService
             'response_time_ms' => $durationMs,
             'ssl_valid' => $sslValid,
             'ssl_error' => null,
-            'redirect_url' => ! empty($redirectUrl) ? $redirectUrl : null,
+            'redirect_url' => $effectiveRedirectUrl,
             'is_redirect' => $isRedirect,
             'is_cloudflare_challenge' => $extracted['is_cloudflare_challenge'],
             'is_empty_or_default' => $extracted['is_empty_or_default'],

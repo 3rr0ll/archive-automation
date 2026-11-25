@@ -396,11 +396,29 @@ class DnsProbeService
 
             $response = curl_exec($ch);
             $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $effectiveUrl = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
             $curlError = curl_error($ch);
             curl_close($ch);
 
             if ($statusCode >= 200 && $statusCode < 300 && is_string($response) && strlen($response) > 0) {
+                // Reject if the final loaded URL redirected away from the root domain index (e.g. redirected to /home or a subpage)
+                $finalUrlToCheck = $effectiveUrl !== '' ? $effectiveUrl : $url;
+                $parsedPath = parse_url($finalUrlToCheck, PHP_URL_PATH);
+                if (! empty($parsedPath) && $parsedPath !== '/' && $parsedPath !== '') {
+                    continue;
+                }
+
                 $extracted = app(HtmlExtractorService::class)->extract($response);
+
+                // Reject if the HTML contains a meta refresh or JS redirect away from root
+                $metaRefreshUrl = $extracted['meta_refresh_url'] ?? null;
+                if (! empty($metaRefreshUrl)) {
+                    $metaPath = parse_url($metaRefreshUrl, PHP_URL_PATH);
+                    if (! empty($metaPath) && $metaPath !== '/' && $metaPath !== '') {
+                        continue;
+                    }
+                }
+
                 $title = $extracted['title'] ?? '';
                 $body = $extracted['body_text'] ?? '';
                 $combined = $title . ' ' . substr($body, 0, 1000);
@@ -417,7 +435,7 @@ class DnsProbeService
 
                     $isRelated = $this->matchesDomainKeywords($domain, $extendedContent);
                     if ($isRelated) {
-                        $parsedHost = parse_url($url, PHP_URL_HOST);
+                        $parsedHost = parse_url($finalUrlToCheck, PHP_URL_HOST) ?: parse_url($url, PHP_URL_HOST);
                         $detectedVersion = ($parsedHost && str_starts_with(strtolower($parsedHost), 'www.')) ? 'www' : 'non-www';
 
                         return [
@@ -425,7 +443,7 @@ class DnsProbeService
                             'is_content_related' => true,
                             'title' => $title,
                             'status' => $statusCode,
-                            'url' => $url,
+                            'url' => $finalUrlToCheck,
                             'detected_version' => $detectedVersion,
                             'error' => null,
                         ];
@@ -734,7 +752,20 @@ class DnsProbeService
             }
 
             $isRedirectOnly = (($data['http'] >= 300 && $data['http'] < 400) || ($data['https'] >= 300 && $data['https'] < 400)) && ! $has2xx;
-            if ($isRedirectOnly && ! $hasBlockedStatus) {
+            $redirectsToSubpath = false;
+            foreach ($data['raw_results'] as $raw) {
+                if (! empty($raw['redirect_url'])) {
+                    $redirPath = parse_url($raw['redirect_url'], PHP_URL_PATH);
+                    if (! empty($redirPath) && $redirPath !== '/' && $redirPath !== '') {
+                        $redirectsToSubpath = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($redirectsToSubpath) {
+                $notes[] = 'Redirects away from index (subpath redirect)';
+            } elseif ($isRedirectOnly && ! $hasBlockedStatus) {
                 $score = max($score, 2);
                 $notes = array_merge(['Redirect response'], $notes);
             }
@@ -774,7 +805,10 @@ class DnsProbeService
             }
 
             // Verdict assignment
-            if ($isParkingOrSale) {
+            if ($redirectsToSubpath) {
+                $verdict = 'Subpath redirect';
+                $score = min($score, 2);
+            } elseif ($isParkingOrSale) {
                 $verdict = 'Parking / For Sale';
             } elseif ($isBlocked) {
                 $verdict = 'Live (blocked)';
@@ -805,13 +839,15 @@ class DnsProbeService
                 }
             }
 
-            // If no 2xx, check redirect_url or target_host with redirect status
+            // If no 2xx, check redirect_url or target_host with redirect status (only if redirect is to root index, not subpage)
             if (! $workingTargetHost) {
                 foreach ($data['raw_results'] as $raw) {
                     $redir = $raw['redirect_url'] ?? '';
                     if (! empty($redir)) {
                         $parsedHost = parse_url($redir, PHP_URL_HOST);
-                        if (! empty($parsedHost) && str_contains(strtolower($parsedHost), strtolower($domainBase))) {
+                        $parsedPath = parse_url($redir, PHP_URL_PATH);
+                        $isRootPath = empty($parsedPath) || $parsedPath === '/' || $parsedPath === '';
+                        if (! empty($parsedHost) && $isRootPath && str_contains(strtolower($parsedHost), strtolower($domainBase))) {
                             $workingTargetHost = $parsedHost;
                             break;
                         }
@@ -827,11 +863,11 @@ class DnsProbeService
                 'ip' => $ip,
                 'verdict' => $verdict,
                 'score' => $score,
-                'is_working' => $has2xx,
-                'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300,
+                'is_working' => $has2xx && ! $redirectsToSubpath,
+                'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300 && ! $redirectsToSubpath,
                 'is_parking' => $isParkingOrSale,
                 'is_blocked' => $isBlocked,
-                'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale,
+                'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale && ! $redirectsToSubpath,
                 'detected_version' => $detectedVersion,
                 'https' => $data['https'] ? (string) $data['https'] : '—',
                 'http' => $data['http'] ? (string) $data['http'] : '—',

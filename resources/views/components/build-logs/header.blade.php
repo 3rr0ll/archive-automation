@@ -23,9 +23,23 @@
             <x-lucide-external-link class="size-3.5 text-zinc-400" />
         </a>
 
-        <!-- Edit Files via SFTP Button -->
+        @php
+            $isHistoricalDns = ($deployment->deployment_type ?? null) === 'redirect' || ($deployment->archive_source ?? null) === 'redirect';
+        @endphp
+
+        <!-- Switch to Archive Button (for Historical DNS / redirect deployments) -->
+        <button type="button"
+                @click="triggerSwitchToArchive()"
+                :disabled="isSwitchingToArchive"
+                x-show="deployment && (deployment.deployment_type === 'redirect' || deployment.archive_source === 'redirect') && (deployment.status === 'completed' || deployment.status === 'failed')"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-md transition cursor-pointer disabled:opacity-50">
+            <x-lucide-archive class="size-3.5 text-zinc-500 dark:text-zinc-400" x-bind:class="isSwitchingToArchive ? 'animate-spin' : ''" />
+            <span x-text="isSwitchingToArchive ? 'Switching...' : 'Switch to Archive'"></span>
+        </button>
+
+        <!-- Edit Files via SFTP Button (only for standard server deployments) -->
         <a :href="'/deployments/' + (deployment ? (deployment.hash || deployment.id) : '{{ $deployment->hash }}') + '/files'"
-           x-show="deployment && (deployment.status === 'completed' || deployment.status === 'failed')"
+           x-show="deployment && deployment.deployment_type !== 'redirect' && deployment.archive_source !== 'redirect' && (deployment.status === 'completed' || deployment.status === 'failed')"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-md transition">
             <x-lucide-file-code class="size-3.5 text-zinc-500 dark:text-zinc-400" />
             <span>Edit files</span>

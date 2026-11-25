@@ -98,6 +98,7 @@ class HtmlExtractorService
 
         $isCloudflareChallenge = $this->detectCloudflareChallenge($html, $title, $bodyText);
         $isEmptyOrDefault = $this->detectEmptyOrDefault($title, $bodyText, $html);
+        $metaRefreshUrl = $this->extractMetaRefreshUrl($xpath, $html);
 
         return [
             'title' => $title,
@@ -107,7 +108,40 @@ class HtmlExtractorService
             'body_text' => $bodyText,
             'is_empty_or_default' => $isEmptyOrDefault,
             'is_cloudflare_challenge' => $isCloudflareChallenge,
+            'meta_refresh_url' => $metaRefreshUrl,
         ];
+    }
+
+    /**
+     * Extract redirect URL from <meta http-equiv="refresh" content="...;url=..."> or window.location
+     */
+    protected function extractMetaRefreshUrl(\DOMXPath $xpath, string $html): ?string
+    {
+        // 1. Check <meta http-equiv="refresh" content="...">
+        $refreshNodes = $xpath->query('//meta[translate(@http-equiv, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")="refresh"]/@content');
+        if ($refreshNodes && $refreshNodes->length > 0) {
+            $content = (string) $refreshNodes->item(0)->nodeValue;
+            if (preg_match('/url\s*=\s*[\'"]?([^\'"\s>]+)/i', $content, $m)) {
+                return trim($m[1]);
+            }
+        }
+
+        // Regex fallback for malformed or unusual meta refresh
+        if (preg_match('/<meta[^>]*http-equiv=[\'"]?refresh[\'"]?[^>]*content=[\'"]?[^;\'"]*;\s*url=([^\'"\s>]+)[\'"]?/i', $html, $m)) {
+            return trim($m[1]);
+        }
+
+        // 2. Check JavaScript location redirect patterns (e.g. window.location.replace("..."), window.location.href = "...", window.location = "...")
+        if (preg_match('/(?:window\.)?location(?:\.href|\.replace)?\s*=\s*[\'"]([^\'"]+)[\'"]/i', $html, $m)) {
+            return trim($m[1]);
+        }
+
+        // 3. Check plain text redirect hint (e.g. "This page should redirect you to http://...")
+        if (preg_match('/redirect(?:ed)?\s+you\s+to\s+<a[^>]*href=[\'"]([^\'"]+)[\'"]/i', $html, $m)) {
+            return trim($m[1]);
+        }
+
+        return null;
     }
 
     /**

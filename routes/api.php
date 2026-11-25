@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/deployments/{deployment}/subdomain-htaccess/apply', [DeploymentSubdomainHtaccessController::class, 'apply'])->name('deployments.subdomain-htaccess.apply');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
     Route::post('/deployments/{deployment}/retry', [DeploymentController::class, 'retry'])->name('deployments.retry');
+    Route::post('/deployments/{deployment}/switch-to-archive', [DeploymentController::class, 'switchToArchive'])->name('deployments.switch-to-archive');
     Route::get('/deployments/{deployment}/files/tree', [DeploymentFileEditorController::class, 'listDirectory']);
     Route::get('/deployments/{deployment}/files/read', [DeploymentFileEditorController::class, 'readFile']);
     Route::post('/deployments/{deployment}/files/write', [DeploymentFileEditorController::class, 'writeFile']);
