@@ -63,6 +63,12 @@ export async function retryDeployment(id) {
     return res;
 }
 
+export async function switchToArchiveDeployment(id) {
+    const res = await api.post(`/deployments/${id}/switch-to-archive`);
+    clientCache.invalidate('deployments*');
+    return res;
+}
+
 export async function deleteDeployment(id) {
     const res = await api.delete(`/deployments/${id}`);
     clientCache.invalidate('deployments*');

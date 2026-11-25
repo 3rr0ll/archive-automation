@@ -221,6 +221,67 @@ class DeploymentLifecycleService
         return $deployment->refresh();
     }
 
+    /**
+     * Switch a historical DNS (redirect) deployment to an archived website deployment.
+     */
+    public function switchToArchive(Deployment $deployment): Deployment
+    {
+        if ($deployment->status === DeploymentStatus::Processing) {
+            throw new DomainException('Cannot switch deployment while it is currently processing. Cancel it first.');
+        }
+
+        // Ensure an active server is assigned
+        $serverId = $deployment->server_id;
+        if (! $serverId) {
+            $activeServer = Server::where('is_active', true)->first() ?? Server::first();
+            $serverId = $activeServer?->server_id;
+        }
+
+        if (! $serverId) {
+            throw new DomainException('No active RunCloud server available to switch this deployment to.');
+        }
+
+        $hasLocalArchive = filled($deployment->archive_path)
+            && Storage::disk('local')->exists($deployment->archive_path)
+            && Storage::disk('local')->size($deployment->archive_path) > 0;
+
+        $isUpload = filled($deployment->archive_path) && $hasLocalArchive;
+        $archiveSource = $isUpload ? 'upload' : 'url';
+        $waitsForArchive = ! $isUpload;
+        $readyStep = $waitsForArchive ? 'waiting_for_archive' : 'archive_ready';
+
+        DB::transaction(function () use ($deployment, $serverId, $archiveSource, $waitsForArchive, $readyStep): void {
+            $deployment->update([
+                'server_id' => $serverId,
+                'deployment_type' => 'full',
+                'archive_source' => $archiveSource,
+                'archive_status' => $waitsForArchive ? ArchiveStatus::Waiting : ArchiveStatus::Ready,
+                'status' => DeploymentStatus::Pending,
+                'current_step' => $readyStep,
+            ]);
+
+            $deployment->logs()->create([
+                'step_name' => 'switching_to_archive',
+                'status' => 'in_progress',
+                'message' => 'Switched from Historical DNS to Archive recovery deployment. Queueing website deployment to RunCloud.',
+            ]);
+        });
+
+        $this->auditLogger->record('deployment.switched_to_archive', $deployment, [
+            'domain' => $deployment->domain,
+            'server_id' => $serverId,
+            'waits_for_archive' => $waitsForArchive,
+        ]);
+
+        if ($waitsForArchive) {
+            WaitForWaybackArchive::dispatch($deployment);
+        } else {
+            DeployArchivedWebsite::dispatch($deployment);
+        }
+
+        return $deployment->refresh();
+    }
+
     public function delete(Deployment $deployment): void
     {
         if ($deployment->status === DeploymentStatus::Processing) {

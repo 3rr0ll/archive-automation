@@ -173,6 +173,22 @@ class DeploymentController extends Controller
         ], 202);
     }
 
+    public function switchToArchive(Deployment $deployment): JsonResponse
+    {
+        try {
+            $deployment = $this->lifecycleService->switchToArchive($deployment);
+        } catch (DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'data' => new DeploymentResource($deployment->load('user:id,name,email', 'logs')),
+            'message' => 'Switched to archive recovery deployment.',
+        ], 202);
+    }
+
     public function adminDestroy(Deployment $deployment): JsonResponse
     {
         try {

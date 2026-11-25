@@ -8,6 +8,7 @@ import {
     previewDeploymentSubdomainHtaccess,
     applyDeploymentSubdomainHtaccess,
     retryDeployment,
+    switchToArchiveDeployment,
     cancelDeployment,
     deleteDeployment,
 } from '../services/deployment-service.js';
@@ -23,6 +24,7 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
         searchQuery: '',
         statusFilter: 'all',
         isRetrying: false,
+        isSwitchingToArchive: false,
         isCancelling: false,
         isDeleting: false,
         autoScroll: true,
@@ -409,6 +411,38 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             } finally {
                 this.isRetrying = false;
             }
+        },
+
+        async triggerSwitchToArchive() {
+            if (this.isSwitchingToArchive) return;
+
+            const executeSwitch = async () => {
+                this.isSwitchingToArchive = true;
+                try {
+                    await switchToArchiveDeployment(this.deploymentId);
+                    window.toast?.success('Switched to archive recovery deployment.');
+                    await this.loadData(false);
+                } catch (error) {
+                    window.toast?.error(error.message || 'Failed to switch to archive deployment.');
+                } finally {
+                    this.isSwitchingToArchive = false;
+                }
+            };
+
+            if (window.confirmModal) {
+                window.confirmModal.show({
+                    title: 'Switch to Archive Deployment',
+                    message: 'Are you sure you want to switch this domain from Historical DNS to an Archive deployment on RunCloud? Cloudflare Worker routes and DNS will be deployed to your server.',
+                    key: this.deployment?.domain || '',
+                    metaLabel: 'Domain',
+                    confirmText: 'Switch to Archive',
+                    type: 'warning',
+                    onConfirm: executeSwitch
+                });
+                return;
+            }
+
+            await executeSwitch();
         },
 
         async triggerCancel() {
