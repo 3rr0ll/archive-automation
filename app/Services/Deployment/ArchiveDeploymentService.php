@@ -202,9 +202,15 @@ class ArchiveDeploymentService
                 return $deployment;
             }
 
+            $lastSwitchId = (int) ($deployment->logs()
+                ->where('step_name', 'switching_to_archive')
+                ->max('id') ?? 0);
+
             $workersAlreadyConfigured = $deployment->logs()
                 ->where('step_name', 'configuring_cloudflare_workers')
                 ->where('status', 'success')
+                ->where('id', '>', $lastSwitchId)
+                ->where('message', 'not like', '%redirect routes%')
                 ->exists();
 
             if ($workersAlreadyConfigured) {
