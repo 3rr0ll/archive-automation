@@ -351,6 +351,20 @@ class DnsProbeService
             'domain is registered',
             'inquire about this domain',
             'related searches',
+            'under construction',
+            'coming soon',
+            'sito web in costruzione',
+            'sito in costruzione',
+            'impossibile visualizzare il sito',
+            'pagina in costruzione',
+            'site en construction',
+            'en construcción',
+            'sitio en construcción',
+            'im aufbau',
+            'website unavailable',
+            'site unavailable',
+            'account suspended',
+            'this site can\'t be reached',
         ];
 
         foreach ($parkingPatterns as $pattern) {
@@ -804,9 +818,14 @@ class DnsProbeService
                 $notes = array_merge(['Port 80 redirect, but HTTPS failed/blocked'], $notes);
             }
 
+            $hasSslHandshakeError = ($data['ssl_valid'] === false && ! $hasHttps2xx);
+
             // Verdict assignment
             if ($redirectsToSubpath) {
                 $verdict = 'Subpath redirect';
+                $score = min($score, 2);
+            } elseif ($hasSslHandshakeError) {
+                $verdict = 'SSL error';
                 $score = min($score, 2);
             } elseif ($isParkingOrSale) {
                 $verdict = 'Parking / For Sale';
@@ -863,11 +882,11 @@ class DnsProbeService
                 'ip' => $ip,
                 'verdict' => $verdict,
                 'score' => $score,
-                'is_working' => $has2xx && ! $redirectsToSubpath,
-                'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300 && ! $redirectsToSubpath,
+                'is_working' => $has2xx && ! $redirectsToSubpath && ! $hasSslHandshakeError && ! $isParkingOrSale,
+                'is_https_2xx' => is_numeric($data['https'] ?? null) && (int) $data['https'] >= 200 && (int) $data['https'] < 300 && ! $redirectsToSubpath && ! $isParkingOrSale,
                 'is_parking' => $isParkingOrSale,
                 'is_blocked' => $isBlocked,
-                'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale && ! $redirectsToSubpath,
+                'is_content_related' => $isContentRelated && ! $data['is_empty'] && ! $isParkingOrSale && ! $redirectsToSubpath && ! $hasSslHandshakeError,
                 'detected_version' => $detectedVersion,
                 'https' => $data['https'] ? (string) $data['https'] : '—',
                 'http' => $data['http'] ? (string) $data['http'] : '—',
