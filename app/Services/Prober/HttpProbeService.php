@@ -198,6 +198,14 @@ class HttpProbeService
         $headerText = substr($rawResponse, 0, $headerSize);
         $htmlContent = substr($rawResponse, $headerSize);
 
+        // Ensure HTML content is valid UTF-8 to prevent JSON encoding errors on non-UTF-8 pages
+        if ($htmlContent !== '' && ! mb_check_encoding($htmlContent, 'UTF-8')) {
+            $detected = mb_detect_encoding($htmlContent, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
+            $htmlContent = $detected
+                ? (string) mb_convert_encoding($htmlContent, 'UTF-8', $detected)
+                : (string) mb_convert_encoding($htmlContent, 'UTF-8', 'UTF-8');
+        }
+
         // Parse Server header
         $server = null;
         if (preg_match('/^server:\s*([^\r\n]+)/im', $headerText, $matches)) {

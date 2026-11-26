@@ -68,7 +68,7 @@ class ProbeController extends Controller
 
         $response = $this->dnsProbeService->probeMultiple($domain, $ips, $protocols, $timeout);
 
-        return response()->json($response);
+        return response()->json($response, 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     /**
@@ -104,7 +104,7 @@ class ProbeController extends Controller
 
         $response = $this->dnsProbeService->probeSingle($domain, $ip, $protocol, $timeout);
 
-        return response()->json($response);
+        return response()->json($response, 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     /**
