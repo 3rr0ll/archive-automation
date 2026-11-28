@@ -33,6 +33,7 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
         selectedSubdomainFolders: [],
         configuredSubdomains: [],
         htaccessStatusLoaded: false,
+        hasLoadedSubdomainFolders: false,
         isLoadingSubdomainFolders: false,
         isApplyingHtaccess: false,
         isPreviewingHtaccess: false,
@@ -93,15 +94,13 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
             }
             try {
                 const [deploymentRes, logsRes] = await Promise.all([
-                    fetchDeployment(this.deploymentId),
+                    showLoader && this.deployment ? this.deployment : fetchDeployment(this.deploymentId),
                     fetchDeploymentLogs(this.deploymentId, { per_page: 100, sort_direction: 'desc' }),
                 ]);
 
                 this.deployment = deploymentRes.data || deploymentRes;
                 this.logs = [...(logsRes.data || logsRes || [])].reverse();
                 this.syncSubdomainSslFeedback();
-
-                await this.loadSubdomainFolders(this.subdomainFoldersMeta.current_page || 1);
 
                 if (this.autoScroll) {
                     this.$nextTick(() => {
@@ -118,9 +117,13 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
                     this.isLoading = false;
                 }
             }
+
+            void this.loadSubdomainFolders(this.subdomainFoldersMeta.current_page);
         },
 
         async loadSubdomainFolders(page = 1) {
+            if (this.isLoadingSubdomainFolders) return;
+
             this.isLoadingSubdomainFolders = true;
             try {
                 const response = await fetchDeploymentSubdomainFolders(this.deploymentId, {
@@ -128,17 +131,24 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
                     per_page: this.subdomainFoldersMeta.per_page || 10,
                 });
 
-                this.subdomainFolders = response.data || [];
-                this.allSubdomainFolders = response.all_folders || [];
-                this.subdomainFoldersMeta = {
+                const meta = {
                     current_page: response.meta?.current_page ?? page,
                     last_page: response.meta?.last_page ?? 1,
                     per_page: response.meta?.per_page ?? 10,
                     total: response.meta?.total ?? 0,
                 };
 
-                if (this.subdomainFoldersMeta.total > 0 && !this.htaccessStatusLoaded) {
+                if (meta.total > 0 && !this.htaccessStatusLoaded) {
                     await this.loadHtaccessStatus();
+                }
+
+                const foldersBecameVisible = this.subdomainFoldersMeta.total === 0 && meta.total > 0;
+                this.subdomainFolders = response.data || [];
+                this.allSubdomainFolders = response.all_folders || [];
+                this.subdomainFoldersMeta = meta;
+
+                if (foldersBecameVisible && this.autoScroll) {
+                    this.$nextTick(() => this.scrollToBottom());
                 }
             } catch (error) {
                 console.error('Failed to load subdomain folders:', error);
@@ -146,6 +156,7 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
                     window.toast.error(error.message || 'Failed to load subdomain folders.');
                 }
             } finally {
+                this.hasLoadedSubdomainFolders = true;
                 this.isLoadingSubdomainFolders = false;
             }
         },
@@ -339,6 +350,11 @@ export function deploymentLogsPage(deploymentId, initialDeployment = null) {
 
         get sourceText() {
             if (!this.deployment) return '—';
+            if (this.deployment.archive_source === 'runcloud') {
+                const name = this.deployment.runcloud_web_app_name;
+                const id = this.deployment.runcloud_web_app_id;
+                return name && id ? `RunCloud · ${name} (#${id})` : 'RunCloud';
+            }
             if (this.deployment.archive_source === 'upload') {
                 return this.deployment.archive_original_name || 'Uploaded Archive';
             }

@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 class ServerApiTest extends TestCase
@@ -108,6 +110,100 @@ class ServerApiTest extends TestCase
         ]);
     }
 
+    public function test_website_sync_imports_multiple_pages_and_skips_existing_apps_and_domains(): void
+    {
+        Sleep::fake();
+        Http::preventStrayRequests();
+        config(['services.runcloud.api_token' => 'test-token']);
+        $server = Server::factory()->create(['server_id' => 12345, 'is_active' => false]);
+        $existing = [
+            'user_id' => $this->admin->id,
+            'server_id' => $server->server_id,
+            'version' => 'non-www',
+            'status' => 'completed',
+        ];
+        $existingApp = Deployment::create([...$existing, 'domain' => 'old.example.com', 'runcloud_web_app_id' => 1]);
+        Deployment::create([...$existing, 'domain' => 'WWW.EXISTING.TEST.', 'server_id' => null]);
+
+        $baseUrl = 'https://manage.runcloud.io/api/v3/servers/12345/webapps';
+        Http::fake([
+            "{$baseUrl}?page=1" => Http::response([
+                'data' => [
+                    ['id' => 1, 'name' => 'renamed'],
+                    ['id' => 2, 'name' => 'duplicate', 'domainName' => 'existing.test'],
+                    ['id' => 3, 'name' => 'first'],
+                    ['id' => 4, 'name' => 'empty'],
+                    ['id' => 5, 'name' => 'next-in-page', 'domainName' => 'next-in-page.test'],
+                ],
+                'meta' => ['pagination' => ['total_pages' => 2]],
+            ]),
+            "{$baseUrl}?page=2" => Http::response([
+                'data' => [['id' => 6, 'name' => 'last', 'primaryDomain' => ['name' => 'last.test']]],
+                'meta' => ['pagination' => ['total_pages' => 2]],
+            ]),
+            "{$baseUrl}/3/domains" => Http::response(['data' => [
+                ['name' => 'alias.test', 'type' => 'alias'],
+                ['name' => 'www.first.test', 'type' => 'primary'],
+            ]]),
+            "{$baseUrl}/4/domains" => Http::response(['data' => []]),
+        ]);
+
+        $endpoint = "/api/servers/{$server->id}/sync-websites";
+        $this->actingAs($this->admin, 'sanctum')->postJson($endpoint)
+            ->assertOk()
+            ->assertJsonPath('data', ['imported' => 1, 'existing' => 2, 'unavailable' => 1, 'next' => ['page' => 1, 'offset' => 4]]);
+        $this->postJson($endpoint, ['page' => 1, 'offset' => 4])
+            ->assertOk()
+            ->assertJsonPath('data.next', ['page' => 2, 'offset' => 0]);
+        $this->postJson($endpoint, ['page' => 2])
+            ->assertOk()
+            ->assertJsonPath('data', ['imported' => 1, 'existing' => 0, 'unavailable' => 0, 'next' => null]);
+        $this->postJson($endpoint, ['page' => 2])
+            ->assertOk()
+            ->assertJsonPath('data.existing', 1);
+
+        $this->assertDatabaseCount('deployments', 5);
+        $this->assertDatabaseCount('deployment_logs', 3);
+        $this->assertSame('old.example.com', $existingApp->fresh()->domain);
+        $this->assertDatabaseHas('deployments', [
+            'user_id' => $this->admin->id,
+            'server_id' => $server->server_id,
+            'runcloud_web_app_id' => 3,
+            'runcloud_web_app_name' => 'first',
+            'domain' => 'first.test',
+            'version' => 'www',
+            'archive_source' => 'runcloud',
+            'status' => 'completed',
+        ]);
+        $this->actingAs($this->admin)->get('/dashboard')
+            ->assertOk()
+            ->assertViewHas('initialDeployments', fn (array $deployments): bool => collect($deployments)->contains(
+                fn (Deployment $deployment): bool => $deployment->domain === 'first.test' && $deployment->server?->is($server)
+            ));
+    }
+
+    public function test_website_sync_reports_a_failed_lookup_without_saving_the_batch(): void
+    {
+        Sleep::fake();
+        Http::preventStrayRequests();
+        config(['services.runcloud.api_token' => 'test-token']);
+        $server = Server::factory()->create(['server_id' => 12345]);
+        $baseUrl = 'https://manage.runcloud.io/api/v3/servers/12345/webapps';
+        Http::fake([
+            "{$baseUrl}?page=1" => Http::response(['data' => [
+                ['id' => 1, 'name' => 'first', 'domainName' => 'first.test'],
+                ['id' => 2, 'name' => 'second'],
+            ]]),
+            "{$baseUrl}/2/domains" => Http::response([], 503),
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')->postJson("/api/servers/{$server->id}/sync-websites")
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'Could not finish syncing websites. Try again shortly.');
+
+        $this->assertDatabaseEmpty('deployments');
+    }
+
     public function test_admin_can_toggle_server_active_state(): void
     {
         $server = Server::factory()->create([
@@ -193,6 +289,9 @@ class ServerApiTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/servers/sync')
+            ->assertForbidden();
+
+        $this->postJson("/api/servers/{$server->id}/sync-websites")
             ->assertForbidden();
 
         $this->actingAs($user, 'sanctum')

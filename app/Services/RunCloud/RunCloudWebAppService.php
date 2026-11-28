@@ -313,6 +313,42 @@ class RunCloudWebAppService
     }
 
     /**
+     * @return array{apps: list<array<string, mixed>>, next_page: ?int}
+     */
+    public function getWebsiteSyncPage(int $serverId, int $page): array
+    {
+        $response = $this->rateLimitedGet("/servers/{$serverId}/webapps", ['page' => $page], timeout: 4);
+        $apps = $response?->json('data') ?? $response?->json();
+
+        if (! $response?->successful() || ! is_array($apps) || ! array_is_list($apps)) {
+            throw new RuntimeException("RunCloud could not list websites on server {$serverId}.");
+        }
+
+        return [
+            'apps' => $apps,
+            'next_page' => $page < (int) $response->json('meta.pagination.total_pages') ? $page + 1 : null,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getWebsiteSyncDomains(int $serverId, int $appId): array
+    {
+        $response = $this->rateLimitedGet("/servers/{$serverId}/webapps/{$appId}/domains", timeout: 4);
+        if ($response?->notFound()) {
+            return [];
+        }
+
+        $domains = $response?->json('data') ?? $response?->json();
+        if (! $response?->successful() || ! is_array($domains) || ! array_is_list($domains)) {
+            throw new RuntimeException("RunCloud could not list domains for web application {$appId}.");
+        }
+
+        return $domains;
+    }
+
+    /**
      * GET request that waits and retries when RunCloud's rate limit (120 req/min) is hit.
      *
      * A long Retry-After is not waited out: lookups stop until it passes, and return null so
@@ -320,7 +356,7 @@ class RunCloudWebAppService
      *
      * @param  array<string, mixed>  $query
      */
-    private function rateLimitedGet(string $url, array $query = []): ?Response
+    private function rateLimitedGet(string $url, array $query = [], ?int $timeout = null): ?Response
     {
         if ($this->client->cache()->isRunCloudRateLimited()) {
             return null;
@@ -329,7 +365,18 @@ class RunCloudWebAppService
         $this->pace();
 
         try {
-            return $this->client->client()
+            $request = $this->client->client();
+
+            if ($timeout !== null) {
+                $response = $request->connectTimeout(3)->timeout($timeout)->get($url, $query);
+                if ($response->status() === 429) {
+                    $this->client->cache()->markRunCloudRateLimited(max(1, (int) $response->header('Retry-After')));
+                }
+
+                return $response;
+            }
+
+            return $request
                 ->retry(
                     3,
                     fn (int $attempt, Throwable $e): int => $e instanceof RequestException

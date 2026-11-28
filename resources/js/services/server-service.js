@@ -22,6 +22,10 @@ export async function syncServers() {
     return res;
 }
 
+export function syncServerWebsites(id, cursor) {
+    return api.post(`/servers/${id}/sync-websites`, cursor);
+}
+
 export async function toggleServerActive(id, isActive = null) {
     const res = await api.patch(`/servers/${id}/toggle-active`, {
         is_active: isActive,

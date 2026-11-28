@@ -8,10 +8,13 @@ use App\Models\Server;
 use App\Services\Cache\ApplicationCache;
 use App\Services\Logging\AuditLogger;
 use App\Services\Servers\ServerService;
+use App\Services\Servers\ServerWebsiteSyncService;
 use Exception;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use RuntimeException;
 
 class ServerController extends Controller
 {
@@ -74,5 +77,30 @@ class ServerController extends Controller
             'message' => $updated->is_active ? 'Server activated.' : 'Server deactivated.',
             'data' => new ServerResource($updated),
         ]);
+    }
+
+    public function syncWebsites(Request $request, Server $server, ServerWebsiteSyncService $websiteSync): JsonResponse
+    {
+        $validated = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'offset' => ['sometimes', 'integer', 'min:0'],
+        ]);
+
+        try {
+            $result = $websiteSync->sync(
+                $server,
+                $request->user(),
+                (int) ($validated['page'] ?? 1),
+                (int) ($validated['offset'] ?? 0),
+            );
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Another website sync is saving. Try again shortly.'], 409);
+        } catch (RuntimeException $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Could not finish syncing websites. Try again shortly.'], 502);
+        }
+
+        return response()->json(['data' => $result]);
     }
 }

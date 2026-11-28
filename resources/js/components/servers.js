@@ -1,10 +1,11 @@
-import { syncServers, toggleServerActive } from '../services/server-service.js';
+import { syncServers, syncServerWebsites, toggleServerActive } from '../services/server-service.js';
 
 export function serversPage(initialServers = []) {
     return {
         isLoading: false,
         items: Array.isArray(initialServers) ? initialServers : [],
         isSyncing: false,
+        syncingWebsitesId: null,
         searchQuery: '',
         statusFilter: 'all',
         sortBy: 'newest',
@@ -99,6 +100,38 @@ export function serversPage(initialServers = []) {
                 window.toast?.error(error.message || 'Failed to sync servers from RunCloud.');
             } finally {
                 this.isSyncing = false;
+            }
+        },
+
+        async syncWebsites(item) {
+            if (this.syncingWebsitesId !== null) return;
+
+            this.syncingWebsitesId = item.id;
+            let cursor = { page: 1, offset: 0 };
+            let imported = 0;
+            let existing = 0;
+            let unavailable = 0;
+
+            try {
+                while (cursor) {
+                    const { data } = await syncServerWebsites(item.id, cursor);
+                    imported += data.imported;
+                    existing += data.existing;
+                    unavailable += data.unavailable;
+                    cursor = data.next;
+                }
+
+                const result = `${imported} imported, ${existing} already in the database.`;
+                if (unavailable > 0) {
+                    window.toast?.warning(`${result} ${unavailable} web apps had no available domain or app details.`);
+                } else {
+                    window.toast?.success(result);
+                }
+            } catch (error) {
+                const progress = imported > 0 ? `${imported} websites were imported before the sync stopped. ` : '';
+                window.toast?.error(progress + (error.message || 'Could not finish syncing websites.'));
+            } finally {
+                this.syncingWebsitesId = null;
             }
         },
 
