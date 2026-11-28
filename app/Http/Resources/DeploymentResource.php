@@ -24,6 +24,8 @@ class DeploymentResource extends JsonResource
                 'email' => $this->user->email,
             ]),
             'server_id' => $this->server_id,
+            'runcloud_web_app_id' => $this->runcloud_web_app_id,
+            'runcloud_web_app_name' => $this->runcloud_web_app_name,
             'server' => $this->whenLoaded('server', fn (): ?array => $this->server ? [
                 'id' => $this->server->id,
                 'server_id' => $this->server->server_id,

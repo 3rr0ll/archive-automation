@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.3",
         "google/apiclient": "^2.20",
+        "google/apiclient-services": "^0.468.0",
         "laravel/framework": "^13.17",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",

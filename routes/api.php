@@ -93,6 +93,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
     Route::get('/admin/google-search-console/indexing/status', [GoogleSearchConsoleController::class, 'getIndexingStatus']);
 
     Route::post('/servers/sync', [ServerController::class, 'sync'])->name('servers.sync');
+    Route::post('/servers/{server}/sync-websites', [ServerController::class, 'syncWebsites'])->name('servers.sync-websites');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::post('/servers/{server}/archives/unzip', [ArchiveController::class, 'unzip'])

@@ -167,12 +167,6 @@
 
     <!-- Detected Subfolders Checkbox List -->
     <div class="p-3 space-y-2 max-h-56 overflow-y-auto">
-        <template x-if="isLoadingSubdomainFolders && subdomainFolders.length === 0">
-            <div class="py-6 flex items-center justify-center text-zinc-400">
-                <span class="animate-spin inline-block size-4 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-800 dark:border-t-zinc-200 rounded-full"></span>
-            </div>
-        </template>
-
         <template x-for="folder in subdomainFolders" :key="folder.id">
             <label class="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition cursor-pointer select-none"
                    :class="isFolderSelected(folder)
